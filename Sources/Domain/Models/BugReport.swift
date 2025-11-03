@@ -175,7 +175,7 @@ public struct DeviceInfo: Codable {
         let machineMirror = Mirror(reflecting: systemInfo.machine)
         let identifier = machineMirror.children.reduce("") { identifier, element in
             guard let value = element.value as? Int8, value != 0 else { return identifier }
-            return identifier + String(UnicodeScalar(UInt8(value))!)
+            return identifier + String(UnicodeScalar(UInt8(value)))
         }
         return identifier
     }
@@ -274,18 +274,18 @@ public struct MemoryInfo: Codable {
         var hostSize = mach_msg_type_number_t(MemoryLayout<vm_statistics_data_t>.stride / MemoryLayout<integer_t>.stride)
         var pageSize: vm_size_t = 0
         
-        let hostInfo = vm_statistics_data_t.allocate(capacity: 1)
-        defer { hostInfo.deallocate() }
+        var vmStats = vm_statistics_data_t()
         
-        let result = hostInfo.withMemoryRebound(to: integer_t.self, capacity: Int(hostSize)) {
-            host_statistics(hostPort, HOST_VM_INFO, $0, &hostSize)
+        let result = withUnsafeMutablePointer(to: &vmStats) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(hostSize)) {
+                host_statistics(hostPort, HOST_VM_INFO, $0, &hostSize)
+            }
         }
         
         let _ = host_page_size(hostPort, &pageSize)
         
         if result == KERN_SUCCESS {
-            let data = hostInfo.pointee
-            self.availableMemory = Int64(data.free_count) * Int64(pageSize)
+            self.availableMemory = Int64(vmStats.free_count) * Int64(pageSize)
         } else {
             self.availableMemory = 0
         }
