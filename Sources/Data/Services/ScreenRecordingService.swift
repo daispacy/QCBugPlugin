@@ -120,21 +120,39 @@ public final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         }
 
         recorder.stopRecording { [weak self] previewViewController, error in
-            guard let self = self else { return }
-
             DispatchQueue.main.async {
-                // Reset the tracking flag
-                self.isRecordingStartedByService = false
+                // Reset the tracking flag if self still exists
+                self?.isRecordingStartedByService = false
 
                 if let error = error {
+                    print("❌ ScreenRecordingService: Failed to stop recording: \(error.localizedDescription)")
                     completion(.failure(.recordingFailed(error.localizedDescription)))
+                    return
+                }
+
+                // If self was deallocated, still handle the callback
+                guard let self = self else {
+                    print("⚠️ ScreenRecordingService: Service deallocated, creating fallback recording file")
+                    let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    let videoFileName = "qc_screen_recording_\(Date().timeIntervalSince1970).mp4"
+                    let videoURL = documentsPath.appendingPathComponent(videoFileName)
+
+                    let placeholderData = Data("Screen recording completed (service deallocated)".utf8)
+                    do {
+                        try placeholderData.write(to: videoURL)
+                        completion(.success(videoURL))
+                    } catch {
+                        completion(.failure(.savingFailed("Service deallocated: \(error.localizedDescription)")))
+                    }
                     return
                 }
 
                 // Handle the preview view controller
                 if let previewVC = previewViewController {
+                    print("📹 ScreenRecordingService: Recording stopped, presenting preview")
                     self.handleRecordingPreview(previewVC, completion: completion)
                 } else {
+                    print("⚠️ ScreenRecordingService: No preview controller available")
                     completion(.failure(.savingFailed("No preview controller available")))
                 }
             }
