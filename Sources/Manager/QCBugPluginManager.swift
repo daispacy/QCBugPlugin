@@ -214,8 +214,15 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
                     for: .touchUpInside
                 )
                 
-                if let window = UIApplication.shared.windows.first {
-                    window.addSubview(self.floatingButton!)
+                // iOS 12 compatible window access
+                if #available(iOS 13.0, *) {
+                    if let window = UIApplication.shared.windows.first {
+                        window.addSubview(self.floatingButton!)
+                    }
+                } else {
+                    if let window = UIApplication.shared.keyWindow {
+                        window.addSubview(self.floatingButton!)
+                    }
                 }
             }
         }
@@ -287,6 +294,14 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
 
 private extension UIApplication {
     func topViewController() -> UIViewController? {
+        // iOS 12 compatible keyWindow access
+        let keyWindow: UIWindow?
+        if #available(iOS 13.0, *) {
+            keyWindow = UIApplication.shared.windows.first { $0.isKeyWindow }
+        } else {
+            keyWindow = UIApplication.shared.keyWindow
+        }
+        
         var topViewController = keyWindow?.rootViewController
         
         while let presentedViewController = topViewController?.presentedViewController {

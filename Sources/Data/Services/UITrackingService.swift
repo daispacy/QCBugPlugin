@@ -356,8 +356,16 @@ extension UITrackingService {
 
 private extension UIApplication {
     func topViewController() -> UIViewController? {
-        guard let window = windows.first(where: { $0.isKeyWindow }) else { return nil }
-        return topViewController(from: window.rootViewController)
+        // iOS 12 compatible window access
+        let window: UIWindow?
+        if #available(iOS 13.0, *) {
+            window = windows.first(where: { $0.isKeyWindow })
+        } else {
+            window = keyWindow
+        }
+        
+        guard let rootWindow = window else { return nil }
+        return topViewController(from: rootWindow.rootViewController)
     }
     
     private func topViewController(from viewController: UIViewController?) -> UIViewController? {

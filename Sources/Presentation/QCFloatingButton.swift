@@ -32,8 +32,12 @@ public final class QCFloatingButton: UIButton {
     // MARK: - Setup
     
     private func setupButton() {
-        // Appearance
-        backgroundColor = UIColor.systemRed.withAlphaComponent(0.9)
+        // Appearance - iOS 12 compatible
+        if #available(iOS 13.0, *) {
+            backgroundColor = UIColor.systemRed.withAlphaComponent(0.9)
+        } else {
+            backgroundColor = UIColor(red: 1.0, green: 0.231, blue: 0.188, alpha: 0.9)
+        }
         layer.cornerRadius = 30
         layer.shadowColor = UIColor.black.cgColor
         layer.shadowOffset = CGSize(width: 0, height: 4)

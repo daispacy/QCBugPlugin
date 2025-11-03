@@ -64,7 +64,12 @@ public final class QCBugReportViewController: UIViewController {
     // MARK: - Setup Methods
     
     private func setupUI() {
-        view.backgroundColor = UIColor.systemBackground
+        // iOS 12 compatible background color
+        if #available(iOS 13.0, *) {
+            view.backgroundColor = UIColor.systemBackground
+        } else {
+            view.backgroundColor = UIColor.white
+        }
         title = "Report Bug"
         
         // Navigation items
