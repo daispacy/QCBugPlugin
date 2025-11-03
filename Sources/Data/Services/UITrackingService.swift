@@ -134,13 +134,13 @@ extension UITrackingService {
         swizzleMethod(
             class: UIViewController.self,
             originalSelector: #selector(UIViewController.viewDidAppear(_:)),
-            swizzledSelector: #selector(UIViewController.qc_viewDidAppear(_:))
+            swizzledSelector: #selector(UIViewController.qcBugPlugin_viewDidAppear(_:))
         )
         
         swizzleMethod(
             class: UIViewController.self,
             originalSelector: #selector(UIViewController.viewDidDisappear(_:)),
-            swizzledSelector: #selector(UIViewController.qc_viewDidDisappear(_:))
+            swizzledSelector: #selector(UIViewController.qcBugPlugin_viewDidDisappear(_:))
         )
     }
     
@@ -148,7 +148,7 @@ extension UITrackingService {
         swizzleMethod(
             class: UIButton.self,
             originalSelector: #selector(UIButton.sendAction(_:to:for:)),
-            swizzledSelector: #selector(UIButton.qc_sendAction(_:to:for:))
+            swizzledSelector: #selector(UIButton.qcBugPlugin_sendAction(_:to:for:))
         )
     }
     
@@ -156,7 +156,7 @@ extension UITrackingService {
         swizzleMethod(
             class: UITextField.self,
             originalSelector: #selector(UITextField.becomeFirstResponder),
-            swizzledSelector: #selector(UITextField.qc_becomeFirstResponder)
+            swizzledSelector: #selector(UITextField.qcBugPlugin_becomeFirstResponder)
         )
     }
     
@@ -164,7 +164,7 @@ extension UITrackingService {
         swizzleMethod(
             class: UITapGestureRecognizer.self,
             originalSelector: #selector(UITapGestureRecognizer.touchesBegan(_:with:)),
-            swizzledSelector: #selector(UITapGestureRecognizer.qc_touchesBegan(_:with:))
+            swizzledSelector: #selector(UITapGestureRecognizer.qcBugPlugin_touchesBegan(_:with:))
         )
     }
     
@@ -198,8 +198,8 @@ extension UITrackingService {
 
 extension UIViewController {
     
-    @objc dynamic func qc_viewDidAppear(_ animated: Bool) {
-        qc_viewDidAppear(animated) // Call original method
+    @objc dynamic func qcBugPlugin_viewDidAppear(_ animated: Bool) {
+        qcBugPlugin_viewDidAppear(animated) // Call original method
         
         // Track screen view
         if let tracker = UITrackingService.shared as? UITrackingService,
@@ -216,8 +216,8 @@ extension UIViewController {
         }
     }
     
-    @objc dynamic func qc_viewDidDisappear(_ animated: Bool) {
-        qc_viewDidDisappear(animated) // Call original method
+    @objc dynamic func qcBugPlugin_viewDidDisappear(_ animated: Bool) {
+        qcBugPlugin_viewDidDisappear(animated) // Call original method
         
         // Track screen disappear
         if let tracker = UITrackingService.shared as? UITrackingService,
@@ -240,8 +240,8 @@ extension UIViewController {
 
 extension UIButton {
     
-    @objc dynamic func qc_sendAction(_ action: Selector, to target: Any?, for event: UIEvent?) {
-        qc_sendAction(action, to: target, for: event) // Call original method
+    @objc dynamic func qcBugPlugin_sendAction(_ action: Selector, to target: Any?, for event: UIEvent?) {
+        qcBugPlugin_sendAction(action, to: target, for: event) // Call original method
         
         // Track button tap
         if let tracker = UITrackingService.shared as? UITrackingService,
@@ -276,8 +276,8 @@ extension UIButton {
 
 extension UITextField {
     
-    @objc dynamic func qc_becomeFirstResponder() -> Bool {
-        let result = qc_becomeFirstResponder() // Call original method
+    @objc dynamic func qcBugPlugin_becomeFirstResponder() -> Bool {
+        let result = qcBugPlugin_becomeFirstResponder() // Call original method
         
         // Track text field tap
         if let tracker = UITrackingService.shared as? UITrackingService,
@@ -312,8 +312,8 @@ extension UITextField {
 
 extension UITapGestureRecognizer {
     
-    @objc dynamic func qc_touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        qc_touchesBegan(touches, with: event) // Call original method
+    @objc dynamic func qcBugPlugin_touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        qcBugPlugin_touchesBegan(touches, with: event) // Call original method
         
         // Track tap gesture
         if let tracker = UITrackingService.shared as? UITrackingService,

@@ -54,11 +54,13 @@ All major components implement protocols (`QCBugPluginProtocol`, `UITrackingProt
 ### Method Swizzling Architecture
 `UITrackingService` uses runtime method replacement for non-intrusive tracking:
 ```swift
-// Pattern: Original → Swizzled method
-viewDidAppear(_:) → qc_viewDidAppear(_:)
-sendAction(_:to:for:) → qc_sendAction(_:to:for:)
+// Pattern: Original → Swizzled method (with qcBugPlugin_ prefix to avoid conflicts)
+viewDidAppear(_:) → qcBugPlugin_viewDidAppear(_:)
+sendAction(_:to:for:) → qcBugPlugin_sendAction(_:to:for:)
+becomeFirstResponder() → qcBugPlugin_becomeFirstResponder()
+touchesBegan(_:with:) → qcBugPlugin_touchesBegan(_:with:)
 ```
-**Critical**: Always call original implementation in swizzled methods, use `actionQueue` for thread safety. Swizzling extensions should be `internal` or `private`.
+**Critical**: Always call original implementation in swizzled methods, use `actionQueue` for thread safety. Swizzling extensions should be `internal` or `private`. All swizzled methods use `qcBugPlugin_` prefix to prevent conflicts with other frameworks.
 
 ### Native-Web Bridge Communication
 `QCBugReportViewController` uses WKScriptMessageHandler pattern:

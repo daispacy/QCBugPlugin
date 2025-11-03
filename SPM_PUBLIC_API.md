@@ -249,20 +249,29 @@ extension QCBugPluginManager {
 
 ### Example Internal Code:
 ```swift
-// UITrackingService.swift - These are INTERNAL
+// UITrackingService.swift - These are INTERNAL/RUNTIME ACCESSIBLE
+// All swizzled methods use qcBugPlugin_ prefix to avoid conflicts
 extension UIViewController {
-    @objc dynamic func qc_viewDidAppear(_ animated: Bool) { ... }
-    @objc dynamic func qc_viewDidDisappear(_ animated: Bool) { ... }
+    @objc dynamic func qcBugPlugin_viewDidAppear(_ animated: Bool) { ... }
+    @objc dynamic func qcBugPlugin_viewDidDisappear(_ animated: Bool) { ... }
 }
 
 extension UIButton {
-    @objc dynamic func qc_sendAction(...) { ... }
+    @objc dynamic func qcBugPlugin_sendAction(...) { ... }
 }
 
-// Private/Internal helpers
-private func addAction(_ action: UserAction) { ... }
-private func trimHistoryIfNeeded() { ... }
-private func getCurrentScreenInfo() -> (String, String) { ... }
+extension UITextField {
+    @objc dynamic func qcBugPlugin_becomeFirstResponder() -> Bool { ... }
+}
+
+extension UITapGestureRecognizer {
+    @objc dynamic func qcBugPlugin_touchesBegan(...) { ... }
+}
+
+// Internal helpers (accessible within framework)
+internal func addAction(_ action: UserAction) { ... }
+internal func getCurrentScreenInfo() -> (String, String) { ... }
+internal var _isTracking: Bool { ... }
 ```
 
 ## 📦 SPM Integration Example
