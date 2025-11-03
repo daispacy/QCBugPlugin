@@ -161,6 +161,8 @@ public final class UITrackingService: NSObject, UITrackingProtocol {
     public var isTracking: Bool { get }
     public var maxActionHistoryCount: Int { get set }
     
+    public override init()
+    
     public func startTracking()
     public func stopTracking()
     public func getActionHistory() -> [UserAction]
@@ -171,6 +173,8 @@ public final class UITrackingService: NSObject, UITrackingProtocol {
 public final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     public var isAvailable: Bool { get }
     public var isRecording: Bool { get }
+    
+    public override init()
     
     public func requestPermission(completion: @escaping (Bool) -> Void)
     public func startRecording(completion: @escaping (Result<Void, ScreenRecordingError>) -> Void)
@@ -226,6 +230,12 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     public func isTrackingEnabled() -> Bool
     public func setCustomData(_ data: [String: Any])
     public func setScreenRecordingEnabled(_ enabled: Bool)
+}
+
+// QCBugReportViewControllerDelegate implementation
+extension QCBugPluginManager {
+    public func bugReportViewController(_ controller: QCBugReportViewController, didSubmitReport report: BugReport)
+    public func bugReportViewControllerDidCancel(_ controller: QCBugReportViewController)
 }
 ```
 

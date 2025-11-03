@@ -15,7 +15,7 @@ public final class UITrackingService: NSObject, UITrackingProtocol {
     
     // MARK: - Properties
     private var actionHistory: [UserAction] = []
-    private var _isTracking: Bool = false
+    internal var _isTracking: Bool = false
     private let actionQueue = DispatchQueue(label: "com.qcbugplugin.actionqueue", qos: .utility)
     
     public weak var delegate: UITrackingDelegate?
@@ -28,6 +28,13 @@ public final class UITrackingService: NSObject, UITrackingProtocol {
         didSet {
             trimHistoryIfNeeded()
         }
+    }
+    
+    // MARK: - Initialization
+    
+    /// Public initializer for UITrackingService
+    public override init() {
+        super.init()
     }
     
     // MARK: - UITrackingProtocol Implementation
@@ -66,7 +73,7 @@ public final class UITrackingService: NSObject, UITrackingProtocol {
     
     // MARK: - Private Methods
     
-    private func addAction(_ action: UserAction) {
+    internal func addAction(_ action: UserAction) {
         actionQueue.async { [weak self] in
             guard let self = self, self._isTracking else { return }
             
@@ -92,7 +99,7 @@ public final class UITrackingService: NSObject, UITrackingProtocol {
         }
     }
     
-    private func getCurrentScreenInfo() -> (String, String) {
+    internal func getCurrentScreenInfo() -> (String, String) {
         guard let topVC = UIApplication.shared.topViewController() else {
             return ("Unknown", "Unknown")
         }
@@ -191,11 +198,12 @@ extension UITrackingService {
 
 extension UIViewController {
     
-    @objc private func qc_viewDidAppear(_ animated: Bool) {
+    @objc dynamic func qc_viewDidAppear(_ animated: Bool) {
         qc_viewDidAppear(animated) // Call original method
         
         // Track screen view
-        if UITrackingService.shared._isTracking {
+        if let tracker = UITrackingService.shared as? UITrackingService,
+           tracker._isTracking {
             let className = String(describing: type(of: self))
             let screenName = self.title ?? self.navigationItem.title ?? className
             
@@ -204,15 +212,16 @@ extension UIViewController {
                 viewControllerClass: className
             )
             
-            UITrackingService.shared.addAction(action)
+            tracker.addAction(action)
         }
     }
     
-    @objc private func qc_viewDidDisappear(_ animated: Bool) {
+    @objc dynamic func qc_viewDidDisappear(_ animated: Bool) {
         qc_viewDidDisappear(animated) // Call original method
         
         // Track screen disappear
-        if UITrackingService.shared._isTracking {
+        if let tracker = UITrackingService.shared as? UITrackingService,
+           tracker._isTracking {
             let className = String(describing: type(of: self))
             let screenName = self.title ?? self.navigationItem.title ?? className
             
@@ -222,7 +231,7 @@ extension UIViewController {
                 viewControllerClass: className
             )
             
-            UITrackingService.shared.addAction(action)
+            tracker.addAction(action)
         }
     }
 }
@@ -231,14 +240,15 @@ extension UIViewController {
 
 extension UIButton {
     
-    @objc private func qc_sendAction(_ action: Selector, to target: Any?, for event: UIEvent?) {
+    @objc dynamic func qc_sendAction(_ action: Selector, to target: Any?, for event: UIEvent?) {
         qc_sendAction(action, to: target, for: event) // Call original method
         
         // Track button tap
-        if UITrackingService.shared._isTracking,
+        if let tracker = UITrackingService.shared as? UITrackingService,
+           tracker._isTracking,
            let touch = event?.allTouches?.first {
             
-            let (screenName, className) = UITrackingService.shared.getCurrentScreenInfo()
+            let (screenName, className) = tracker.getCurrentScreenInfo()
             let coordinates = touch.location(in: self)
             
             let elementInfo = ElementInfo(
@@ -257,7 +267,7 @@ extension UIButton {
                 coordinates: coordinates
             )
             
-            UITrackingService.shared.addAction(userAction)
+            tracker.addAction(userAction)
         }
     }
 }
@@ -266,12 +276,13 @@ extension UIButton {
 
 extension UITextField {
     
-    @objc private func qc_becomeFirstResponder() -> Bool {
+    @objc dynamic func qc_becomeFirstResponder() -> Bool {
         let result = qc_becomeFirstResponder() // Call original method
         
         // Track text field tap
-        if UITrackingService.shared._isTracking && result {
-            let (screenName, className) = UITrackingService.shared.getCurrentScreenInfo()
+        if let tracker = UITrackingService.shared as? UITrackingService,
+           tracker._isTracking && result {
+            let (screenName, className) = tracker.getCurrentScreenInfo()
             
             let elementInfo = ElementInfo(
                 accessibilityIdentifier: self.accessibilityIdentifier,
@@ -290,7 +301,7 @@ extension UITextField {
                 coordinates: CGPoint(x: self.frame.midX, y: self.frame.midY)
             )
             
-            UITrackingService.shared.addAction(action)
+            tracker.addAction(action)
         }
         
         return result
@@ -301,15 +312,16 @@ extension UITextField {
 
 extension UITapGestureRecognizer {
     
-    @objc private func qc_touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    @objc dynamic func qc_touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         qc_touchesBegan(touches, with: event) // Call original method
         
         // Track tap gesture
-        if UITrackingService.shared._isTracking,
+        if let tracker = UITrackingService.shared as? UITrackingService,
+           tracker._isTracking,
            let touch = touches.first,
            let view = self.view {
             
-            let (screenName, className) = UITrackingService.shared.getCurrentScreenInfo()
+            let (screenName, className) = tracker.getCurrentScreenInfo()
             let coordinates = touch.location(in: view)
             
             let elementInfo = ElementInfo(
@@ -329,7 +341,7 @@ extension UITapGestureRecognizer {
                 coordinates: coordinates
             )
             
-            UITrackingService.shared.addAction(action)
+            tracker.addAction(action)
         }
     }
 }

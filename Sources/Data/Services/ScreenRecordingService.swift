@@ -20,6 +20,13 @@ public final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     private var outputURL: URL?
     private var startTime: CMTime?
     
+    // MARK: - Initialization
+    
+    /// Public initializer for ScreenRecordingService
+    public override init() {
+        super.init()
+    }
+    
     // MARK: - ScreenRecordingProtocol Implementation
     
     public var isAvailable: Bool {

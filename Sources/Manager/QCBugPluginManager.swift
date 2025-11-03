@@ -244,7 +244,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
 // MARK: - QCBugReportViewControllerDelegate
 
 extension QCBugPluginManager: QCBugReportViewControllerDelegate {
-    func bugReportViewController(_ controller: QCBugReportViewController, didSubmitReport report: BugReport) {
+    public func bugReportViewController(_ controller: QCBugReportViewController, didSubmitReport report: BugReport) {
         bugReportService?.submitBugReport(report) { [weak self] result in
             guard let self = self else { return }
             
@@ -278,7 +278,7 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         }
     }
     
-    func bugReportViewControllerDidCancel(_ controller: QCBugReportViewController) {
+    public func bugReportViewControllerDidCancel(_ controller: QCBugReportViewController) {
         controller.dismiss(animated: true)
     }
 }
