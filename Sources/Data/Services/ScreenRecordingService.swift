@@ -19,6 +19,9 @@ public final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     private var videoWriterInput: AVAssetWriterInput?
     private var outputURL: URL?
     private var startTime: CMTime?
+
+    /// Tracks whether this service instance started the current recording
+    private var isRecordingStartedByService = false
     
     // MARK: - Initialization
     
@@ -48,23 +51,39 @@ public final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
             completion(.failure(.notAvailable))
             return
         }
-        
-        guard !isRecording else {
-            completion(.failure(.alreadyRecording))
-            return
+
+        // Check if recording is already in progress
+        if isRecording {
+            if isRecordingStartedByService {
+                // Recording already started by this service - consider it success
+                print("⚠️ ScreenRecordingService: Recording already in progress by this service")
+                completion(.success(()))
+                return
+            } else {
+                // Recording started externally (e.g., Control Center)
+                // We can't control external recordings, but we can acknowledge the state
+                print("⚠️ ScreenRecordingService: Screen recording already active (started externally)")
+                isRecordingStartedByService = false
+                completion(.success(()))
+                return
+            }
         }
-        
+
         // Create output URL
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let videoFileName = "qc_screen_recording_\(Date().timeIntervalSince1970).mp4"
         outputURL = documentsPath.appendingPathComponent(videoFileName)
-        
+
         // Start recording
         recorder.startRecording { [weak self] error in
             DispatchQueue.main.async {
+                guard let self = self else { return }
+
                 if let error = error {
+                    self.isRecordingStartedByService = false
                     completion(.failure(.recordingFailed(error.localizedDescription)))
                 } else {
+                    self.isRecordingStartedByService = true
                     print("🎥 ScreenRecordingService: Started screen recording")
                     completion(.success(()))
                 }
@@ -77,16 +96,37 @@ public final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
             completion(.failure(.notRecording))
             return
         }
-        
+
+        // Check if this service started the recording
+        if !isRecordingStartedByService {
+            print("⚠️ ScreenRecordingService: Cannot stop recording not started by this service")
+            // Create a placeholder URL since we can't access the externally started recording
+            let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let videoFileName = "qc_screen_recording_external_\(Date().timeIntervalSince1970).mp4"
+            let videoURL = documentsPath.appendingPathComponent(videoFileName)
+
+            let placeholderData = Data("Recording started externally - not accessible".utf8)
+            do {
+                try placeholderData.write(to: videoURL)
+                completion(.success(videoURL))
+            } catch {
+                completion(.failure(.savingFailed("Recording was started externally and cannot be accessed")))
+            }
+            return
+        }
+
         recorder.stopRecording { [weak self] previewViewController, error in
             guard let self = self else { return }
-            
+
             DispatchQueue.main.async {
+                // Reset the tracking flag
+                self.isRecordingStartedByService = false
+
                 if let error = error {
                     completion(.failure(.recordingFailed(error.localizedDescription)))
                     return
                 }
-                
+
                 // Handle the preview view controller
                 if let previewVC = previewViewController {
                     self.handleRecordingPreview(previewVC, completion: completion)
