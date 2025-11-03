@@ -3,14 +3,18 @@
 //  YourApp
 //
 //  Template file for integrating QCBugPlugin into a view controller
-//  WITHOUT modifying the original view controller code.
+//  using manual lifecycle hooks (no swizzling).
 //
 //  Usage:
 //  1. Copy this file to your project
 //  2. Rename to match your ViewController: e.g., CheckoutViewController+QCBugPlugin.swift
 //  3. Replace "YourViewController" with your actual class name
-//  4. Customize the tracking data for your feature
-//  5. Build in DEBUG or STAGING configuration
+//  4. Add lifecycle calls to your original ViewController (see instructions below)
+//  5. Customize the tracking data for your feature
+//  6. Build in DEBUG or STAGING configuration
+//
+//  IMPORTANT: Swift no longer supports automatic swizzling via class initialize().
+//  You must manually call QCBugPlugin methods from your ViewController's lifecycle methods.
 //
 
 import UIKit
@@ -23,128 +27,28 @@ import ObjectiveC
 
 extension YourViewController {
     
-    // MARK: - Swizzling Setup
+    // MARK: - Setup Methods
     
-    /// Storage for the swizzling token to ensure it runs only once
-    private static var swizzlingToken: Int = 0
-    
-    /// Automatically sets up swizzling when the class is first loaded
-    static func initializeQCBugPlugin() {
-        guard self === YourViewController.self else { return }
-        
-        // Ensure swizzling happens only once
-        if swizzlingToken == 0 {
-            swizzleViewDidLoad()
-            swizzleViewWillAppear()
-            swizzleViewDidDisappear()
-            swizzleMotionEnded()
-            swizzlingToken = 1
-            
-            print("✅ QCBugPlugin swizzling initialized for \(String(describing: self))")
-        }
+    /// Call this from your viewDidLoad()
+    func setupQCBugReporting() {
+        addBugReportButton()
+        setInitialContext()
+        print("🐛 QCBugPlugin configured for \(String(describing: type(of: self)))")
     }
     
-    // MARK: - Method Swizzling Implementations
-    
-    private static func swizzleViewDidLoad() {
-        let originalSelector = #selector(viewDidLoad)
-        let swizzledSelector = #selector(qcBugPlugin_viewDidLoad)
-        swizzleMethod(original: originalSelector, swizzled: swizzledSelector)
-    }
-    
-    private static func swizzleViewWillAppear() {
-        let originalSelector = #selector(viewWillAppear(_:))
-        let swizzledSelector = #selector(qcBugPlugin_viewWillAppear(_:))
-        swizzleMethod(original: originalSelector, swizzled: swizzledSelector)
-    }
-    
-    private static func swizzleViewDidDisappear() {
-        let originalSelector = #selector(viewDidDisappear(_:))
-        let swizzledSelector = #selector(qcBugPlugin_viewDidDisappear(_:))
-        swizzleMethod(original: originalSelector, swizzled: swizzledSelector)
-    }
-    
-    private static func swizzleMotionEnded() {
-        let originalSelector = #selector(motionEnded(_:with:))
-        let swizzledSelector = #selector(qcBugPlugin_motionEnded(_:with:))
-        swizzleMethod(original: originalSelector, swizzled: swizzledSelector)
-    }
-    
-    private static func swizzleMethod(original: Selector, swizzled: Selector) {
-        guard let originalMethod = class_getInstanceMethod(self, original),
-              let swizzledMethod = class_getInstanceMethod(self, swizzled) else {
-            print("⚠️ Failed to swizzle method: \(original)")
-            return
-        }
-        
-        // Add method if it doesn't exist in the subclass
-        let didAddMethod = class_addMethod(
-            self,
-            original,
-            method_getImplementation(swizzledMethod),
-            method_getTypeEncoding(swizzledMethod)
-        )
-        
-        if didAddMethod {
-            class_replaceMethod(
-                self,
-                swizzled,
-                method_getImplementation(originalMethod),
-                method_getTypeEncoding(originalMethod)
-            )
-        } else {
-            method_exchangeImplementations(originalMethod, swizzledMethod)
-        }
-    }
-    
-    // MARK: - Swizzled Lifecycle Methods
-    
-    @objc private func qcBugPlugin_viewDidLoad() {
-        // IMPORTANT: Call original implementation
-        // Due to swizzling, this actually calls the original viewDidLoad
-        qcBugPlugin_viewDidLoad()
-        
-        // Add QCBugPlugin setup
-        setupQCBugReporting()
-    }
-    
-    @objc private func qcBugPlugin_viewWillAppear(_ animated: Bool) {
-        // IMPORTANT: Call original implementation
-        qcBugPlugin_viewWillAppear(animated)
-        
-        // Update context data when screen appears
+    /// Call this from your viewWillAppear(_:)
+    func updateQCBugReportContext() {
         updateBugReportContext()
     }
     
-    @objc private func qcBugPlugin_viewDidDisappear(_ animated: Bool) {
-        // IMPORTANT: Call original implementation
-        qcBugPlugin_viewDidDisappear(animated)
-        
-        // Optional: Clear or update context when leaving screen
-        // clearBugReportContext()
-    }
-    
-    @objc private func qcBugPlugin_motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
-        // IMPORTANT: Call original implementation if it exists
-        qcBugPlugin_motionEnded(motion, with: event)
-        
-        // Handle shake gesture for bug reporting
+    /// Call this from your motionEnded(_:with:) if you want shake gesture
+    func handleQCShakeGesture(_ motion: UIEvent.EventSubtype) {
         if motion == .motionShake {
             presentBugReportWithContext()
         }
     }
     
-    // MARK: - QCBugPlugin Setup
-    
-    private func setupQCBugReporting() {
-        // Add debug button to navigation bar
-        addBugReportButton()
-        
-        // Set initial feature context
-        setInitialContext()
-        
-        print("🐛 QCBugPlugin configured for \(String(describing: type(of: self)))")
-    }
+    // MARK: - UI Setup
     
     private func addBugReportButton() {
         // Add bug report button to navigation bar
@@ -233,55 +137,79 @@ extension YourViewController {
 
 // MARK: - Auto-Initialize on Class Load
 
-extension YourViewController {
-    /// Called automatically when the class is first accessed
-    /// This triggers the swizzling setup
-    @objc override open class func initialize() {
-        // Call super to maintain inheritance chain
-        super.initialize()
-        
-        // Initialize QCBugPlugin swizzling
-        initializeQCBugPlugin()
     }
 }
 
 #endif
 
-// MARK: - Usage Notes
+// MARK: - Usage Instructions
 /*
  
- HOW TO USE THIS TEMPLATE:
+ HOW TO INTEGRATE INTO YOUR VIEWCONTROLLER:
  
- 1. COPY THIS FILE to your project
+ 1. COPY this extension file to your project
  
- 2. RENAME THE FILE to match your ViewController:
-    Example: CheckoutViewController+QCBugPlugin.swift
+ 2. RENAME the file to match your ViewController
  
- 3. REPLACE "YourViewController" with your actual class name throughout the file
+ 3. ADD THESE CALLS to your original ViewController.swift:
  
- 4. CUSTOMIZE the context data:
-    - Change "YourFeatureName" to your actual feature name
-    - Add feature-specific data in setInitialContext()
-    - Add dynamic data in updateBugReportContext()
-    - Implement collectFormData() if you have forms
+    #if DEBUG || STAGING
+    import QCBugPlugin
+    #endif
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        #if DEBUG || STAGING
+        setupQCBugReporting()  // Add this line
+        #endif
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        
+        #if DEBUG || STAGING
+        updateQCBugReportContext()  // Add this line
+        #endif
+    }
+    
+    // Optional: Add shake gesture handling
+    override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        super.motionEnded(motion, with: event)
+        
+        #if DEBUG || STAGING
+        handleQCShakeGesture(motion)  // Add this line
+        #endif
+    }
  
- 5. BUILD in DEBUG or STAGING configuration
+ 4. CUSTOMIZE the tracking data in this extension file
  
- 6. TEST the integration:
-    - Shake device to trigger bug report
-    - Tap 🐛 button in navigation bar
-    - Verify context data is collected correctly
+ 5. TEST the integration
+ 
+ USAGE NOTES:
+ 
+ NO MORE AUTOMATIC SWIZZLING:
+ - Swift no longer supports class initialize() method
+ - You must manually call setup methods from your ViewController
+ - This gives you explicit control over when QCBugPlugin is activated
+ - Minimal changes to original code (just 3 method calls)
+ 
+ INTEGRATION PATTERN:
+ - Keep this extension file separate from your main ViewController
+ - Only add conditional compilation (#if DEBUG) calls to original code
+ - All QCBugPlugin logic stays in the extension
+ - Easy to remove by deleting extension file and removing #if blocks
+ 
+ CUSTOMIZATION:
+ - Change "YourFeatureName" to your actual feature name
+ - Add feature-specific data in setInitialContext()
+ - Add dynamic data in updateBugReportContext()
+ - Implement collectFormData() if you have forms
  
  SECURITY REMINDERS:
  - ✅ DO track: user selections, form presence, feature state
  - ❌ DON'T track: passwords, PINs, full card numbers, sensitive data
  - ✅ DO use presence flags: "hasPassword": true
  - ❌ DON'T use actual values: "password": "abc123"
- 
- SWIZZLING SAFETY:
- - Always call the original method (qcBugPlugin_xxx calls original)
- - Use conditional compilation (#if DEBUG || STAGING)
- - Test thoroughly in DEBUG builds
- - Verify original functionality is not affected
  
  */

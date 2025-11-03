@@ -43,19 +43,39 @@ Or in Xcode:
 
 ## 🔧 Quick Start
 
-### Basic Setup (AppDelegate)
+## 🚀 Quick Start
+
+### Installation
+
+Add QCBugPlugin to your project via Swift Package Manager:
 
 ```swift
-import QCBugPlugin
+dependencies: [
+    .package(url: "https://github.com/daispacy/QCBugPlugin.git", from: "1.0.0")
+]
+```
 
+### Basic Setup
+
+**IMPORTANT:** Swift no longer supports automatic `class func initialize()`. You must manually call setup methods.
+
+**1. App-Level Setup (AppDelegate):**
+
+```swift
+import UIKit
+#if DEBUG || STAGING
+import QCBugPlugin
+#endif
+
+@main
 class AppDelegate: UIResponder, UIApplicationDelegate {
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    
+    func application(_ application: UIApplication, 
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         
         #if DEBUG || STAGING
-        // Configure the plugin
-        QCBugPlugin.configure(webhookURL: "https://your-webhook-url.com/bugs")
-        
-        // Start tracking user interactions
+        // Configure QCBugPlugin
+        QCBugPlugin.configure(webhookURL: "https://your-webhook.com/bugs")
         QCBugPlugin.startTracking()
         #endif
         
@@ -63,6 +83,36 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 }
 ```
+
+**2. Feature-Level Setup (ViewController):**
+
+```swift
+import UIKit
+#if DEBUG || STAGING
+import QCBugPlugin
+#endif
+
+class YourViewController: UIViewController {
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        #if DEBUG || STAGING
+        setupQCBugReporting()  // Call from extension
+        #endif
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        
+        #if DEBUG || STAGING
+        updateQCBugReportContext()  // Call from extension
+        #endif
+    }
+}
+```
+
+See [Templates/](Templates/) for complete integration examples.
 
 ### Advanced Configuration
 
@@ -97,18 +147,25 @@ override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) 
 }
 ```
 
-## 🎯 Feature-Specific Integration (Non-Intrusive Pattern)
+## 🎯 Feature-Specific Integration (Manual Setup Pattern)
 
 ### Integration Philosophy
 
-**DO NOT modify existing feature code!** Instead, create extensions that automatically integrate QCBugPlugin using method swizzling.
+**Keep QCBugPlugin code separate!** Create extension files with setup methods that you call from your ViewControllers.
+
+### ⚠️ Important: No Automatic Swizzling
+
+**Swift no longer supports `class func initialize()`**, so automatic swizzling is not possible. You must:
+1. Create a separate extension file with QCBugPlugin setup code
+2. Manually call setup methods from your ViewController lifecycle methods
+3. Use `#if DEBUG || STAGING` to conditionally compile
 
 ### 📁 Ready-to-Use Templates
 
-We provide complete templates for non-intrusive integration. See the [`Templates/`](Templates/) folder:
+We provide complete templates for manual integration. See the [`Templates/`](Templates/) folder:
 
-- **`AppDelegate+QCBugPlugin.swift`** - App-level initialization (copy once)
-- **`YourViewController+QCBugPlugin.swift`** - Per-feature screen tracking (copy per feature)
+- **`AppDelegate+QCBugPlugin.swift`** - App-level initialization with manual setup
+- **`YourViewController+QCBugPlugin.swift`** - Per-feature screen tracking with lifecycle hooks
 - **`YourViewModel+QCBugPlugin.swift`** - Business logic tracking (copy per ViewModel)
 
 👉 **[See Templates README for detailed usage guide](Templates/README.md)**
@@ -118,16 +175,17 @@ We provide complete templates for non-intrusive integration. See the [`Templates
 1. **Copy** the appropriate template from `Templates/` folder
 2. **Rename** to match your class (e.g., `CheckoutViewController+QCBugPlugin.swift`)
 3. **Replace** placeholder names with your actual class names
-4. **Customize** tracking data for your feature
-5. **Build** in DEBUG or STAGING - automatic integration!
+4. **Add method calls** to your original ViewController (3 lines with `#if DEBUG`)
+5. **Customize** tracking data for your feature
+6. **Build** in DEBUG or STAGING
 
-**Zero modifications to your original code required!**
+**Minimal modifications to original code (only conditional method calls)!**
 
 ### Pattern: Extension-Based Integration
 
 For each feature, create a separate file: `<FeatureViewController>+QCBugPlugin.swift`
 
-#### Example: Minimal Integration
+#### Example: Manual Integration
 
 **File:** `CheckoutViewController+QCBugPlugin.swift`
 
@@ -139,20 +197,8 @@ import QCBugPlugin
 
 extension CheckoutViewController {
     
-    static func setupQCBugPlugin() {
-        // Swizzle viewDidLoad
-        let original = #selector(viewDidLoad)
-        let swizzled = #selector(qc_viewDidLoad)
-        
-        guard let originalMethod = class_getInstanceMethod(self, original),
-              let swizzledMethod = class_getInstanceMethod(self, swizzled) else { return }
-        
-        method_exchangeImplementations(originalMethod, swizzledMethod)
-    }
-    
-    @objc private func qc_viewDidLoad() {
-        qc_viewDidLoad() // Call original
-        
+    /// Call from viewDidLoad()
+    func setupQCBugReporting() {
         // Add debug button
         let bugButton = UIBarButtonItem(title: "🐛", style: .plain, 
                                         target: self, action: #selector(showBugReport))
@@ -165,20 +211,48 @@ extension CheckoutViewController {
         ])
     }
     
-    @objc private func showBugReport() {
-        QCBugPlugin.presentBugReport()
+    /// Call from viewWillAppear(_:)
+    func updateQCBugReportContext() {
+        // Update dynamic data
+        QCBugPlugin.setCustomData([
+            "feature": "Checkout",
+            "itemsInCart": cart.items.count,
+            "totalAmount": cart.total
+        ])
     }
     
-    override class func initialize() {
-        guard self === CheckoutViewController.self else { return }
-        setupQCBugPlugin()
+    @objc private func showBugReport() {
+        QCBugPlugin.presentBugReport()
     }
 }
 
 #endif
 ```
 
-**That's it!** Your original `CheckoutViewController.swift` remains completely unchanged.
+**In your original CheckoutViewController.swift:**
+
+```swift
+class CheckoutViewController: UIViewController {
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        #if DEBUG || STAGING
+        setupQCBugReporting()  // Add this one line
+        #endif
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        
+        #if DEBUG || STAGING
+        updateQCBugReportContext()  // Add this one line
+        #endif
+    }
+}
+```
+
+**That's it!** Just two conditional method calls in your original code.
 
 ### Complete Templates
 

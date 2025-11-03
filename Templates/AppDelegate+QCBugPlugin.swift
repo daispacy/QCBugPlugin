@@ -8,8 +8,11 @@
 //  Usage:
 //  1. Copy this file to your project
 //  2. Customize the configuration for your app
-//  3. The swizzling will automatically initialize QCBugPlugin
+//  3. Call setupQCBugPlugin() from your AppDelegate's didFinishLaunchingWithOptions
 //  4. Build in DEBUG or STAGING configuration
+//
+//  IMPORTANT: Swift no longer supports class initialize() method.
+//  You must manually call setupQCBugPlugin() in your AppDelegate.
 //
 
 import UIKit
@@ -22,45 +25,14 @@ import ObjectiveC
 
 extension AppDelegate {
     
-    // MARK: - Swizzling Setup
+    // MARK: - Setup Method
     
-    private static var swizzlingToken: Int = 0
-    
-    /// Automatically sets up swizzling when AppDelegate is loaded
-    static func initializeQCBugPluginForApp() {
-        guard swizzlingToken == 0 else { return }
-        
-        let originalSelector = #selector(application(_:didFinishLaunchingWithOptions:))
-        let swizzledSelector = #selector(qcBugPlugin_application(_:didFinishLaunchingWithOptions:))
-        
-        guard let originalMethod = class_getInstanceMethod(self, originalSelector),
-              let swizzledMethod = class_getInstanceMethod(self, swizzledSelector) else {
-            print("⚠️ QCBugPlugin: Failed to swizzle AppDelegate methods")
-            return
-        }
-        
-        method_exchangeImplementations(originalMethod, swizzledMethod)
-        swizzlingToken = 1
-        
-        print("✅ QCBugPlugin: AppDelegate swizzling initialized")
-    }
-    
-    // MARK: - Swizzled Application Lifecycle
-    
-    @objc private func qcBugPlugin_application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-    ) -> Bool {
-        // IMPORTANT: Call original implementation
-        let result = qcBugPlugin_application(application, didFinishLaunchingWithOptions: launchOptions)
-        
-        // Configure QCBugPlugin
+    /// Call this method from your AppDelegate's application(_:didFinishLaunchingWithOptions:)
+    /// Swift no longer supports automatic class initialize(), so manual setup is required.
+    func setupQCBugPlugin() {
         configureQCBugPlugin()
-        
-        // Enable global shake gesture
         enableGlobalShakeGesture()
-        
-        return result
+        print("✅ QCBugPlugin: Initialized from AppDelegate")
     }
     
     // MARK: - QCBugPlugin Configuration
@@ -126,62 +98,59 @@ extension AppDelegate {
 
 extension UIWindow {
     
-    private static var shakeSwizzlingToken: Int = 0
+    // NOTE: Global shake gesture can be enabled, but requires manual override
+    // in your UIWindow subclass or SceneDelegate for iOS 13+
+    // This is optional - individual ViewControllers can handle shake independently
     
-    /// Swizzle motionEnded to enable global shake gesture
-    static func setupQCBugPluginShakeGesture() {
-        guard shakeSwizzlingToken == 0 else { return }
-        
-        let originalSelector = #selector(motionEnded(_:with:))
-        let swizzledSelector = #selector(qcBugPlugin_motionEnded(_:with:))
-        
-        guard let originalMethod = class_getInstanceMethod(self, originalSelector),
-              let swizzledMethod = class_getInstanceMethod(self, swizzledSelector) else {
-            return
-        }
-        
-        method_exchangeImplementations(originalMethod, swizzledMethod)
-        shakeSwizzlingToken = 1
-    }
+    /* Uncomment if you want global shake gesture handling:
     
-    @objc private func qcBugPlugin_motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
-        // Call original implementation
-        qcBugPlugin_motionEnded(motion, with: event)
+    override open func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        super.motionEnded(motion, with: event)
         
-        // Handle shake gesture globally
         if motion == .motionShake {
             QCBugPlugin.presentBugReport()
         }
     }
-    
-    override open class func initialize() {
-        super.initialize()
-        guard self === UIWindow.self else { return }
-        setupQCBugPluginShakeGesture()
-    }
-}
-
-// MARK: - Auto-Initialize
-
-extension AppDelegate {
-    /// Called automatically when AppDelegate class is first loaded
-    @objc override open class func initialize() {
-        super.initialize()
-        guard self === AppDelegate.self else { return }
-        initializeQCBugPluginForApp()
-    }
+    */
 }
 
 #endif
 
-// MARK: - Usage Notes
+// MARK: - Usage Instructions
 /*
  
  HOW TO USE THIS TEMPLATE:
  
  1. COPY THIS FILE to your project
  
- 2. CUSTOMIZE the configuration:
+ 2. ADD TO YOUR AppDelegate.swift:
+ 
+    #if DEBUG || STAGING
+    import QCBugPlugin
+    #endif
+    
+    func application(_ application: UIApplication, 
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        
+        #if DEBUG || STAGING
+        setupQCBugPlugin()  // Add this line
+        #endif
+        
+        // Your existing code...
+        return true
+    }
+ 
+ 3. CUSTOMIZE the configuration:
+    - Replace webhook URL with your actual endpoint
+    - Add API key if your webhook requires authentication
+    - Customize customData with your app-specific information
+ 
+ 4. BUILD in DEBUG or STAGING configuration
+ 
+ 5. TEST the integration:
+    - Launch app
+    - Check console for "✅ QCBugPlugin: Initialized from AppDelegate" message
+    - Shake device to test global bug reporting (if enabled in ViewController)
     - Replace webhook URL with your actual endpoint
     - Add API key if your webhook requires authentication
     - Customize customData with your app-specific information
