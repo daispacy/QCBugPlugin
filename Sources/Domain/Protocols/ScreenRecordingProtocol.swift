@@ -15,7 +15,11 @@ public protocol ScreenRecordingProtocol: AnyObject {
     
     /// Check if currently recording
     var isRecording: Bool { get }
-    
+
+    /// Check if the current recording was started by this service instance
+    /// Returns false if recording was started externally (e.g., Control Center)
+    var isRecordingOwnedByService: Bool { get }
+
     /// Start screen recording
     /// - Returns: Result with success/failure
     func startRecording(completion: @escaping (Result<Void, ScreenRecordingError>) -> Void)

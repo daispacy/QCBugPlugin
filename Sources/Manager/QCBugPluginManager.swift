@@ -91,19 +91,19 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     
     public func stopTracking() {
         uiTracker?.stopTracking()
-        
-        // Stop screen recording if active
-        if screenRecorder?.isRecording == true {
+
+        // Stop screen recording if active and owned by this service
+        if screenRecorder?.isRecordingOwnedByService == true {
             screenRecorder?.stopRecording { _ in }
         }
-        
+
         NotificationCenter.default.post(
             name: .qcBugPluginDidStopTracking,
             object: self
         )
-        
+
         delegate?.bugPluginDidStopTracking(self)
-        
+
         print("⏹️ QCBugPlugin: Stopped tracking user interactions")
     }
     
@@ -163,7 +163,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     
     public func setScreenRecordingEnabled(_ enabled: Bool) {
         guard var config = configuration else { return }
-        
+
         let newConfig = QCBugPluginConfig(
             webhookURL: config.webhookURL,
             apiKey: config.apiKey,
@@ -172,16 +172,101 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             maxActionHistoryCount: config.maxActionHistoryCount,
             enableFloatingButton: config.enableFloatingButton
         )
-        
+
         self.configuration = newConfig
-        
+
         if enabled && screenRecorder == nil {
             screenRecorder = ScreenRecordingService()
         } else if !enabled {
             screenRecorder = nil
         }
     }
-    
+
+    public func startScreenRecording(completion: @escaping (Result<Void, Error>) -> Void) {
+        guard let recorder = screenRecorder else {
+            let error = NSError(
+                domain: "com.qcbugplugin",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Screen recording is not enabled"]
+            )
+            completion(.failure(error))
+            return
+        }
+
+        recorder.startRecording { [weak self] result in
+            guard let self = self else { return }
+
+            switch result {
+            case .success:
+                // Notify delegate and post notification
+                self.delegate?.bugPluginDidStartRecording(self)
+                NotificationCenter.default.post(
+                    name: .qcBugPluginDidStartRecording,
+                    object: self
+                )
+                print("🎥 QCBugPlugin: Screen recording started")
+                completion(.success(()))
+
+            case .failure(let error):
+                // Notify delegate and post notification
+                self.delegate?.bugPlugin(self, didFailRecordingWithError: error)
+                NotificationCenter.default.post(
+                    name: .qcBugPluginDidFailRecording,
+                    object: self,
+                    userInfo: ["error": error]
+                )
+                completion(.failure(error))
+            }
+        }
+    }
+
+    public func stopScreenRecording(completion: @escaping (Result<URL, Error>) -> Void) {
+        guard let recorder = screenRecorder else {
+            let error = NSError(
+                domain: "com.qcbugplugin",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Screen recording is not enabled"]
+            )
+            completion(.failure(error))
+            return
+        }
+
+        recorder.stopRecording { [weak self] result in
+            guard let self = self else { return }
+
+            switch result {
+            case .success(let url):
+                // Notify delegate and post notification
+                self.delegate?.bugPlugin(self, didStopRecordingWithURL: url)
+                NotificationCenter.default.post(
+                    name: .qcBugPluginDidStopRecording,
+                    object: self,
+                    userInfo: ["url": url]
+                )
+                print("🎬 QCBugPlugin: Screen recording stopped - \(url)")
+                completion(.success(url))
+
+            case .failure(let error):
+                // Notify delegate and post notification
+                self.delegate?.bugPlugin(self, didFailRecordingWithError: error)
+                NotificationCenter.default.post(
+                    name: .qcBugPluginDidFailRecording,
+                    object: self,
+                    userInfo: ["error": error]
+                )
+                completion(.failure(error))
+            }
+        }
+    }
+
+    public func isScreenRecording() -> Bool {
+        return screenRecorder?.isRecording ?? false
+    }
+
+    public func isScreenRecordingOwnedByPlugin() -> Bool {
+        return screenRecorder?.isRecordingOwnedByService ?? false
+    }
+
     // MARK: - Private Methods
     
     private func setupNotificationObservers() {
@@ -234,8 +319,8 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     }
     
     @objc private func appDidEnterBackground() {
-        // Stop screen recording when app goes to background
-        if screenRecorder?.isRecording == true {
+        // Stop screen recording when app goes to background (only if owned by this service)
+        if screenRecorder?.isRecordingOwnedByService == true {
             screenRecorder?.stopRecording { _ in }
         }
     }

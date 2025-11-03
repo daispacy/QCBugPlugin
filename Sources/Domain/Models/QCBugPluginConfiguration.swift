@@ -41,4 +41,9 @@ public extension Notification.Name {
     static let qcBugPluginDidSubmitReport = Notification.Name("qcBugPluginDidSubmitReport")
     static let qcBugPluginDidFailToSubmitReport = Notification.Name("qcBugPluginDidFailToSubmitReport")
     static let qcBugPluginDidTrackUserAction = Notification.Name("qcBugPluginDidTrackUserAction")
+
+    // Screen Recording Events
+    static let qcBugPluginDidStartRecording = Notification.Name("qcBugPluginDidStartRecording")
+    static let qcBugPluginDidStopRecording = Notification.Name("qcBugPluginDidStopRecording")
+    static let qcBugPluginDidFailRecording = Notification.Name("qcBugPluginDidFailRecording")
 }

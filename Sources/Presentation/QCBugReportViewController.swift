@@ -227,17 +227,28 @@ extension QCBugReportViewController: WKScriptMessageHandler {
 extension QCBugReportViewController {
     
     private func startScreenRecording() {
-        guard let recorder = screenRecorder, !isRecording else { return }
-        
+        guard let recorder = screenRecorder else { return }
+
+        // Check if already recording using the service's state
+        guard !recorder.isRecording else {
+            // If recording is already active, just update UI to reflect this
+            isRecording = true
+            updateRecordingState(isRecording: true)
+            return
+        }
+
         recorder.startRecording { [weak self] result in
             DispatchQueue.main.async {
+                guard let self = self, let recorder = self.screenRecorder else { return }
+
                 switch result {
                 case .success:
-                    self?.isRecording = true
-                    self?.updateRecordingState(isRecording: true)
-                    
+                    // Sync local state with service state
+                    self.isRecording = recorder.isRecordingOwnedByService
+                    self.updateRecordingState(isRecording: self.isRecording)
+
                 case .failure(let error):
-                    self?.showErrorAlert(message: "Failed to start recording: \(error.localizedDescription)")
+                    self.showErrorAlert(message: "Failed to start recording: \(error.localizedDescription)")
                 }
             }
         }
@@ -245,19 +256,30 @@ extension QCBugReportViewController {
     
     private func stopScreenRecording() {
         guard let recorder = screenRecorder, isRecording else { return }
-        
+
+        // Only attempt to stop if we own the recording
+        guard recorder.isRecordingOwnedByService else {
+            // Recording not owned by service, just update UI
+            isRecording = false
+            updateRecordingState(isRecording: false)
+            showErrorAlert(message: "Cannot stop recording that was started externally")
+            return
+        }
+
         recorder.stopRecording { [weak self] result in
             DispatchQueue.main.async {
-                self?.isRecording = false
-                self?.updateRecordingState(isRecording: false)
-                
+                guard let self = self else { return }
+
+                self.isRecording = false
+                self.updateRecordingState(isRecording: false)
+
                 switch result {
                 case .success(let url):
-                    self?.recordingURL = url
-                    self?.updateRecordingURL(url.absoluteString)
-                    
+                    self.recordingURL = url
+                    self.updateRecordingURL(url.absoluteString)
+
                 case .failure(let error):
-                    self?.showErrorAlert(message: "Failed to stop recording: \(error.localizedDescription)")
+                    self.showErrorAlert(message: "Failed to stop recording: \(error.localizedDescription)")
                 }
             }
         }

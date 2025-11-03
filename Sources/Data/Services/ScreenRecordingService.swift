@@ -39,6 +39,10 @@ public final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     public var isRecording: Bool {
         return recorder.isRecording
     }
+
+    public var isRecordingOwnedByService: Bool {
+        return isRecordingStartedByService && isRecording
+    }
     
     public func requestPermission(completion: @escaping (Bool) -> Void) {
         // ReplayKit handles permissions automatically

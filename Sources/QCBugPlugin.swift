@@ -92,7 +92,31 @@ public final class QCBugPlugin {
     public static func setScreenRecordingEnabled(_ enabled: Bool) {
         shared.setScreenRecordingEnabled(enabled)
     }
-    
+
+    // MARK: - Screen Recording Control
+
+    /// Start screen recording manually
+    /// - Parameter completion: Callback with success/failure result
+    public static func startScreenRecording(completion: @escaping (Result<Void, Error>) -> Void) {
+        shared.startScreenRecording(completion: completion)
+    }
+
+    /// Stop screen recording manually
+    /// - Parameter completion: Callback with video URL or error
+    public static func stopScreenRecording(completion: @escaping (Result<URL, Error>) -> Void) {
+        shared.stopScreenRecording(completion: completion)
+    }
+
+    /// Check if screen recording is currently active
+    public static var isScreenRecording: Bool {
+        return shared.isScreenRecording()
+    }
+
+    /// Check if the current recording is owned by this plugin
+    public static var isScreenRecordingOwnedByPlugin: Bool {
+        return shared.isScreenRecordingOwnedByPlugin()
+    }
+
     // MARK: - Debug Helpers
     
     #if DEBUG
@@ -123,18 +147,29 @@ public final class QCBugPlugin {
 public extension Notification.Name {
     /// Posted when QC Bug Plugin starts tracking
     static let QCBugPluginDidStartTracking = Notification.Name.qcBugPluginDidStartTracking
-    
+
     /// Posted when QC Bug Plugin stops tracking
     static let QCBugPluginDidStopTracking = Notification.Name.qcBugPluginDidStopTracking
-    
+
     /// Posted when a bug report is submitted successfully
     static let QCBugPluginDidSubmitReport = Notification.Name.qcBugPluginDidSubmitReport
-    
+
     /// Posted when bug report submission fails
     static let QCBugPluginDidFailToSubmitReport = Notification.Name.qcBugPluginDidFailToSubmitReport
-    
+
     /// Posted when a user action is tracked
     static let QCBugPluginDidTrackUserAction = Notification.Name.qcBugPluginDidTrackUserAction
+
+    // MARK: - Screen Recording Notifications
+
+    /// Posted when screen recording starts successfully
+    static let QCBugPluginDidStartRecording = Notification.Name.qcBugPluginDidStartRecording
+
+    /// Posted when screen recording stops successfully (userInfo contains "url" key)
+    static let QCBugPluginDidStopRecording = Notification.Name.qcBugPluginDidStopRecording
+
+    /// Posted when screen recording fails (userInfo contains "error" key)
+    static let QCBugPluginDidFailRecording = Notification.Name.qcBugPluginDidFailRecording
 }
 
 // MARK: - Documentation
