@@ -14,21 +14,36 @@ A comprehensive iOS framework for QC bug reporting with user interaction trackin
 
 ## 📦 Installation
 
+### Swift Package Manager (Recommended)
+
+Add to your `Package.swift`:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/daispacy/QCBugPlugin.git", from: "1.0.0")
+]
+```
+
+Or in Xcode:
+1. File → Add Package Dependencies
+2. Enter repository URL: `https://github.com/daispacy/QCBugPlugin.git`
+3. Select version and add to your target
+
 ### Manual Integration
 
 1. Add the `QCBugPlugin` folder to your Xcode project
 2. Add the framework to your target's dependencies
 3. Import the framework: `import QCBugPlugin`
 
-### Xcode Project Setup
+### Requirements
 
-1. Add QCBugPlugin as a framework target in your existing project
-2. Link the framework to your app target
-3. Make sure to add required frameworks: `ReplayKit`, `WebKit`
+- iOS 12.0+
+- Swift 5.3+
+- Xcode 12.0+
 
 ## 🔧 Quick Start
 
-### Basic Setup
+### Basic Setup (AppDelegate)
 
 ```swift
 import QCBugPlugin
@@ -36,50 +51,483 @@ import QCBugPlugin
 class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         
+        #if DEBUG || STAGING
         // Configure the plugin
         QCBugPlugin.configure(webhookURL: "https://your-webhook-url.com/bugs")
         
         // Start tracking user interactions
         QCBugPlugin.startTracking()
+        #endif
         
         return true
     }
 }
 ```
 
-### Trigger Bug Report
+### Advanced Configuration
 
 ```swift
-// Option 1: Shake gesture
+#if DEBUG || STAGING
+let config = QCBugPluginConfig(
+    webhookURL: "https://your-webhook-url.com/bugs",
+    apiKey: "your-api-key",
+    customData: [
+        "app": "YourApp",
+        "environment": "DEBUG",
+        "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+    ],
+    isScreenRecordingEnabled: true,
+    maxActionHistoryCount: 100,
+    enableFloatingButton: true
+)
+
+QCBugPlugin.configure(with: config)
+QCBugPlugin.startTracking()
+#endif
+```
+
+### Global Trigger (Shake Gesture)
+
+```swift
+// In AppDelegate or SceneDelegate
 override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
     if motion == .motionShake {
         QCBugPlugin.presentBugReport()
     }
 }
+```
 
-// Option 2: Button action
-@IBAction func reportBugTapped(_ sender: UIButton) {
-    QCBugPlugin.presentBugReport()
+## 🎯 Feature-Specific Integration (Non-Intrusive Pattern)
+
+### Integration Philosophy
+
+**DO NOT modify existing feature code!** Instead, create extensions that automatically integrate QCBugPlugin using method swizzling.
+
+### 📁 Ready-to-Use Templates
+
+We provide complete templates for non-intrusive integration. See the [`Templates/`](Templates/) folder:
+
+- **`AppDelegate+QCBugPlugin.swift`** - App-level initialization (copy once)
+- **`YourViewController+QCBugPlugin.swift`** - Per-feature screen tracking (copy per feature)
+- **`YourViewModel+QCBugPlugin.swift`** - Business logic tracking (copy per ViewModel)
+
+👉 **[See Templates README for detailed usage guide](Templates/README.md)**
+
+### Quick Integration Steps
+
+1. **Copy** the appropriate template from `Templates/` folder
+2. **Rename** to match your class (e.g., `CheckoutViewController+QCBugPlugin.swift`)
+3. **Replace** placeholder names with your actual class names
+4. **Customize** tracking data for your feature
+5. **Build** in DEBUG or STAGING - automatic integration!
+
+**Zero modifications to your original code required!**
+
+### Pattern: Extension-Based Integration
+
+For each feature, create a separate file: `<FeatureViewController>+QCBugPlugin.swift`
+
+#### Example: Minimal Integration
+
+**File:** `CheckoutViewController+QCBugPlugin.swift`
+
+```swift
+import UIKit
+import QCBugPlugin
+
+#if DEBUG || STAGING
+
+extension CheckoutViewController {
+    
+    static func setupQCBugPlugin() {
+        // Swizzle viewDidLoad
+        let original = #selector(viewDidLoad)
+        let swizzled = #selector(qc_viewDidLoad)
+        
+        guard let originalMethod = class_getInstanceMethod(self, original),
+              let swizzledMethod = class_getInstanceMethod(self, swizzled) else { return }
+        
+        method_exchangeImplementations(originalMethod, swizzledMethod)
+    }
+    
+    @objc private func qc_viewDidLoad() {
+        qc_viewDidLoad() // Call original
+        
+        // Add debug button
+        let bugButton = UIBarButtonItem(title: "🐛", style: .plain, 
+                                        target: self, action: #selector(showBugReport))
+        navigationItem.rightBarButtonItem = bugButton
+        
+        // Set feature context
+        QCBugPlugin.setCustomData([
+            "feature": "Checkout",
+            "screen": "CheckoutViewController"
+        ])
+    }
+    
+    @objc private func showBugReport() {
+        QCBugPlugin.presentBugReport()
+    }
+    
+    override class func initialize() {
+        guard self === CheckoutViewController.self else { return }
+        setupQCBugPlugin()
+    }
+}
+
+#endif
+```
+
+**That's it!** Your original `CheckoutViewController.swift` remains completely unchanged.
+
+### Complete Templates
+
+For comprehensive integration with all lifecycle hooks, data tracking, and best practices, use the templates in the [`Templates/`](Templates/) folder. Each template includes:
+
+- ✅ Full method swizzling setup
+- ✅ Multiple lifecycle hooks (viewDidLoad, viewWillAppear, etc.)
+- ✅ Shake gesture handling
+- ✅ Debug button integration
+- ✅ Context data management
+- ✅ Security guidelines and sanitization examples
+- ✅ Detailed inline documentation
+
+```swift
+import UIKit
+import QCBugPlugin
+
+#if DEBUG || STAGING
+
+extension InstallmentFeeViewController {
+    
+    // MARK: - QCBugPlugin Auto-Setup
+    
+    /// Automatically called when the class is first accessed
+    static func setupQCBugPlugin() {
+        swizzleViewDidLoad()
+        swizzleViewWillAppear()
+        swizzleMotionEnded()
+    }
+    
+    // MARK: - Method Swizzling
+    
+    private static func swizzleViewDidLoad() {
+        let originalSelector = #selector(viewDidLoad)
+        let swizzledSelector = #selector(qcBugPlugin_viewDidLoad)
+        
+        guard let originalMethod = class_getInstanceMethod(self, originalSelector),
+              let swizzledMethod = class_getInstanceMethod(self, swizzledSelector) else {
+            return
+        }
+        
+        method_exchangeImplementations(originalMethod, swizzledMethod)
+    }
+    
+    private static func swizzleViewWillAppear() {
+        let originalSelector = #selector(viewWillAppear(_:))
+        let swizzledSelector = #selector(qcBugPlugin_viewWillAppear(_:))
+        
+        guard let originalMethod = class_getInstanceMethod(self, originalSelector),
+              let swizzledMethod = class_getInstanceMethod(self, swizzledSelector) else {
+            return
+        }
+        
+        method_exchangeImplementations(originalMethod, swizzledMethod)
+    }
+    
+    private static func swizzleMotionEnded() {
+        let originalSelector = #selector(motionEnded(_:with:))
+        let swizzledSelector = #selector(qcBugPlugin_motionEnded(_:with:))
+        
+        guard let originalMethod = class_getInstanceMethod(self, originalSelector),
+              let swizzledMethod = class_getInstanceMethod(self, swizzledSelector) else {
+            return
+        }
+        
+        method_exchangeImplementations(originalMethod, swizzledMethod)
+    }
+    
+    // MARK: - Swizzled Methods
+    
+    @objc private func qcBugPlugin_viewDidLoad() {
+        // Call original implementation
+        qcBugPlugin_viewDidLoad() // This calls the original due to swizzling
+        
+        // Add QCBugPlugin setup
+        setupBugReportButton()
+        setupFeatureTracking()
+    }
+    
+    @objc private func qcBugPlugin_viewWillAppear(_ animated: Bool) {
+        // Call original implementation
+        qcBugPlugin_viewWillAppear(animated)
+        
+        // Update custom data when view appears
+        updateContextData()
+    }
+    
+    @objc private func qcBugPlugin_motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        // Call original implementation if it exists
+        qcBugPlugin_motionEnded(motion, with: event)
+        
+        // Handle shake gesture for bug reporting
+        if motion == .motionShake {
+            presentBugReportWithContext()
+        }
+    }
+    
+    // MARK: - QCBugPlugin Setup Methods
+    
+    private func setupBugReportButton() {
+        let bugButton = UIBarButtonItem(
+            title: "🐛",
+            style: .plain,
+            target: self,
+            action: #selector(bugReportButtonTapped)
+        )
+        navigationItem.rightBarButtonItem = bugButton
+    }
+    
+    @objc private func bugReportButtonTapped() {
+        presentBugReportWithContext()
+    }
+    
+    private func setupFeatureTracking() {
+        QCBugPlugin.setCustomData([
+            "feature": "InstallmentFeeCheck",
+            "screen": "InstallmentFeeViewController",
+            "screenTitle": title ?? "Unknown"
+        ])
+        
+        print("🐛 QCBugPlugin configured for InstallmentFeeCheck feature")
+    }
+    
+    private func updateContextData() {
+        var contextData: [String: Any] = [
+            "feature": "InstallmentFeeCheck",
+            "screen": "InstallmentFeeViewController"
+        ]
+        
+        // Add feature-specific data (example - adapt to your feature)
+        // if let selectedBank = viewModel?.selectedBank {
+        //     contextData["selectedBank"] = selectedBank.name
+        //     contextData["selectedBankCode"] = selectedBank.code
+        // }
+        
+        QCBugPlugin.setCustomData(contextData)
+    }
+    
+    private func presentBugReportWithContext() {
+        // Update context with latest data before presenting
+        updateContextData()
+        
+        // Present bug report
+        QCBugPlugin.presentBugReport()
+    }
+}
+
+// MARK: - Auto-Initialize
+
+extension InstallmentFeeViewController {
+    /// Called automatically when class is first loaded
+    @objc override open class func initialize() {
+        super.initialize()
+        
+        // Ensure this runs only once
+        struct Static {
+            static var token: Int = 0
+        }
+        
+        if self === InstallmentFeeViewController.self {
+            setupQCBugPlugin()
+        }
+    }
+}
+
+#endif
+```
+
+### Pattern: ViewModel Extension
+
+**File:** `InstallmentFeeViewModel+QCBugPlugin.swift`
+
+```swift
+import Foundation
+import QCBugPlugin
+
+#if DEBUG || STAGING
+
+extension InstallmentFeeViewModel {
+    
+    // MARK: - Business Logic Tracking
+    
+    func trackFeeChargeRequest() {
+        QCBugPlugin.setCustomData([
+            "action": "FeeChargeRequest",
+            "timestamp": Date().timeIntervalSince1970,
+            "selectedBank": selectedBank?.code ?? "none",
+            "amount": amountEntered ?? 0
+        ])
+    }
+    
+    func trackFeeChargeSuccess(fee: Decimal) {
+        QCBugPlugin.setCustomData([
+            "action": "FeeChargeSuccess",
+            "feeAmount": NSDecimalNumber(decimal: fee).doubleValue,
+            "success": true
+        ])
+    }
+    
+    func trackFeeChargeFailure(error: Error) {
+        QCBugPlugin.setCustomData([
+            "action": "FeeChargeFailure",
+            "errorType": String(describing: type(of: error)),
+            "errorMessage": error.localizedDescription,
+            "success": false
+        ])
+    }
+    
+    func trackUserSelection(type: String, value: String) {
+        QCBugPlugin.setCustomData([
+            "action": "UserSelection",
+            "selectionType": type,
+            "selectedValue": value
+        ])
+    }
+}
+
+#endif
+```
+
+### Integration Rules
+
+#### ✅ DO:
+1. **Create separate extension files**: `<YourViewController>+QCBugPlugin.swift`
+2. **Use method swizzling**: Hook into existing lifecycle methods without modifying original code
+3. **Wrap in `#if DEBUG || STAGING`**: Keep bug reporting out of production builds
+4. **Track feature-specific context**: Add meaningful custom data for each feature
+5. **Provide multiple triggers**: Shake gesture, debug button, floating button
+6. **Update context dynamically**: Refresh custom data in `viewWillAppear` or before presenting
+
+#### ❌ DON'T:
+1. **Modify existing feature code**: Never change original ViewController or ViewModel files
+2. **Include in production**: Always use conditional compilation for DEBUG/STAGING only
+3. **Track sensitive data**: Sanitize or exclude passwords, card numbers, PINs
+4. **Block main thread**: Keep tracking operations lightweight
+5. **Forget to call original**: Always call the original method in swizzled implementations
+
+### Swizzling Template
+
+For any ViewController that needs integration:
+
+```swift
+import UIKit
+import QCBugPlugin
+import ObjectiveC
+
+#if DEBUG || STAGING
+
+extension YourViewController {
+    
+    private static let swizzling: Void = {
+        let originalSelector = #selector(viewDidLoad)
+        let swizzledSelector = #selector(qc_viewDidLoad)
+        
+        guard let originalMethod = class_getInstanceMethod(YourViewController.self, originalSelector),
+              let swizzledMethod = class_getInstanceMethod(YourViewController.self, swizzledSelector) else {
+            return
+        }
+        
+        method_exchangeImplementations(originalMethod, swizzledMethod)
+    }()
+    
+    @objc private func qc_viewDidLoad() {
+        qc_viewDidLoad() // Calls original due to swizzling
+        
+        // Your QCBugPlugin setup here
+        setupQCBugReporting()
+    }
+    
+    private func setupQCBugReporting() {
+        // Add debug button
+        let bugButton = UIBarButtonItem(title: "🐛", style: .plain, target: self, action: #selector(showBugReport))
+        navigationItem.rightBarButtonItem = bugButton
+        
+        // Set feature context
+        QCBugPlugin.setCustomData([
+            "feature": "YourFeatureName",
+            "screen": String(describing: type(of: self))
+        ])
+    }
+    
+    @objc private func showBugReport() {
+        QCBugPlugin.presentBugReport()
+    }
+    
+    // Auto-trigger swizzling when class loads
+    public override class func initialize() {
+        guard self === YourViewController.self else { return }
+        _ = swizzling
+    }
+}
+
+#endif
+```
+
+### Available Swizzling Points
+
+The framework provides automatic swizzling for:
+- `viewDidAppear(_:)` - Screen tracking
+- `viewDidDisappear(_:)` - Screen exit tracking  
+- `sendAction(_:to:for:)` - Button tap tracking (UIButton)
+- `becomeFirstResponder()` - TextField focus tracking
+
+You can add custom swizzling for:
+- `viewDidLoad` - Initial setup
+- `viewWillAppear(_:)` - Context updates
+- `viewWillDisappear(_:)` - Cleanup
+- Custom methods - Feature-specific tracking
+
+### Security & Privacy
+
+#### Data Sanitization Example:
+
+```swift
+private func collectFormData() -> [String: Any] {
+    var data: [String: Any] = [:]
+    
+    // ✅ Safe: Presence flags
+    data["hasCardPrefix"] = !cardPrefixTextField.text.isEmpty
+    data["hasAmount"] = amountTextField.text != nil
+    
+    // ✅ Safe: Non-sensitive selections
+    data["selectedBank"] = selectedBank?.name
+    data["selectedPeriod"] = selectedPeriod
+    
+    // ❌ DON'T: Never track actual sensitive values
+    // data["cardNumber"] = cardNumberTextField.text  // WRONG!
+    // data["pin"] = pinTextField.text                 // WRONG!
+    
+    return data
 }
 ```
 
-## ⚙️ Advanced Configuration
+### Testing Your Integration
 
 ```swift
-let config = QCBugPluginConfig(
-    webhookURL: "https://your-webhook-url.com/bugs",
-    apiKey: "your-api-key",
-    customData: [
-        "userId": "12345",
-        "environment": "staging",
-        "version": "1.2.0"
-    ],
-    isScreenRecordingEnabled: true,
-    maxActionHistoryCount: 100,
-    enableFloatingButton: true // Debug builds only
-)
-
-QCBugPlugin.configure(with: config)
+#if DEBUG
+// In your ViewController or AppDelegate
+func testQCBugPluginIntegration() {
+    // Verify tracking is active
+    print("Tracking enabled: \(QCBugPlugin.isTrackingEnabled)")
+    
+    // Check framework info
+    print("Framework: \(QCBugPlugin.frameworkInfo)")
+    
+    // Manually trigger bug report
+    QCBugPlugin.presentBugReport()
+}
+#endif
 ```
 
 ## 🎯 Debug Mode
@@ -212,17 +660,95 @@ QCBugPlugin.printInfo()
 ## 📋 Requirements
 
 - iOS 12.0+
+- Swift 5.3+
 - Xcode 12.0+
-- Swift 5.0+
+- Required Frameworks: ReplayKit, WebKit (automatically linked via SPM)
 
-## 🤝 Integration with Other Apps
+## 🤝 Integration Examples
 
-This framework is designed to be easily portable between iOS apps:
+### Example 1: E-commerce Checkout Flow
 
-1. Copy the `QCBugPlugin` framework
-2. Configure with your webhook URL
-3. Start tracking
-4. Integrate trigger mechanism (shake, button, etc.)
+```swift
+// CheckoutViewController+QCBugPlugin.swift
+#if DEBUG || STAGING
+extension CheckoutViewController {
+    private func setupQCBugReporting() {
+        QCBugPlugin.setCustomData([
+            "feature": "Checkout",
+            "cartItems": cartItemCount,
+            "totalAmount": orderTotal,
+            "paymentMethod": selectedPaymentMethod?.name ?? "none"
+        ])
+    }
+}
+#endif
+```
+
+### Example 2: User Profile Feature
+
+```swift
+// ProfileViewController+QCBugPlugin.swift
+#if DEBUG || STAGING
+extension ProfileViewController {
+    private func updateBugReportContext() {
+        QCBugPlugin.setCustomData([
+            "feature": "UserProfile",
+            "userId": user?.id ?? "guest",
+            "isVerified": user?.isVerified ?? false,
+            "lastUpdate": user?.lastModified
+        ])
+    }
+}
+#endif
+```
+
+## 📝 Best Practices
+
+1. **Conditional Compilation**: Always wrap QCBugPlugin code in `#if DEBUG || STAGING`
+2. **Extension Pattern**: Use separate `+QCBugPlugin.swift` files for each feature
+3. **Method Swizzling**: Hook into lifecycle methods without modifying original code
+4. **Context Tracking**: Update custom data in `viewWillAppear` for accuracy
+5. **Data Sanitization**: Never track passwords, PINs, or full card numbers
+6. **Multiple Triggers**: Provide shake gesture, debug button, and floating button options
+7. **Test Integration**: Verify data collection before deploying to QC team
+
+## 📚 Documentation & Resources
+
+- **[Integration Templates](Templates/)** - Ready-to-use templates for non-intrusive integration
+- **[Integration Checklist](INTEGRATION_CHECKLIST.md)** - Complete checklist for proper integration
+- **[Sample Implementation](SAMPLE_IMPLEMENT.md)** - Real-world integration example
+- **[Architecture Guide](STRUCTURE.md)** - Framework architecture and design patterns
+- **[Public API Reference](SPM_PUBLIC_API.md)** - Complete SPM public API documentation
+- **[Copilot Instructions](.github/copilot-instructions.md)** - AI assistant guidelines
+
+## 🧪 Testing
+
+### Debug Information
+
+```swift
+#if DEBUG
+// Print framework info
+print(QCBugPlugin.frameworkInfo)
+
+// Check tracking status
+print("Tracking: \(QCBugPlugin.isTrackingEnabled)")
+
+// Test bug report presentation
+QCBugPlugin.presentBugReport()
+#endif
+```
+
+### Mock Webhook for Testing
+
+Use services like:
+- webhook.site
+- requestbin.com
+- Your local development server
+
+Example webhook URL format:
+```
+https://webhook.site/your-unique-id
+```
 
 ## 📝 License
 
