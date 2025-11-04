@@ -216,25 +216,8 @@ extension QCBugReportViewController {
                 video.appendChild(source);
                 body.appendChild(video);
             } else {
-                const fallback = document.createElement('div');
-                fallback.className = 'media-preview-fallback';
-                const text = document.createElement('span');
-                text.textContent = 'Preview not available. ';
-                const link = document.createElement('a');
-                if (media.fileURL) {
-                    link.href = media.fileURL;
-                } else {
-                    link.href = '#';
-                    link.addEventListener('click', function(event) {
-                        event.preventDefault();
-                    });
-                }
-                link.target = '_blank';
-                link.rel = 'noopener';
-                link.textContent = 'Open attachment';
-                fallback.appendChild(text);
-                fallback.appendChild(link);
-                body.appendChild(fallback);
+                handlePreviewFailure(index);
+                return;
             }
 
             caption.textContent = displayName;
@@ -934,25 +917,8 @@ extension QCBugReportViewController {
                 video.appendChild(source);
                 body.appendChild(video);
             } else {
-                const fallback = document.createElement('div');
-                fallback.className = 'media-preview-fallback';
-                const text = document.createElement('span');
-                text.textContent = 'Preview not available. ';
-                const link = document.createElement('a');
-                if (media.fileURL) {
-                    link.href = media.fileURL;
-                } else {
-                    link.href = '#';
-                    link.addEventListener('click', function(event) {
-                        event.preventDefault();
-                    });
-                }
-                link.target = '_blank';
-                link.rel = 'noopener';
-                link.textContent = 'Open attachment';
-                fallback.appendChild(text);
-                fallback.appendChild(link);
-                body.appendChild(fallback);
+                handlePreviewFailure(index);
+                return;
             }
 
             caption.textContent = displayName;
