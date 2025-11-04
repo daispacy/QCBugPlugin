@@ -71,6 +71,7 @@ public final class QCFloatingActionButtons: UIView {
         screenshotButton.alpha = 0
         screenshotButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
         clipsToBounds = false
+        isUserInteractionEnabled = true
     }
 
     private func setupMainButton() {
@@ -300,6 +301,31 @@ public final class QCFloatingActionButtons: UIView {
         }
 
         lastLocation = newCenter
+    }
+
+    // MARK: - Hit Testing for Touch Events
+    
+    override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        // Check if the point is within the main button
+        let mainButtonPoint = convert(point, to: mainButton)
+        if mainButton.bounds.contains(mainButtonPoint) {
+            return mainButton.hitTest(mainButtonPoint, with: event) ?? mainButton
+        }
+        
+        // Check if the point is within the record button
+        let recordButtonPoint = convert(point, to: recordButton)
+        if recordButton.bounds.contains(recordButtonPoint) && recordButton.alpha > 0 {
+            return recordButton.hitTest(recordButtonPoint, with: event) ?? recordButton
+        }
+        
+        // Check if the point is within the screenshot button
+        let screenshotButtonPoint = convert(point, to: screenshotButton)
+        if screenshotButton.bounds.contains(screenshotButtonPoint) && screenshotButton.alpha > 0 {
+            return screenshotButton.hitTest(screenshotButtonPoint, with: event) ?? screenshotButton
+        }
+        
+        // If point is not within any button, return nil to allow touches to pass through
+        return nil
     }
 
     // MARK: - Public Methods
