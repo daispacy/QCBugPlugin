@@ -28,6 +28,7 @@ public final class QCBugReportViewController: UIViewController {
     private var webView: WKWebView!
     private var isRecording = false
     private var recordingURL: URL?
+    private var mediaAttachments: [MediaAttachment] = []
     
     // Bug report data
     private var bugDescription = ""
@@ -135,7 +136,7 @@ public final class QCBugReportViewController: UIViewController {
         let deviceInfo = DeviceInfo()
         let appInfo = AppInfo()
         let customData = configuration?.customData.compactMapValues { "\($0)" } ?? [:]
-        
+
         return BugReport(
             description: bugDescription,
             priority: selectedPriority,
@@ -147,8 +148,20 @@ public final class QCBugReportViewController: UIViewController {
             customData: customData,
             currentScreen: getCurrentScreenName(),
             networkInfo: NetworkInfo(),
-            memoryInfo: MemoryInfo()
+            memoryInfo: MemoryInfo(),
+            mediaAttachments: mediaAttachments
         )
+    }
+
+    // MARK: - Media Attachments
+
+    internal func addMediaAttachment(_ attachment: MediaAttachment) {
+        mediaAttachments.append(attachment)
+
+        // Update recording URL for backward compatibility
+        if attachment.type == .screenRecording, let url = URL(string: attachment.fileURL) {
+            recordingURL = url
+        }
     }
     
     private func getCurrentScreenName() -> String? {

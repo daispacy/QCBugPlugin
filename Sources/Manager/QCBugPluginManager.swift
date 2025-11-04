@@ -19,9 +19,13 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     private var configuration: QCBugPluginConfig?
     private var uiTracker: UITrackingProtocol?
     private var screenRecorder: ScreenRecordingProtocol?
+    private var screenCapture: ScreenCaptureProtocol?
     private var bugReportService: BugReportProtocol?
     private var isConfigured: Bool = false
     private var floatingButton: QCFloatingButton?
+    private var floatingActionButtons: QCFloatingActionButtons?
+    private var pendingMediaAttachments: [MediaAttachment] = []
+    private var shouldAutoPresentForm: Bool = false
     
     // MARK: - Public Properties
     public weak var delegate: QCBugPluginDelegate?
@@ -47,27 +51,30 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     
     public func configure(with config: QCBugPluginConfig) {
         self.configuration = config
-        
+
         // Initialize services
         self.uiTracker = UITrackingService()
         self.uiTracker?.maxActionHistoryCount = config.maxActionHistoryCount
-        
+
         if config.isScreenRecordingEnabled {
             self.screenRecorder = ScreenRecordingService()
         }
-        
+
+        // Initialize screen capture service
+        self.screenCapture = ScreenCaptureService()
+
         self.bugReportService = BugReportAPIService(
             webhookURL: config.webhookURL,
             apiKey: config.apiKey
         )
-        
-        // Setup floating button if enabled
+
+        // Setup floating action buttons if enabled
         if config.enableFloatingButton {
-            setupFloatingButton()
+            setupFloatingActionButtons()
         }
-        
+
         self.isConfigured = true
-        
+
         print("✅ QCBugPlugin configured successfully")
     }
     
@@ -112,26 +119,34 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             print("❌ QCBugPlugin: Plugin not configured. Call configure() first.")
             return
         }
-        
+
         // Check delegate permission
         if let shouldPresent = delegate?.bugPluginShouldPresentBugReport(self),
            !shouldPresent {
             return
         }
-        
+
         let actionHistory = uiTracker?.getActionHistory() ?? []
-        
+
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            
+
             let bugReportVC = QCBugReportViewController(
                 actionHistory: actionHistory,
                 screenRecorder: self.screenRecorder,
                 configuration: self.configuration
             )
-            
+
             bugReportVC.delegate = self
-            
+
+            // Add any pending media attachments
+            for attachment in self.pendingMediaAttachments {
+                bugReportVC.addMediaAttachment(attachment)
+            }
+
+            // Clear pending attachments after adding
+            self.pendingMediaAttachments.removeAll()
+
             // Present modally
             if let topViewController = UIApplication.shared.topViewController() {
                 let navController = UINavigationController(rootViewController: bugReportVC)
@@ -236,6 +251,13 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
 
             switch result {
             case .success(let url):
+                // Create media attachment
+                let attachment = MediaAttachment(type: .screenRecording, fileURL: url)
+                self.pendingMediaAttachments.append(attachment)
+
+                // Update floating button state
+                self.floatingActionButtons?.updateRecordingState(isRecording: false)
+
                 // Notify delegate and post notification
                 self.delegate?.bugPlugin(self, didStopRecordingWithURL: url)
                 NotificationCenter.default.post(
@@ -244,6 +266,15 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
                     userInfo: ["url": url]
                 )
                 print("🎬 QCBugPlugin: Screen recording stopped - \(url)")
+
+                // Auto-present bug report form if enabled
+                if self.shouldAutoPresentForm {
+                    self.shouldAutoPresentForm = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self.presentBugReport()
+                    }
+                }
+
                 completion(.success(url))
 
             case .failure(let error):
@@ -290,7 +321,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         #if DEBUG
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            
+
             if self.floatingButton == nil {
                 self.floatingButton = QCFloatingButton()
                 self.floatingButton?.addTarget(
@@ -298,7 +329,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
                     action: #selector(self.floatingButtonTapped),
                     for: .touchUpInside
                 )
-                
+
                 // iOS 12 compatible window access
                 if #available(iOS 13.0, *) {
                     if let window = UIApplication.shared.windows.first {
@@ -313,7 +344,31 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         }
         #endif
     }
-    
+
+    private func setupFloatingActionButtons() {
+        #if DEBUG
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            if self.floatingActionButtons == nil {
+                self.floatingActionButtons = QCFloatingActionButtons()
+                self.floatingActionButtons?.delegate = self
+
+                // iOS 12 compatible window access
+                if #available(iOS 13.0, *) {
+                    if let window = UIApplication.shared.windows.first {
+                        window.addSubview(self.floatingActionButtons!)
+                    }
+                } else {
+                    if let window = UIApplication.shared.keyWindow {
+                        window.addSubview(self.floatingActionButtons!)
+                    }
+                }
+            }
+        }
+        #endif
+    }
+
     @objc private func floatingButtonTapped() {
         presentBugReport()
     }
@@ -324,12 +379,102 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             screenRecorder?.stopRecording { _ in }
         }
     }
-    
+
     @objc private func appWillEnterForeground() {
         // Resume tracking if it was enabled
         if let tracker = uiTracker, tracker.isTracking {
             // Tracking continues automatically
         }
+    }
+
+    // MARK: - Screenshot Capture
+
+    public func captureScreenshot(completion: @escaping (Result<URL, Error>) -> Void) {
+        guard let capture = screenCapture else {
+            let error = NSError(
+                domain: "com.qcbugplugin",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Screen capture is not available"]
+            )
+            completion(.failure(error))
+            return
+        }
+
+        capture.captureScreen { [weak self] result in
+            guard let self = self else { return }
+
+            switch result {
+            case .success(let url):
+                // Create media attachment
+                let attachment = MediaAttachment(type: .screenshot, fileURL: url)
+                self.pendingMediaAttachments.append(attachment)
+
+                print("📸 QCBugPlugin: Screenshot captured - \(url)")
+
+                // Auto-present bug report form
+                self.shouldAutoPresentForm = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.shouldAutoPresentForm = false
+                    self.presentBugReport()
+                }
+
+                completion(.success(url))
+
+            case .failure(let error):
+                print("❌ QCBugPlugin: Screenshot capture failed - \(error.localizedDescription)")
+                completion(.failure(error))
+            }
+        }
+    }
+}
+
+// MARK: - QCFloatingActionButtonsDelegate
+
+extension QCBugPluginManager: QCFloatingActionButtonsDelegate {
+
+    public func floatingButtonsDidTapRecord() {
+        guard let recorder = screenRecorder else {
+            print("❌ QCBugPlugin: Screen recording not enabled")
+            return
+        }
+
+        if recorder.isRecording {
+            // Stop recording
+            shouldAutoPresentForm = true
+            stopScreenRecording { result in
+                switch result {
+                case .success(let url):
+                    print("✅ Recording stopped: \(url)")
+                case .failure(let error):
+                    print("❌ Failed to stop recording: \(error)")
+                }
+            }
+        } else {
+            // Start recording
+            startScreenRecording { [weak self] result in
+                switch result {
+                case .success:
+                    self?.floatingActionButtons?.updateRecordingState(isRecording: true)
+                case .failure(let error):
+                    print("❌ Failed to start recording: \(error)")
+                }
+            }
+        }
+    }
+
+    public func floatingButtonsDidTapScreenshot() {
+        captureScreenshot { result in
+            switch result {
+            case .success(let url):
+                print("✅ Screenshot captured: \(url)")
+            case .failure(let error):
+                print("❌ Failed to capture screenshot: \(error)")
+            }
+        }
+    }
+
+    public func floatingButtonsDidTapBugReport() {
+        presentBugReport()
     }
 }
 

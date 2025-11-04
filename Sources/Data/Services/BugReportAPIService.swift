@@ -126,15 +126,39 @@ public final class BugReportAPIService: BugReportProtocol {
         boundary: String
     ) -> Data {
         var body = Data()
-        
+
         // Add bug report JSON data
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"bug_report\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: application/json\r\n\r\n".data(using: .utf8)!)
         body.append(report)
         body.append("\r\n".data(using: .utf8)!)
-        
-        // Add screen recording if available
+
+        // Parse media attachments from report JSON
+        if let reportDict = try? JSONSerialization.jsonObject(with: report) as? [String: Any],
+           let mediaAttachmentsArray = reportDict["mediaAttachments"] as? [[String: Any]] {
+
+            // Add each media attachment
+            for (index, attachmentDict) in mediaAttachmentsArray.enumerated() {
+                if let fileURLString = attachmentDict["fileURL"] as? String,
+                   let fileURL = URL(string: fileURLString),
+                   let fileData = try? Data(contentsOf: fileURL),
+                   let typeString = attachmentDict["type"] as? String {
+
+                    let fileName = fileURL.lastPathComponent
+                    let fieldName = typeString == "screenshot" ? "screenshot_\(index)" : "screen_recording"
+                    let contentType = typeString == "screenshot" ? "image/png" : "video/mp4"
+
+                    body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                    body.append("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
+                    body.append("Content-Type: \(contentType)\r\n\r\n".data(using: .utf8)!)
+                    body.append(fileData)
+                    body.append("\r\n".data(using: .utf8)!)
+                }
+            }
+        }
+
+        // Add screen recording if available (backward compatibility)
         if let videoURL = screenRecordingURL,
            let videoData = try? Data(contentsOf: videoURL) {
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
@@ -143,10 +167,10 @@ public final class BugReportAPIService: BugReportProtocol {
             body.append(videoData)
             body.append("\r\n".data(using: .utf8)!)
         }
-        
+
         // Add closing boundary
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        
+
         return body
     }
     

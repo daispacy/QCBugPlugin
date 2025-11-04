@@ -35,11 +35,14 @@ public struct BugReport: Codable {
     /// App information
     public let appInfo: AppInfo
     
-    /// Screenshot URLs (if any)
+    /// Screenshot URLs (if any) - Deprecated, use mediaAttachments instead
     public let screenshots: [String]
-    
-    /// Screen recording URL (if available)
+
+    /// Screen recording URL (if available) - Deprecated, use mediaAttachments instead
     public let screenRecordingURL: String?
+
+    /// Media attachments (screenshots and recordings)
+    public let mediaAttachments: [MediaAttachment]
     
     /// Custom data provided by the app
     public let customData: [String: String]
@@ -65,7 +68,8 @@ public struct BugReport: Codable {
         customData: [String: String] = [:],
         currentScreen: String? = nil,
         networkInfo: NetworkInfo? = nil,
-        memoryInfo: MemoryInfo? = nil
+        memoryInfo: MemoryInfo? = nil,
+        mediaAttachments: [MediaAttachment] = []
     ) {
         self.id = UUID().uuidString
         self.timestamp = Date()
@@ -81,6 +85,7 @@ public struct BugReport: Codable {
         self.currentScreen = currentScreen
         self.networkInfo = networkInfo
         self.memoryInfo = memoryInfo
+        self.mediaAttachments = mediaAttachments
     }
 }
 
