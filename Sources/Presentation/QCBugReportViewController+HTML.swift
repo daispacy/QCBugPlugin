@@ -77,6 +77,18 @@ extension QCBugReportViewController {
                             <div id="recordingStatus" class="recording-status"></div>
                         </div>
                     </div>
+                    
+                    <div id="recordingPreview" class="media-preview" style="display: none; margin-top: 15px;">
+                        <div class="media-item">
+                            <span class="media-type">🎥 Recording</span>
+                            <span id="recordingName" class="media-name">Recorded video</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="section" id="mediaSection" style="display: none;">
+                    <h2>📎 Attachments</h2>
+                    <div id="mediaList" class="media-list"></div>
                 </div>
                 
                 <div class="section">
@@ -256,6 +268,46 @@ extension QCBugReportViewController {
             50% { opacity: 0.5; }
         }
         
+        .media-preview {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid #e5e5e7;
+        }
+        
+        .media-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #e5e5e7;
+        }
+        
+        .media-type {
+            font-size: 18px;
+            margin-right: 10px;
+            min-width: 30px;
+        }
+        
+        .media-name {
+            flex: 1;
+            font-size: 14px;
+            color: #1d1d1f;
+            font-weight: 500;
+            word-break: break-word;
+        }
+        
+        .media-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .media-list .media-item {
+            justify-content: space-between;
+        }
+        
         .actions-timeline {
             max-height: 300px;
             overflow-y: auto;
@@ -395,6 +447,7 @@ extension QCBugReportViewController {
         let actionHistory = [];
         let isRecordingAvailable = false;
         let isCurrentlyRecording = false;
+        let capturedMedia = [];
         
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -487,6 +540,21 @@ extension QCBugReportViewController {
             const status = document.getElementById('recordingStatus');
             status.textContent = '✅ Recording saved successfully';
             status.className = 'recording-status';
+            
+            // Display the recording in the preview section
+            const preview = document.getElementById('recordingPreview');
+            const recordingName = document.getElementById('recordingName');
+            
+            const fileName = url.split('/').pop() || 'recording.mp4';
+            recordingName.textContent = fileName;
+            preview.style.display = 'block';
+            
+            // Add to media attachments list
+            addMediaAttachment({
+                type: 'screenRecording',
+                fileURL: url,
+                fileName: fileName
+            });
         }
         
         // Action history
@@ -585,6 +653,37 @@ extension QCBugReportViewController {
             document.getElementById('systemVersion').textContent = navigator.userAgent.includes('iPhone') ? 'iOS' : 'Unknown';
             document.getElementById('appVersion').textContent = '1.0.0';
             document.getElementById('screenSize').textContent = `${screen.width}×${screen.height}`;
+        }
+        
+        function addMediaAttachment(media) {
+            capturedMedia.push(media);
+            updateMediaList();
+        }
+        
+        function updateMediaList() {
+            const mediaList = document.getElementById('mediaList');
+            const mediaSection = document.getElementById('mediaSection');
+            
+            if (capturedMedia.length === 0) {
+                mediaSection.style.display = 'none';
+                return;
+            }
+            
+            mediaSection.style.display = 'block';
+            
+            const html = capturedMedia.map((media, index) => {
+                const icon = media.type === 'screenRecording' ? '🎥' : 
+                            media.type === 'screenshot' ? '📸' : '📎';
+                
+                return `
+                    <div class="media-item">
+                        <span class="media-type">${icon}</span>
+                        <span class="media-name">${media.fileName}</span>
+                    </div>
+                `;
+            }).join('');
+            
+            mediaList.innerHTML = html;
         }
         """
     }

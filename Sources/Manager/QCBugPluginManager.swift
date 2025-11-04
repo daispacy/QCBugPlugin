@@ -150,7 +150,12 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             // Present modally
             if let topViewController = UIApplication.shared.topViewController() {
                 let navController = UINavigationController(rootViewController: bugReportVC)
-                navController.modalPresentationStyle = .fullScreen
+                navController.modalPresentationStyle = .formSheet
+                if #available(iOS 15.0, *) {
+                    if let sheet = navController.sheetPresentationController {
+                        sheet.detents = [.medium(), .large()]
+                    }
+                }
                 topViewController.present(navController, animated: true)
             }
         }
@@ -161,8 +166,8 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     }
     
     public func setCustomData(_ data: [String: Any]) {
-        guard var config = configuration else { return }
-        
+        guard let config = configuration else { return }
+
         // Update configuration with new custom data
         let newConfig = QCBugPluginConfig(
             webhookURL: config.webhookURL,
@@ -177,7 +182,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     }
     
     public func setScreenRecordingEnabled(_ enabled: Bool) {
-        guard var config = configuration else { return }
+        guard let config = configuration else { return }
 
         let newConfig = QCBugPluginConfig(
             webhookURL: config.webhookURL,
