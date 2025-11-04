@@ -26,15 +26,12 @@ public final class QCBugReportViewController: UIViewController {
     private let configuration: QCBugPluginConfiguration?
     
     private var webView: WKWebView!
-    private var isRecording = false
-    private var recordingURL: URL?
     private var mediaAttachments: [MediaAttachment] = []
     
     // Bug report data
     private var bugDescription = ""
     private var selectedPriority: BugPriority = .medium
     private var selectedCategory: BugCategory = .other
-    private var shouldRecordScreen = false
     
     // MARK: - Initialization
     
@@ -95,7 +92,6 @@ public final class QCBugReportViewController: UIViewController {
         
         // Add message handlers for JS -> Native communication
         userController.add(self, name: "bugReportHandler")
-        userController.add(self, name: "recordingHandler")
         
         configuration.userContentController = userController
         configuration.preferences.javaScriptEnabled = true
@@ -144,7 +140,6 @@ public final class QCBugReportViewController: UIViewController {
             userActions: actionHistory,
             deviceInfo: deviceInfo,
             appInfo: appInfo,
-            screenRecordingURL: recordingURL?.absoluteString,
             customData: customData,
             currentScreen: getCurrentScreenName(),
             networkInfo: NetworkInfo(),
@@ -157,11 +152,6 @@ public final class QCBugReportViewController: UIViewController {
 
     internal func addMediaAttachment(_ attachment: MediaAttachment) {
         mediaAttachments.append(attachment)
-
-        // Update recording URL for backward compatibility
-        if attachment.type == .screenRecording, let url = URL(string: attachment.fileURL) {
-            recordingURL = url
-        }
     }
     
     private func getCurrentScreenName() -> String? {
@@ -179,8 +169,6 @@ extension QCBugReportViewController: WKScriptMessageHandler {
         switch message.name {
         case "bugReportHandler":
             handleBugReportMessage(message)
-        case "recordingHandler":
-            handleRecordingMessage(message)
         default:
             break
         }
@@ -208,23 +196,6 @@ extension QCBugReportViewController: WKScriptMessageHandler {
                 selectedCategory = category
             }
             
-        case "updateRecordingOption":
-            shouldRecordScreen = data["enabled"] as? Bool ?? false
-            
-        default:
-            break
-        }
-    }
-    
-    private func handleRecordingMessage(_ message: WKScriptMessage) {
-        guard let data = message.body as? [String: Any],
-              let action = data["action"] as? String else { return }
-        
-        switch action {
-        case "startRecording":
-            startScreenRecording()
-        case "stopRecording":
-            stopScreenRecording()
         default:
             break
         }
@@ -235,86 +206,6 @@ extension QCBugReportViewController: WKScriptMessageHandler {
     }
 }
 
-// MARK: - Screen Recording
-
-extension QCBugReportViewController {
-    
-    private func startScreenRecording() {
-        guard let recorder = screenRecorder else { return }
-
-        // Check if already recording using the service's state
-        guard !recorder.isRecording else {
-            // If recording is already active, just update UI to reflect this
-            isRecording = true
-            updateRecordingState(isRecording: true)
-            return
-        }
-
-        recorder.startRecording { [weak self] result in
-            DispatchQueue.main.async {
-                guard let self = self, let recorder = self.screenRecorder else { return }
-
-                switch result {
-                case .success:
-                    // Sync local state with service state
-                    self.isRecording = recorder.isRecordingOwnedByService
-                    self.updateRecordingState(isRecording: self.isRecording)
-
-                case .failure(let error):
-                    self.showErrorAlert(message: "Failed to start recording: \(error.localizedDescription)")
-                }
-            }
-        }
-    }
-    
-    private func stopScreenRecording() {
-        guard let recorder = screenRecorder, isRecording else { return }
-
-        // Only attempt to stop if we own the recording
-        guard recorder.isRecordingOwnedByService else {
-            // Recording not owned by service, just update UI
-            isRecording = false
-            updateRecordingState(isRecording: false)
-            showErrorAlert(message: "Cannot stop recording that was started externally")
-            return
-        }
-
-        recorder.stopRecording { [weak self] result in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-
-                self.isRecording = false
-                self.updateRecordingState(isRecording: false)
-
-                switch result {
-                case .success(let url):
-                    self.recordingURL = url
-                    self.updateRecordingURL(url.absoluteString)
-
-                case .failure(let error):
-                    self.showErrorAlert(message: "Failed to stop recording: \(error.localizedDescription)")
-                }
-            }
-        }
-    }
-    
-    private func updateRecordingState(isRecording: Bool) {
-        let script = "updateRecordingState(\(isRecording))"
-        webView.evaluateJavaScript(script)
-    }
-    
-    private func updateRecordingURL(_ url: String) {
-        let script = "updateRecordingURL('\(url)')"
-        webView.evaluateJavaScript(script)
-    }
-    
-    private func showErrorAlert(message: String) {
-        let alert = UIAlertController(title: "Error", message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
-    }
-}
-
 // MARK: - WKNavigationDelegate
 
 extension QCBugReportViewController: WKNavigationDelegate {
@@ -322,9 +213,6 @@ extension QCBugReportViewController: WKNavigationDelegate {
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // Inject action history data
         injectActionHistory()
-        
-        // Configure recording availability
-        injectRecordingAvailability()
     }
     
     private func injectActionHistory() {
@@ -339,11 +227,5 @@ extension QCBugReportViewController: WKNavigationDelegate {
         } catch {
             print("Failed to inject action history: \(error)")
         }
-    }
-    
-    private func injectRecordingAvailability() {
-        let isAvailable = screenRecorder?.isAvailable ?? false
-        let script = "setRecordingAvailability(\(isAvailable))"
-        webView.evaluateJavaScript(script)
     }
 }

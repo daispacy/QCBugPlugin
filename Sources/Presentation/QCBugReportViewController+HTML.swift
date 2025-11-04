@@ -44,47 +44,7 @@ extension QCBugReportViewController {
                     </select>
                 </div>
                 
-                <div class="section">
-                    <h2>📂 Category</h2>
-                    <select id="categorySelect" onchange="updateCategory()">
-                        <option value="ui">🎨 UI/UX Issue</option>
-                        <option value="functionality">⚙️ Functionality</option>
-                        <option value="performance">⚡ Performance</option>
-                        <option value="crash">💥 Crash</option>
-                        <option value="data">📊 Data Issue</option>
-                        <option value="network">🌐 Network</option>
-                        <option value="security">🔒 Security</option>
-                        <option value="other" selected>❓ Other</option>
-                    </select>
-                </div>
                 
-                <div class="section" id="recordingSection">
-                    <h2>🎥 Screen Recording</h2>
-                    <div class="recording-container">
-                        <label class="checkbox-container">
-                            <input type="checkbox" id="enableRecording" onchange="updateRecordingOption()">
-                            <span class="checkmark"></span>
-                            Enable Screen Recording
-                        </label>
-                        
-                        <div class="recording-controls" id="recordingControls" style="display: none;">
-                            <button id="startRecordingBtn" onclick="startRecording()" class="record-btn start">
-                                🔴 Start Recording
-                            </button>
-                            <button id="stopRecordingBtn" onclick="stopRecording()" class="record-btn stop" disabled>
-                                ⏹️ Stop Recording
-                            </button>
-                            <div id="recordingStatus" class="recording-status"></div>
-                        </div>
-                    </div>
-                    
-                    <div id="recordingPreview" class="media-preview" style="display: none; margin-top: 15px;">
-                        <div class="media-item">
-                            <span class="media-type">🎥 Recording</span>
-                            <span id="recordingName" class="media-name">Recorded video</span>
-                        </div>
-                    </div>
-                </div>
                 
                 <div class="section" id="mediaSection" style="display: none;">
                     <h2>📎 Attachments</h2>
@@ -206,66 +166,6 @@ extension QCBugReportViewController {
             width: 18px;
             height: 18px;
             cursor: pointer;
-        }
-        
-        .recording-controls {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        
-        .record-btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        .record-btn.start {
-            background: #ff3b30;
-            color: white;
-        }
-        
-        .record-btn.start:hover {
-            background: #d70015;
-        }
-        
-        .record-btn.stop {
-            background: #8e8e93;
-            color: white;
-        }
-        
-        .record-btn.stop:enabled {
-            background: #ff9500;
-        }
-        
-        .record-btn.stop:enabled:hover {
-            background: #e6850e;
-        }
-        
-        .record-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .recording-status {
-            font-size: 14px;
-            color: #8e8e93;
-            font-weight: 500;
-        }
-        
-        .recording-status.recording {
-            color: #ff3b30;
-            animation: pulse 1.5s infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
         }
         
         .media-preview {
@@ -425,16 +325,6 @@ extension QCBugReportViewController {
                 padding: 15px;
             }
             
-            .recording-controls {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .record-btn {
-                width: 100%;
-                margin-bottom: 8px;
-            }
-            
             .info-grid {
                 grid-template-columns: 1fr;
             }
@@ -445,8 +335,6 @@ extension QCBugReportViewController {
     private func generateJavaScript() -> String {
         return """
         let actionHistory = [];
-        let isRecordingAvailable = false;
-        let isCurrentlyRecording = false;
         let capturedMedia = [];
         
         // Initialize on page load
@@ -472,88 +360,10 @@ extension QCBugReportViewController {
         }
         
         function updateCategory() {
-            const category = document.getElementById('categorySelect').value;
+            const category = document.querySelector('.section:nth-of-type(3) select').value;
             webkit.messageHandlers.bugReportHandler.postMessage({
                 action: 'updateCategory',
                 category: category
-            });
-        }
-        
-        function updateRecordingOption() {
-            const enabled = document.getElementById('enableRecording').checked;
-            const controls = document.getElementById('recordingControls');
-            controls.style.display = enabled ? 'block' : 'none';
-            
-            webkit.messageHandlers.bugReportHandler.postMessage({
-                action: 'updateRecordingOption',
-                enabled: enabled
-            });
-        }
-        
-        // Recording handlers
-        function startRecording() {
-            if (!isRecordingAvailable) {
-                alert('Screen recording is not available on this device');
-                return;
-            }
-            
-            webkit.messageHandlers.recordingHandler.postMessage({
-                action: 'startRecording'
-            });
-        }
-        
-        function stopRecording() {
-            webkit.messageHandlers.recordingHandler.postMessage({
-                action: 'stopRecording'
-            });
-        }
-        
-        // Called from native code
-        function setRecordingAvailability(available) {
-            isRecordingAvailable = available;
-            const section = document.getElementById('recordingSection');
-            
-            if (!available) {
-                section.style.display = 'none';
-            }
-        }
-        
-        function updateRecordingState(recording) {
-            isCurrentlyRecording = recording;
-            const startBtn = document.getElementById('startRecordingBtn');
-            const stopBtn = document.getElementById('stopRecordingBtn');
-            const status = document.getElementById('recordingStatus');
-            
-            startBtn.disabled = recording;
-            stopBtn.disabled = !recording;
-            
-            if (recording) {
-                status.textContent = '🔴 Recording in progress...';
-                status.className = 'recording-status recording';
-            } else {
-                status.textContent = '';
-                status.className = 'recording-status';
-            }
-        }
-        
-        function updateRecordingURL(url) {
-            const status = document.getElementById('recordingStatus');
-            status.textContent = '✅ Recording saved successfully';
-            status.className = 'recording-status';
-            
-            // Display the recording in the preview section
-            const preview = document.getElementById('recordingPreview');
-            const recordingName = document.getElementById('recordingName');
-            
-            const fileName = url.split('/').pop() || 'recording.mp4';
-            recordingName.textContent = fileName;
-            preview.style.display = 'block';
-            
-            // Add to media attachments list
-            addMediaAttachment({
-                type: 'screenRecording',
-                fileURL: url,
-                fileName: fileName
             });
         }
         
