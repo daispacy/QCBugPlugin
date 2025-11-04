@@ -213,6 +213,9 @@ extension QCBugReportViewController: WKNavigationDelegate {
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // Inject action history data
         injectActionHistory()
+        
+        // Inject media attachments
+        injectMediaAttachments()
     }
     
     private func injectActionHistory() {
@@ -226,6 +229,29 @@ extension QCBugReportViewController: WKNavigationDelegate {
             webView.evaluateJavaScript(script)
         } catch {
             print("Failed to inject action history: \(error)")
+        }
+    }
+    
+    private func injectMediaAttachments() {
+        guard !mediaAttachments.isEmpty else { return }
+        
+        for attachment in mediaAttachments {
+            let fileName = URL(fileURLWithPath: attachment.fileURL).lastPathComponent
+            let mediaType = attachment.type == .screenRecording ? "screenRecording" : "screenshot"
+            
+            let script = """
+            addMediaAttachment({
+                type: '\(mediaType)',
+                fileURL: '\(attachment.fileURL)',
+                fileName: '\(fileName)'
+            });
+            """
+            
+            webView.evaluateJavaScript(script) { result, error in
+                if let error = error {
+                    print("Failed to inject media attachment: \(error)")
+                }
+            }
         }
     }
 }
