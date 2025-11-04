@@ -83,6 +83,14 @@ extension QCBugReportViewController {
                 </div>
             </div>
             
+            <div id="mediaPreviewOverlay" class="media-preview-overlay" onclick="if (event.target === this) { closeMediaPreview(); }">
+                <div class="media-preview-content" onclick="event.stopPropagation();">
+                    <button type="button" class="media-preview-close" onclick="closeMediaPreview();">✕</button>
+                    <div id="mediaPreviewBody" class="media-preview-body"></div>
+                    <div id="mediaPreviewCaption" class="media-preview-caption"></div>
+                </div>
+            </div>
+            
             <script>
                 \(generateJavaScript())
             </script>
@@ -104,6 +112,10 @@ extension QCBugReportViewController {
             background-color: #f5f5f7;
             color: #1d1d1f;
             line-height: 1.6;
+        }
+
+        body.media-preview-active {
+            overflow: hidden;
         }
         
         .container {
@@ -165,6 +177,117 @@ extension QCBugReportViewController {
             margin-right: 12px;
             width: 18px;
             height: 18px;
+
+        function showMediaPreview(index) {
+            if (index < 0 || index >= capturedMedia.length) {
+                return;
+            }
+
+            const media = capturedMedia[index];
+            const overlay = document.getElementById('mediaPreviewOverlay');
+            const body = document.getElementById('mediaPreviewBody');
+            const caption = document.getElementById('mediaPreviewCaption');
+
+            if (!overlay || !body || !caption) {
+                return;
+            }
+
+            // Clear previous content
+            while (body.firstChild) {
+                body.removeChild(body.firstChild);
+            }
+            caption.textContent = '';
+
+            const type = (media.type || '').toLowerCase();
+            const isRecording = type === 'screenrecording' || type === 'screen_recording';
+            const isScreenshot = type === 'screenshot';
+            const isImage = isScreenshot || (media.fileURL && media.fileURL.match(/\\.(jpg|jpeg|png|gif|webp)$/i));
+            const displayName = media.fileName || `Attachment ${index + 1}`;
+
+            if (isImage && media.fileURL) {
+                const img = document.createElement('img');
+                img.className = 'media-preview-image';
+                img.src = media.fileURL;
+                img.alt = displayName;
+                img.onerror = function() {
+                    caption.textContent = 'Preview unavailable for this attachment';
+                };
+                body.appendChild(img);
+            } else if (isRecording && media.fileURL) {
+                const video = document.createElement('video');
+                video.className = 'media-preview-video';
+                video.controls = true;
+                video.autoplay = true;
+                video.playsInline = true;
+                const source = document.createElement('source');
+                source.src = media.fileURL;
+                source.type = 'video/mp4';
+                video.appendChild(source);
+                body.appendChild(video);
+            } else {
+                const fallback = document.createElement('div');
+                fallback.className = 'media-preview-fallback';
+                const text = document.createElement('span');
+                text.textContent = 'Preview not available. ';
+                const link = document.createElement('a');
+                if (media.fileURL) {
+                    link.href = media.fileURL;
+                } else {
+                    link.href = '#';
+                    link.addEventListener('click', function(event) {
+                        event.preventDefault();
+                    });
+                }
+                link.target = '_blank';
+                link.rel = 'noopener';
+                link.textContent = 'Open attachment';
+                fallback.appendChild(text);
+                fallback.appendChild(link);
+                body.appendChild(fallback);
+            }
+
+            caption.textContent = displayName;
+            overlay.classList.add('is-visible');
+            if (document.body) {
+                document.body.classList.add('media-preview-active');
+            }
+        }
+
+        function closeMediaPreview() {
+            const overlay = document.getElementById('mediaPreviewOverlay');
+            const body = document.getElementById('mediaPreviewBody');
+            const caption = document.getElementById('mediaPreviewCaption');
+
+            if (!overlay || !overlay.classList.contains('is-visible')) {
+                return;
+            }
+
+            const video = overlay.querySelector('video');
+            if (video) {
+                video.pause();
+            }
+
+            overlay.classList.remove('is-visible');
+            if (document.body) {
+                document.body.classList.remove('media-preview-active');
+            }
+
+            if (caption) {
+                caption.textContent = '';
+            }
+
+            if (body) {
+                while (body.firstChild) {
+                    body.removeChild(body.firstChild);
+                }
+            }
+        }
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeMediaPreview();
+            }
+        });
             cursor: pointer;
         }
         
@@ -287,6 +410,104 @@ extension QCBugReportViewController {
         
         .media-thumbnail-icon--fallback.is-visible {
             display: block;
+        }
+
+        .media-preview-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.65);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 24px;
+        }
+
+        .media-preview-overlay.is-visible {
+            display: flex;
+        }
+
+        .media-preview-content {
+            position: relative;
+            max-width: min(900px, 90vw);
+            max-height: 90vh;
+            background: rgba(28, 28, 30, 0.9);
+            border-radius: 18px;
+            padding: 20px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+
+        .media-preview-body {
+            flex: 1;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .media-preview-image,
+        .media-preview-video {
+            max-width: 100%;
+            max-height: 70vh;
+            border-radius: 12px;
+        }
+
+        .media-preview-video {
+            background: black;
+        }
+
+        .media-preview-close {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            width: 36px;
+            height: 36px;
+            border-radius: 18px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #ffffff;
+            border: none;
+            font-size: 20px;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .media-preview-close:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .media-preview-close:active {
+            transform: scale(0.95);
+        }
+
+        .media-preview-caption {
+            margin-top: 16px;
+            color: #f2f2f7;
+            font-size: 14px;
+            text-align: center;
+            word-break: break-word;
+        }
+
+        .media-preview-fallback {
+            color: #f2f2f7;
+            font-size: 15px;
+            text-align: center;
+            padding: 16px;
+        }
+
+        .media-preview-fallback a {
+            color: #0a84ff;
+            text-decoration: underline;
         }
         
         .media-thumbnail-label {
@@ -573,6 +794,11 @@ extension QCBugReportViewController {
             const [removed] = capturedMedia.splice(index, 1);
             updateMediaList();
 
+            const overlay = document.getElementById('mediaPreviewOverlay');
+            if (overlay && overlay.classList.contains('is-visible')) {
+                closeMediaPreview();
+            }
+
             if (removed && removed.fileURL && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.bugReportHandler) {
                 window.webkit.messageHandlers.bugReportHandler.postMessage({
                     action: 'deleteMediaAttachment',
@@ -618,7 +844,7 @@ extension QCBugReportViewController {
                     if (isImage && media.fileURL.startsWith('file://')) {
                         // Show image thumbnail
                         return `
-                            <div class="media-thumbnail" title="${fileName}">
+                            <div class="media-thumbnail" title="${fileName}" onclick="showMediaPreview(${index});">
                                 ${deleteButton}
                                 <img src="${media.fileURL}" alt="${fileName}" onerror="this.style.display='none'; if (this.nextElementSibling) { this.nextElementSibling.classList.add('is-visible'); }">
                                 ${fallbackIcon}
@@ -628,7 +854,7 @@ extension QCBugReportViewController {
                     } else {
                         // Show icon for video or other media
                         return `
-                            <div class="media-thumbnail" title="${fileName}">
+                            <div class="media-thumbnail" title="${fileName}" onclick="showMediaPreview(${index});">
                                 ${deleteButton}
                                 <span class="media-thumbnail-icon">${icon}</span>
                                 <div class="media-thumbnail-label">${fileName}</div>
