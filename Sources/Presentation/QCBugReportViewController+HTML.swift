@@ -16,7 +16,7 @@ extension QCBugReportViewController {
         <html lang="en">
         <head>
             <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <title>Bug Report</title>
             <style>
                 \(generateCSS())
@@ -206,6 +206,102 @@ extension QCBugReportViewController {
         
         .media-list .media-item {
             justify-content: space-between;
+        }
+        
+        .media-thumbnail-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 12px;
+        }
+        
+        .media-thumbnail {
+            position: relative;
+            background: #f8f9fa;
+            border: 1px solid #e5e5e7;
+            border-radius: 8px;
+            overflow: hidden;
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .media-thumbnail:hover {
+            border-color: #007aff;
+            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2);
+            transform: scale(1.05);
+        }
+        
+        .media-delete-btn {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            background: rgba(255, 59, 48, 0.9);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            opacity: 0.9;
+            transform: scale(1);
+            transition: all 0.2s ease;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .media-thumbnail:hover .media-delete-btn {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+        
+        .media-delete-btn:hover {
+            background: rgba(255, 59, 48, 1);
+            transform: scale(1.1);
+        }
+        
+        .media-delete-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .media-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .media-thumbnail-icon {
+            font-size: 32px;
+        }
+        
+        .media-thumbnail-icon--fallback {
+            display: none;
+        }
+        
+        .media-thumbnail-icon--fallback.is-visible {
+            display: block;
+        }
+        
+        .media-thumbnail-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            font-size: 11px;
+            padding: 4px 6px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
         .actions-timeline {
@@ -470,6 +566,21 @@ extension QCBugReportViewController {
             updateMediaList();
         }
         
+        function deleteMediaAttachment(index) {
+            if (index < 0 || index >= capturedMedia.length) {
+                return;
+            }
+            const [removed] = capturedMedia.splice(index, 1);
+            updateMediaList();
+
+            if (removed && removed.fileURL && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.bugReportHandler) {
+                window.webkit.messageHandlers.bugReportHandler.postMessage({
+                    action: 'deleteMediaAttachment',
+                    fileURL: removed.fileURL
+                });
+            }
+        }
+        
         function updateMediaList() {
             const mediaList = document.getElementById('mediaList');
             const mediaSection = document.getElementById('mediaSection');
@@ -481,17 +592,51 @@ extension QCBugReportViewController {
             
             mediaSection.style.display = 'block';
             
-            const html = capturedMedia.map((media, index) => {
-                const icon = media.type === 'screenRecording' ? '🎥' : 
-                            media.type === 'screenshot' ? '📸' : '📎';
-                
-                return `
-                    <div class="media-item">
-                        <span class="media-type">${icon}</span>
-                        <span class="media-name">${media.fileName}</span>
-                    </div>
-                `;
-            }).join('');
+            const html = `<div class="media-thumbnail-container">` + 
+                capturedMedia.map((media, index) => {
+                    const type = (media.type || '').toLowerCase();
+                    const isRecording = type === 'screenrecording' || type === 'screen_recording';
+                    const isScreenshot = type === 'screenshot';
+                    const icon = isRecording ? '🎥' : isScreenshot ? '📸' : '📎';
+                    const isImage = isScreenshot || (media.fileURL && media.fileURL.match(/\\.(jpg|jpeg|png|gif|webp)$/i));
+                    const rawFileName = media.fileName || `Attachment ${index + 1}`;
+                    const fileName = rawFileName
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                    const deleteButton = `
+                        <button type="button" class="media-delete-btn" onclick="event.stopPropagation(); deleteMediaAttachment(${index});">
+                            ✕
+                        </button>
+                    `;
+                    const fallbackIcon = `
+                        <span class="media-thumbnail-icon media-thumbnail-icon--fallback">${icon}</span>
+                    `;
+                    
+                    if (isImage && media.fileURL.startsWith('file://')) {
+                        // Show image thumbnail
+                        return `
+                            <div class="media-thumbnail" title="${fileName}">
+                                ${deleteButton}
+                                <img src="${media.fileURL}" alt="${fileName}" onerror="this.style.display='none'; if (this.nextElementSibling) { this.nextElementSibling.classList.add('is-visible'); }">
+                                ${fallbackIcon}
+                                <div class="media-thumbnail-label">${fileName}</div>
+                            </div>
+                        `;
+                    } else {
+                        // Show icon for video or other media
+                        return `
+                            <div class="media-thumbnail" title="${fileName}">
+                                ${deleteButton}
+                                <span class="media-thumbnail-icon">${icon}</span>
+                                <div class="media-thumbnail-label">${fileName}</div>
+                            </div>
+                        `;
+                    }
+                }).join('') + 
+                `</div>`;
             
             mediaList.innerHTML = html;
         }

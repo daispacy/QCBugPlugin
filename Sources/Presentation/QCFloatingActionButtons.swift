@@ -13,9 +13,10 @@ public protocol QCFloatingActionButtonsDelegate: AnyObject {
     func floatingButtonsDidTapRecord()
     func floatingButtonsDidTapScreenshot()
     func floatingButtonsDidTapBugReport()
+    func floatingButtonsDidTapClearSession()
 }
 
-/// Floating action buttons container with record, screenshot, and bug report buttons
+/// Floating action buttons container with record, screenshot, form, and session control buttons
 public final class QCFloatingActionButtons: UIView {
 
     // MARK: - Properties
@@ -24,6 +25,8 @@ public final class QCFloatingActionButtons: UIView {
     private let mainButton: UIButton
     private let recordButton: UIButton
     private let screenshotButton: UIButton
+    private let formButton: UIButton
+    private let clearSessionButton: UIButton
     private var isExpanded: Bool = false
 
     private var panGesture: UIPanGestureRecognizer!
@@ -34,8 +37,10 @@ public final class QCFloatingActionButtons: UIView {
 
     public override init(frame: CGRect) {
         mainButton = UIButton(type: .custom)
-        recordButton = UIButton(type: .custom)
-        screenshotButton = UIButton(type: .custom)
+    recordButton = UIButton(type: .custom)
+    screenshotButton = UIButton(type: .custom)
+    formButton = UIButton(type: .custom)
+    clearSessionButton = UIButton(type: .custom)
 
         super.init(frame: CGRect(x: 0, y: 0, width: 60, height: 60))
 
@@ -60,9 +65,17 @@ public final class QCFloatingActionButtons: UIView {
         // Screenshot button
         setupScreenshotButton()
 
+        // Form button
+        setupFormButton()
+
+        // Clear session button
+        setupClearSessionButton()
+
         // Add to view
         addSubview(recordButton)
         addSubview(screenshotButton)
+        addSubview(formButton)
+        addSubview(clearSessionButton)
         addSubview(mainButton)
 
         // Initially hide action buttons
@@ -70,6 +83,10 @@ public final class QCFloatingActionButtons: UIView {
         recordButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
         screenshotButton.alpha = 0
         screenshotButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
+        formButton.alpha = 0
+        formButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
+        clearSessionButton.alpha = 0
+        clearSessionButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
         clipsToBounds = false
         isUserInteractionEnabled = true
     }
@@ -142,6 +159,54 @@ public final class QCFloatingActionButtons: UIView {
 
         screenshotButton.addTarget(self, action: #selector(screenshotButtonTapped), for: .touchUpInside)
     }
+    
+    private func setupFormButton() {
+        formButton.frame = CGRect(x: 0, y: 0, width: 50, height: 50)
+
+        if #available(iOS 13.0, *) {
+            formButton.backgroundColor = UIColor.systemPurple.withAlphaComponent(0.9)
+        } else {
+            formButton.backgroundColor = UIColor(red: 0.694, green: 0.282, blue: 0.835, alpha: 0.9)
+        }
+
+        formButton.layer.cornerRadius = 25
+        formButton.layer.shadowColor = UIColor.black.cgColor
+        formButton.layer.shadowOffset = CGSize(width: 0, height: 2)
+        formButton.layer.shadowRadius = 6
+        formButton.layer.shadowOpacity = 0.3
+        formButton.layer.borderWidth = 2
+        formButton.layer.borderColor = UIColor.white.cgColor
+
+        formButton.setTitle("📝", for: .normal)
+        formButton.titleLabel?.font = UIFont.systemFont(ofSize: 20)
+        formButton.accessibilityLabel = "Open Bug Report Form"
+
+        formButton.addTarget(self, action: #selector(formButtonTapped), for: .touchUpInside)
+    }
+    
+    private func setupClearSessionButton() {
+        clearSessionButton.frame = CGRect(x: 0, y: 0, width: 50, height: 50)
+
+        if #available(iOS 13.0, *) {
+            clearSessionButton.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.9)
+        } else {
+            clearSessionButton.backgroundColor = UIColor(red: 1.0, green: 0.584, blue: 0.0, alpha: 0.9)
+        }
+
+        clearSessionButton.layer.cornerRadius = 25
+        clearSessionButton.layer.shadowColor = UIColor.black.cgColor
+        clearSessionButton.layer.shadowOffset = CGSize(width: 0, height: 2)
+        clearSessionButton.layer.shadowRadius = 6
+        clearSessionButton.layer.shadowOpacity = 0.3
+        clearSessionButton.layer.borderWidth = 2
+        clearSessionButton.layer.borderColor = UIColor.white.cgColor
+
+        clearSessionButton.setTitle("🗑️", for: .normal)
+        clearSessionButton.titleLabel?.font = UIFont.systemFont(ofSize: 20)
+        clearSessionButton.accessibilityLabel = "Clear Bug Session"
+
+        clearSessionButton.addTarget(self, action: #selector(clearSessionButtonTapped), for: .touchUpInside)
+    }
 
     private func setupGestures() {
         panGesture = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
@@ -182,6 +247,18 @@ public final class QCFloatingActionButtons: UIView {
         collapse()
         delegate?.floatingButtonsDidTapScreenshot()
     }
+    
+    @objc private func formButtonTapped() {
+        hapticFeedback.impactOccurred()
+        collapse()
+        delegate?.floatingButtonsDidTapBugReport()
+    }
+    
+    @objc private func clearSessionButtonTapped() {
+        hapticFeedback.impactOccurred()
+        collapse()
+        delegate?.floatingButtonsDidTapClearSession()
+    }
 
     // MARK: - Expand/Collapse
 
@@ -192,12 +269,16 @@ public final class QCFloatingActionButtons: UIView {
         hapticFeedback.impactOccurred()
 
         // Calculate positions
-        let spacing: CGFloat = 70
-        let recordY = mainButton.center.y - spacing
-        let screenshotY = recordY - spacing
+    let spacing: CGFloat = 70
+    let recordY = mainButton.center.y - spacing
+    let screenshotY = recordY - spacing
+    let formY = screenshotY - spacing
+    let clearSessionY = formY - spacing
 
-        recordButton.center = mainButton.center
-        screenshotButton.center = mainButton.center
+    recordButton.center = mainButton.center
+    screenshotButton.center = mainButton.center
+    formButton.center = mainButton.center
+    clearSessionButton.center = mainButton.center
 
         UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
             self.mainButton.transform = CGAffineTransform(rotationAngle: .pi / 4)
@@ -209,6 +290,14 @@ public final class QCFloatingActionButtons: UIView {
             self.screenshotButton.center.y = screenshotY
             self.screenshotButton.alpha = 1
             self.screenshotButton.transform = .identity
+            
+            self.formButton.center.y = formY
+            self.formButton.alpha = 1
+            self.formButton.transform = .identity
+            
+            self.clearSessionButton.center.y = clearSessionY
+            self.clearSessionButton.alpha = 1
+            self.clearSessionButton.transform = .identity
         })
     }
 
@@ -226,6 +315,14 @@ public final class QCFloatingActionButtons: UIView {
             self.screenshotButton.center = self.mainButton.center
             self.screenshotButton.alpha = 0
             self.screenshotButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
+            
+            self.formButton.center = self.mainButton.center
+            self.formButton.alpha = 0
+            self.formButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
+            
+            self.clearSessionButton.center = self.mainButton.center
+            self.clearSessionButton.alpha = 0
+            self.clearSessionButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
         })
     }
 
@@ -322,6 +419,18 @@ public final class QCFloatingActionButtons: UIView {
         let screenshotButtonPoint = convert(point, to: screenshotButton)
         if screenshotButton.bounds.contains(screenshotButtonPoint) && screenshotButton.alpha > 0 {
             return screenshotButton.hitTest(screenshotButtonPoint, with: event) ?? screenshotButton
+        }
+        
+        // Check if the point is within the form button
+        let formButtonPoint = convert(point, to: formButton)
+        if formButton.bounds.contains(formButtonPoint) && formButton.alpha > 0 {
+            return formButton.hitTest(formButtonPoint, with: event) ?? formButton
+        }
+        
+        // Check if the point is within the clear session button
+        let clearSessionButtonPoint = convert(point, to: clearSessionButton)
+        if clearSessionButton.bounds.contains(clearSessionButtonPoint) && clearSessionButton.alpha > 0 {
+            return clearSessionButton.hitTest(clearSessionButtonPoint, with: event) ?? clearSessionButton
         }
         
         // If point is not within any button, return nil to allow touches to pass through

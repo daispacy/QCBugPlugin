@@ -21,12 +21,13 @@ public final class QCBugReportViewController: UIViewController {
     // MARK: - Properties
     public weak var delegate: QCBugReportViewControllerDelegate?
     
-    private let actionHistory: [UserAction]
+    private var actionHistory: [UserAction]
     private let screenRecorder: ScreenRecordingProtocol?
     private let configuration: QCBugPluginConfiguration?
     
     private var webView: WKWebView!
     private var mediaAttachments: [MediaAttachment] = []
+    private var isWebViewLoaded = false
     
     // Bug report data
     private var bugDescription = ""
@@ -57,6 +58,7 @@ public final class QCBugReportViewController: UIViewController {
         setupUI()
         setupWebView()
         loadBugReportInterface()
+        isWebViewLoaded = false
     }
     
     // MARK: - Setup Methods
@@ -111,6 +113,7 @@ public final class QCBugReportViewController: UIViewController {
     }
     
     private func loadBugReportInterface() {
+        isWebViewLoaded = false
         let htmlContent = generateBugReportHTML()
         webView.loadHTMLString(htmlContent, baseURL: nil)
     }
@@ -152,6 +155,65 @@ public final class QCBugReportViewController: UIViewController {
 
     internal func addMediaAttachment(_ attachment: MediaAttachment) {
         mediaAttachments.append(attachment)
+        guard isViewLoaded else { return }
+        let script = mediaAttachmentScript(for: attachment)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.isWebViewLoaded else { return }
+            self.webView.evaluateJavaScript(script)
+        }
+    }
+
+    internal func removeMediaAttachment(withFileURL fileURL: String) {
+        mediaAttachments.removeAll { $0.fileURL == fileURL }
+    }
+    
+    internal func clearMediaAttachments() {
+        mediaAttachments.removeAll()
+        guard isViewLoaded else { return }
+        let script = """
+        if (typeof capturedMedia !== 'undefined' && Array.isArray(capturedMedia)) {
+            capturedMedia.splice(0, capturedMedia.length);
+            updateMediaList();
+        }
+        """
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.isWebViewLoaded else { return }
+            self.webView.evaluateJavaScript(script)
+        }
+    }
+    
+    // MARK: - Session State Management
+    
+    internal func updateActionHistory(_ newHistory: [UserAction]) {
+        actionHistory = newHistory
+        guard isViewLoaded else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.isWebViewLoaded else { return }
+            self.injectActionHistory()
+        }
+    }
+    
+    internal func restoreSessionState(description: String, priority: BugPriority, category: BugCategory) {
+        bugDescription = description
+        selectedPriority = priority
+        selectedCategory = category
+        guard isViewLoaded else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.isWebViewLoaded else { return }
+            self.injectFormState()
+        }
+    }
+    
+    internal func getSessionDescription() -> String {
+        return bugDescription
+    }
+    
+    internal func getSessionPriority() -> BugPriority {
+        return selectedPriority
+    }
+    
+    internal func getSessionCategory() -> BugCategory {
+        return selectedCategory
     }
     
     private func getCurrentScreenName() -> String? {
@@ -195,6 +257,12 @@ extension QCBugReportViewController: WKScriptMessageHandler {
                let category = BugCategory(rawValue: categoryString) {
                 selectedCategory = category
             }
+        
+        case "deleteMediaAttachment":
+            if let fileURL = data["fileURL"] as? String {
+                removeMediaAttachment(withFileURL: fileURL)
+                QCBugPluginManager.shared.removeSessionMedia(withFileURL: fileURL, updatePresentedView: false)
+            }
             
         default:
             break
@@ -211,11 +279,15 @@ extension QCBugReportViewController: WKScriptMessageHandler {
 extension QCBugReportViewController: WKNavigationDelegate {
     
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        isWebViewLoaded = true
         // Inject action history data
         injectActionHistory()
         
         // Inject media attachments
         injectMediaAttachments()
+        
+        // Inject form state
+        injectFormState()
     }
     
     private func injectActionHistory() {
@@ -236,22 +308,51 @@ extension QCBugReportViewController: WKNavigationDelegate {
         guard !mediaAttachments.isEmpty else { return }
         
         for attachment in mediaAttachments {
-            let fileName = URL(fileURLWithPath: attachment.fileURL).lastPathComponent
-            let mediaType = attachment.type == .screenRecording ? "screenRecording" : "screenshot"
-            
-            let script = """
-            addMediaAttachment({
-                type: '\(mediaType)',
-                fileURL: '\(attachment.fileURL)',
-                fileName: '\(fileName)'
-            });
-            """
-            
-            webView.evaluateJavaScript(script) { result, error in
+            let script = mediaAttachmentScript(for: attachment)
+            webView.evaluateJavaScript(script) { _, error in
                 if let error = error {
                     print("Failed to inject media attachment: \(error)")
                 }
             }
         }
+    }
+    
+    private func injectFormState() {
+        let escapedDescription = bugDescription
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        let script = """
+        document.getElementById('bugDescription').value = '\(escapedDescription)';
+        document.getElementById('prioritySelect').value = '\(selectedPriority.rawValue)';
+        document.querySelector('.section:nth-of-type(3) select').value = '\(selectedCategory.rawValue)';
+        updateDescription();
+        updatePriority();
+        updateCategory();
+        """
+        webView.evaluateJavaScript(script)
+    }
+    
+    private func mediaAttachmentScript(for attachment: MediaAttachment) -> String {
+        let mediaType: String
+        switch attachment.type {
+        case .screenRecording:
+            mediaType = "screenRecording"
+        case .screenshot:
+            mediaType = "screenshot"
+        }
+        let fileName = attachment.fileName
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+        let fileURL = attachment.fileURL
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+        return """
+        addMediaAttachment({
+            type: '\(mediaType)',
+            fileURL: '\(fileURL)',
+            fileName: '\(fileName)'
+        });
+        """
     }
 }

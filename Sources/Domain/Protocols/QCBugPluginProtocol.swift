@@ -84,6 +84,11 @@ public protocol QCBugPluginDelegate: AnyObject {
 
     /// Called when screen recording fails to start or stop
     func bugPlugin(_ plugin: QCBugPluginProtocol, didFailRecordingWithError error: Error)
+    
+    // MARK: - Session Callbacks (Optional - have default implementations)
+    
+    /// Called when session is cleared
+    func bugPluginDidClearSession(_ plugin: QCBugPluginProtocol)
 }
 
 // MARK: - Default Implementations for Optional Methods
@@ -97,4 +102,7 @@ public extension QCBugPluginDelegate {
 
     /// Default implementation - does nothing (override to receive callbacks)
     func bugPlugin(_ plugin: QCBugPluginProtocol, didFailRecordingWithError error: Error) { }
+    
+    /// Default implementation - does nothing (override to receive callbacks)
+    func bugPluginDidClearSession(_ plugin: QCBugPluginProtocol) { }
 }

@@ -24,8 +24,12 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     private var isConfigured: Bool = false
     private var floatingButton: QCFloatingButton?
     private var floatingActionButtons: QCFloatingActionButtons?
-    private var pendingMediaAttachments: [MediaAttachment] = []
+    private var sessionMediaAttachments: [MediaAttachment] = []
     private var shouldAutoPresentForm: Bool = false
+    private var sessionBugReportViewController: QCBugReportViewController?
+    private var sessionBugDescription: String = ""
+    private var sessionBugPriority: BugPriority = .medium
+    private var sessionBugCategory: BugCategory = .other
     
     // MARK: - Public Properties
     public weak var delegate: QCBugPluginDelegate?
@@ -131,21 +135,33 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
-            let bugReportVC = QCBugReportViewController(
-                actionHistory: actionHistory,
-                screenRecorder: self.screenRecorder,
-                configuration: self.configuration
-            )
-
-            bugReportVC.delegate = self
-
-            // Add any pending media attachments
-            for attachment in self.pendingMediaAttachments {
-                bugReportVC.addMediaAttachment(attachment)
+            // Reuse existing ViewController if available, otherwise create new one
+            let bugReportVC: QCBugReportViewController
+            if let existingVC = self.sessionBugReportViewController {
+                bugReportVC = existingVC
+                // Update action history in case new actions were recorded
+                bugReportVC.updateActionHistory(actionHistory)
+            } else {
+                bugReportVC = QCBugReportViewController(
+                    actionHistory: actionHistory,
+                    screenRecorder: self.screenRecorder,
+                    configuration: self.configuration
+                )
+                bugReportVC.delegate = self
+                self.sessionBugReportViewController = bugReportVC
+                
+                // Add all session media attachments
+                for attachment in self.sessionMediaAttachments {
+                    bugReportVC.addMediaAttachment(attachment)
+                }
             }
 
-            // Clear pending attachments after adding
-            self.pendingMediaAttachments.removeAll()
+            // Ensure session form state is restored
+            bugReportVC.restoreSessionState(
+                description: self.sessionBugDescription,
+                priority: self.sessionBugPriority,
+                category: self.sessionBugCategory
+            )
 
             // Present modally
             if let topViewController = UIApplication.shared.topViewController() {
@@ -258,7 +274,10 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             case .success(let url):
                 // Create media attachment
                 let attachment = MediaAttachment(type: .screenRecording, fileURL: url)
-                self.pendingMediaAttachments.append(attachment)
+                self.sessionMediaAttachments.append(attachment)
+                DispatchQueue.main.async {
+                    self.sessionBugReportViewController?.addMediaAttachment(attachment)
+                }
 
                 // Update floating button state
                 self.floatingActionButtons?.updateRecordingState(isRecording: false)
@@ -412,7 +431,10 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             case .success(let url):
                 // Create media attachment
                 let attachment = MediaAttachment(type: .screenshot, fileURL: url)
-                self.pendingMediaAttachments.append(attachment)
+                self.sessionMediaAttachments.append(attachment)
+                DispatchQueue.main.async {
+                    self.sessionBugReportViewController?.addMediaAttachment(attachment)
+                }
 
                 print("📸 QCBugPlugin: Screenshot captured - \(url)")
 
@@ -430,6 +452,84 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
                 completion(.failure(error))
             }
         }
+    }
+    
+    // MARK: - Session Management
+    
+    /// Get the current session media attachments count
+    public func getSessionMediaCount() -> Int {
+        return sessionMediaAttachments.count
+    }
+    
+    /// Get all media attachments in the current session
+    public func getSessionMediaAttachments() -> [MediaAttachment] {
+        return sessionMediaAttachments
+    }
+    
+    /// Clear all media attachments in the current session
+    public func clearSession() {
+        let count = sessionMediaAttachments.count
+        sessionMediaAttachments.forEach { attachment in
+            if let url = URL(string: attachment.fileURL), url.isFileURL {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+        sessionMediaAttachments.removeAll()
+        
+        // Clear session UI state
+        sessionBugDescription = ""
+        sessionBugPriority = .medium
+        sessionBugCategory = .other
+        
+        DispatchQueue.main.async {
+            self.sessionBugReportViewController?.clearMediaAttachments()
+            self.sessionBugReportViewController?.restoreSessionState(
+                description: "",
+                priority: .medium,
+                category: .other
+            )
+        }
+        
+        // Notify delegate
+        delegate?.bugPluginDidClearSession(self)
+        
+        // Post notification
+        NotificationCenter.default.post(
+            name: .qcBugPluginDidClearSession,
+            object: self,
+            userInfo: ["count": count]
+        )
+        
+        print("🗑️ QCBugPlugin: Session cleared - \(count) media attachments removed")
+    }
+    
+    /// Remove a specific media attachment from session by index
+    public func removeSessionMedia(at index: Int) {
+        guard index >= 0 && index < sessionMediaAttachments.count else { return }
+        let fileURL = sessionMediaAttachments[index].fileURL
+        _ = removeSessionMedia(withFileURL: fileURL, updatePresentedView: true)
+    }
+
+    /// Remove a specific media attachment from session by file URL
+    @discardableResult
+    public func removeSessionMedia(withFileURL fileURL: String, updatePresentedView: Bool = true) -> Bool {
+        guard let index = sessionMediaAttachments.firstIndex(where: { $0.fileURL == fileURL }) else {
+            return false
+        }
+        let removed = sessionMediaAttachments.remove(at: index)
+
+        if let url = URL(string: removed.fileURL), url.isFileURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+
+        if updatePresentedView {
+            DispatchQueue.main.async {
+                self.sessionBugReportViewController?.removeMediaAttachment(withFileURL: fileURL)
+            }
+        }
+
+        print("🗑️ QCBugPlugin: Removed media attachment - \(removed.fileName)")
+        return true
     }
 }
 
@@ -481,12 +581,21 @@ extension QCBugPluginManager: QCFloatingActionButtonsDelegate {
     public func floatingButtonsDidTapBugReport() {
         presentBugReport()
     }
+    
+    public func floatingButtonsDidTapClearSession() {
+        clearSession()
+    }
 }
 
 // MARK: - QCBugReportViewControllerDelegate
 
 extension QCBugPluginManager: QCBugReportViewControllerDelegate {
     public func bugReportViewController(_ controller: QCBugReportViewController, didSubmitReport report: BugReport) {
+        // Capture session state before submission
+        self.sessionBugDescription = report.description
+        self.sessionBugPriority = report.priority
+        self.sessionBugCategory = report.category
+        
         bugReportService?.submitBugReport(report) { [weak self] result in
             guard let self = self else { return }
             
@@ -521,6 +630,11 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
     }
     
     public func bugReportViewControllerDidCancel(_ controller: QCBugReportViewController) {
+        // Capture session state even on cancel so it can be restored later
+        self.sessionBugDescription = controller.getSessionDescription()
+        self.sessionBugPriority = controller.getSessionPriority()
+        self.sessionBugCategory = controller.getSessionCategory()
+        
         controller.dismiss(animated: true)
     }
 }

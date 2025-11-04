@@ -170,6 +170,11 @@ public extension Notification.Name {
 
     /// Posted when screen recording fails (userInfo contains "error" key)
     static let QCBugPluginDidFailRecording = Notification.Name.qcBugPluginDidFailRecording
+    
+    // MARK: - Session Notifications
+    
+    /// Posted when session is cleared (userInfo contains "count" key with number of removed attachments)
+    static let QCBugPluginDidClearSession = Notification.Name.qcBugPluginDidClearSession
 }
 
 // MARK: - Documentation

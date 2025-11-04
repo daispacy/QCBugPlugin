@@ -46,4 +46,7 @@ public extension Notification.Name {
     static let qcBugPluginDidStartRecording = Notification.Name("qcBugPluginDidStartRecording")
     static let qcBugPluginDidStopRecording = Notification.Name("qcBugPluginDidStopRecording")
     static let qcBugPluginDidFailRecording = Notification.Name("qcBugPluginDidFailRecording")
+    
+    // Session Events
+    static let qcBugPluginDidClearSession = Notification.Name("qcBugPluginDidClearSession")
 }
