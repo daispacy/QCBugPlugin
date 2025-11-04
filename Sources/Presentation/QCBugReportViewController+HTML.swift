@@ -139,51 +139,17 @@ extension QCBugReportViewController {
             color: #1d1d1f;
         }
         
-        textarea, select {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e5e5e7;
-            border-radius: 8px;
-            font-size: 16px;
-            font-family: inherit;
-            transition: border-color 0.3s ease;
-        }
-        
-        textarea:focus, select:focus {
-            outline: none;
-            border-color: #007aff;
-        }
-        
-        textarea {
-            resize: vertical;
-            min-height: 100px;
-        }
-        
-        select {
-            height: 44px;
-            background: white;
-            cursor: pointer;
-        }
-        
-        .checkbox-container {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            font-size: 16px;
-            margin-bottom: 15px;
-        }
-        
-        .checkbox-container input[type="checkbox"] {
-            margin-right: 12px;
-            width: 18px;
-            height: 18px;
-
         function showMediaPreview(index) {
             if (index < 0 || index >= capturedMedia.length) {
                 return;
             }
 
             const media = capturedMedia[index];
+            if (!media || !media.fileURL) {
+                requestNativePreviewByIndex(index);
+                return;
+            }
+
             const overlay = document.getElementById('mediaPreviewOverlay');
             const body = document.getElementById('mediaPreviewBody');
             const caption = document.getElementById('mediaPreviewCaption');
@@ -192,7 +158,6 @@ extension QCBugReportViewController {
                 return;
             }
 
-            // Clear previous content
             while (body.firstChild) {
                 body.removeChild(body.firstChild);
             }
@@ -204,14 +169,40 @@ extension QCBugReportViewController {
             const isImage = isScreenshot || (media.fileURL && media.fileURL.match(/\\.(jpg|jpeg|png|gif|webp)$/i));
             const displayName = media.fileName || `Attachment ${index + 1}`;
 
-            if (isImage && media.fileURL) {
+            if (isImage) {
                 const img = document.createElement('img');
                 img.className = 'media-preview-image';
                 img.src = media.fileURL;
                 img.alt = displayName;
                 img.onerror = function() {
-                    caption.textContent = 'Preview unavailable for this attachment';
+                    handlePreviewFailure(index);
                 };
+                body.appendChild(img);
+            } else if (isRecording) {
+                const video = document.createElement('video');
+                video.className = 'media-preview-video';
+                video.controls = true;
+                video.autoplay = true;
+                video.playsInline = true;
+                video.onerror = function() {
+                    handlePreviewFailure(index);
+                };
+                const source = document.createElement('source');
+                source.src = media.fileURL;
+                source.type = 'video/mp4';
+                video.appendChild(source);
+                body.appendChild(video);
+            } else {
+                handlePreviewFailure(index);
+                return;
+            }
+
+            caption.textContent = displayName;
+            overlay.classList.add('is-visible');
+            if (document.body) {
+                document.body.classList.add('media-preview-active');
+            }
+        }
                 body.appendChild(img);
             } else if (isRecording && media.fileURL) {
                 const video = document.createElement('video');
@@ -280,6 +271,36 @@ extension QCBugReportViewController {
                 while (body.firstChild) {
                     body.removeChild(body.firstChild);
                 }
+            }
+        }
+
+        function handlePreviewFailure(index) {
+            closeMediaPreview();
+            requestNativePreviewByIndex(index);
+        }
+
+        function requestNativePreviewByIndex(index) {
+            if (index < 0 || index >= capturedMedia.length) {
+                return;
+            }
+            const media = capturedMedia[index];
+            requestNativePreview(media);
+        }
+
+        function requestNativePreview(media) {
+            if (!media || !media.fileURL) {
+                return;
+            }
+
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.bugReportHandler) {
+                window.webkit.messageHandlers.bugReportHandler.postMessage({
+                    action: 'previewAttachment',
+                    fileURL: media.fileURL,
+                    type: media.type || '',
+                    fileName: media.fileName || ''
+                });
+            } else {
+                window.open(media.fileURL, '_blank');
             }
         }
 
@@ -509,7 +530,7 @@ extension QCBugReportViewController {
             color: #0a84ff;
             text-decoration: underline;
         }
-        
+
         .media-thumbnail-label {
             position: absolute;
             bottom: 0;

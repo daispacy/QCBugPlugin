@@ -13,6 +13,7 @@ import WebKit
 public protocol QCBugReportViewControllerDelegate: AnyObject {
     func bugReportViewController(_ controller: QCBugReportViewController, didSubmitReport report: BugReport)
     func bugReportViewControllerDidCancel(_ controller: QCBugReportViewController)
+    func bugReportViewController(_ controller: QCBugReportViewController, requestNativePreviewFor url: URL)
 }
 
 /// View controller for displaying the bug report interface
@@ -262,6 +263,12 @@ extension QCBugReportViewController: WKScriptMessageHandler {
             if let fileURL = data["fileURL"] as? String {
                 removeMediaAttachment(withFileURL: fileURL)
                 QCBugPluginManager.shared.removeSessionMedia(withFileURL: fileURL, updatePresentedView: false)
+            }
+
+        case "previewAttachment":
+            if let fileURLString = data["fileURL"] as? String,
+               let url = URL(string: fileURLString) {
+                delegate?.bugReportViewController(self, requestNativePreviewFor: url)
             }
             
         default:

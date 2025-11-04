@@ -8,6 +8,23 @@
 
 import Foundation
 import UIKit
+import QuickLook
+
+private final class SingleAttachmentPreviewDataSource: NSObject, QLPreviewControllerDataSource {
+    private let url: URL
+
+    init(url: URL) {
+        self.url = url
+    }
+
+    func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
+        return 1
+    }
+
+    func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+        return url as NSURL
+    }
+}
 
 /// Main manager class for the QC Bug Plugin
 public final class QCBugPluginManager: QCBugPluginProtocol {
@@ -32,6 +49,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     private var sessionBugCategory: BugCategory = .other
     private var pendingScreenshotCompletion: ((Result<URL, Error>) -> Void)?
     private var pendingScreenshotOriginalURL: URL?
+    private var previewDataSource: SingleAttachmentPreviewDataSource?
     
     // MARK: - Public Properties
     public weak var delegate: QCBugPluginDelegate?
@@ -533,6 +551,26 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             try? FileManager.default.removeItem(at: url)
         }
     }
+
+    private func presentNativeAttachmentPreview(for url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            print("❌ QCBugPlugin: Attachment preview failed - file missing at \(url.path)")
+            return
+        }
+
+        DispatchQueue.main.async {
+            let previewController = QLPreviewController()
+            self.previewDataSource = SingleAttachmentPreviewDataSource(url: url)
+            previewController.dataSource = self.previewDataSource
+
+            guard let presenter = UIApplication.shared.topViewController() else {
+                print("❌ QCBugPlugin: Unable to present attachment preview controller")
+                return
+            }
+
+            presenter.present(previewController, animated: true)
+        }
+    }
     
     // MARK: - Session Management
     
@@ -716,6 +754,10 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         self.sessionBugCategory = controller.getSessionCategory()
         
         controller.dismiss(animated: true)
+    }
+
+    public func bugReportViewController(_ controller: QCBugReportViewController, requestNativePreviewFor url: URL) {
+        presentNativeAttachmentPreview(for: url)
     }
 }
 
