@@ -866,6 +866,116 @@ extension QCBugReportViewController {
             
             mediaList.innerHTML = html;
         }
+
+        function showMediaPreview(index) {
+            if (index < 0 || index >= capturedMedia.length) {
+                return;
+            }
+
+            const media = capturedMedia[index];
+            const overlay = document.getElementById('mediaPreviewOverlay');
+            const body = document.getElementById('mediaPreviewBody');
+            const caption = document.getElementById('mediaPreviewCaption');
+
+            if (!overlay || !body || !caption) {
+                return;
+            }
+
+            while (body.firstChild) {
+                body.removeChild(body.firstChild);
+            }
+            caption.textContent = '';
+
+            const type = (media.type || '').toLowerCase();
+            const isRecording = type === 'screenrecording' || type === 'screen_recording';
+            const isScreenshot = type === 'screenshot';
+            const isImage = isScreenshot || (media.fileURL && media.fileURL.match(/\\.(jpg|jpeg|png|gif|webp)$/i));
+            const displayName = media.fileName || `Attachment ${index + 1}`;
+
+            if (isImage && media.fileURL) {
+                const img = document.createElement('img');
+                img.className = 'media-preview-image';
+                img.src = media.fileURL;
+                img.alt = displayName;
+                img.onerror = function() {
+                    caption.textContent = 'Preview unavailable for this attachment';
+                };
+                body.appendChild(img);
+            } else if (isRecording && media.fileURL) {
+                const video = document.createElement('video');
+                video.className = 'media-preview-video';
+                video.controls = true;
+                video.autoplay = true;
+                video.playsInline = true;
+                const source = document.createElement('source');
+                source.src = media.fileURL;
+                source.type = 'video/mp4';
+                video.appendChild(source);
+                body.appendChild(video);
+            } else {
+                const fallback = document.createElement('div');
+                fallback.className = 'media-preview-fallback';
+                const text = document.createElement('span');
+                text.textContent = 'Preview not available. ';
+                const link = document.createElement('a');
+                if (media.fileURL) {
+                    link.href = media.fileURL;
+                } else {
+                    link.href = '#';
+                    link.addEventListener('click', function(event) {
+                        event.preventDefault();
+                    });
+                }
+                link.target = '_blank';
+                link.rel = 'noopener';
+                link.textContent = 'Open attachment';
+                fallback.appendChild(text);
+                fallback.appendChild(link);
+                body.appendChild(fallback);
+            }
+
+            caption.textContent = displayName;
+            overlay.classList.add('is-visible');
+            if (document.body) {
+                document.body.classList.add('media-preview-active');
+            }
+        }
+
+        function closeMediaPreview() {
+            const overlay = document.getElementById('mediaPreviewOverlay');
+            const body = document.getElementById('mediaPreviewBody');
+            const caption = document.getElementById('mediaPreviewCaption');
+
+            if (!overlay || !overlay.classList.contains('is-visible')) {
+                return;
+            }
+
+            const video = overlay.querySelector('video');
+            if (video) {
+                video.pause();
+            }
+
+            overlay.classList.remove('is-visible');
+            if (document.body) {
+                document.body.classList.remove('media-preview-active');
+            }
+
+            if (caption) {
+                caption.textContent = '';
+            }
+
+            if (body) {
+                while (body.firstChild) {
+                    body.removeChild(body.firstChild);
+                }
+            }
+        }
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeMediaPreview();
+            }
+        });
         """
     }
 }
