@@ -30,6 +30,8 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     private var sessionBugDescription: String = ""
     private var sessionBugPriority: BugPriority = .medium
     private var sessionBugCategory: BugCategory = .other
+    private var pendingScreenshotCompletion: ((Result<URL, Error>) -> Void)?
+    private var pendingScreenshotOriginalURL: URL?
     
     // MARK: - Public Properties
     public weak var delegate: QCBugPluginDelegate?
@@ -429,28 +431,106 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
 
             switch result {
             case .success(let url):
-                // Create media attachment
-                let attachment = MediaAttachment(type: .screenshot, fileURL: url)
-                self.sessionMediaAttachments.append(attachment)
                 DispatchQueue.main.async {
-                    self.sessionBugReportViewController?.addMediaAttachment(attachment)
+                    self.presentScreenshotAnnotationEditor(screenshotURL: url, completion: completion)
                 }
-
-                print("📸 QCBugPlugin: Screenshot captured - \(url)")
-
-                // Auto-present bug report form
-                self.shouldAutoPresentForm = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.shouldAutoPresentForm = false
-                    self.presentBugReport()
-                }
-
-                completion(.success(url))
 
             case .failure(let error):
-                print("❌ QCBugPlugin: Screenshot capture failed - \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    print("❌ QCBugPlugin: Screenshot capture failed - \(error.localizedDescription)")
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+    
+    private func presentScreenshotAnnotationEditor(screenshotURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
+        if pendingScreenshotCompletion != nil {
+            cleanupScreenshot(at: screenshotURL)
+            print("⚠️ QCBugPlugin: Screenshot annotation already in progress")
+            completion(.failure(ScreenshotAnnotationError.annotationInProgress))
+            return
+        }
+
+        guard let image = UIImage(contentsOfFile: screenshotURL.path) else {
+            cleanupScreenshot(at: screenshotURL)
+            print("❌ QCBugPlugin: Failed to load screenshot image for annotation")
+            completion(.failure(ScreenshotAnnotationError.failedToLoadImage))
+            return
+        }
+
+        guard let presenter = UIApplication.shared.topViewController() else {
+            cleanupScreenshot(at: screenshotURL)
+            print("❌ QCBugPlugin: Unable to locate presenter for screenshot annotation")
+            completion(.failure(ScreenshotAnnotationError.presentationFailed))
+            return
+        }
+
+        pendingScreenshotCompletion = completion
+        pendingScreenshotOriginalURL = screenshotURL
+
+        let annotationController = QCScreenshotAnnotationViewController(
+            image: image,
+            originalURL: screenshotURL
+        ) { [weak self] result in
+            self?.handleScreenshotAnnotationResult(result)
+        }
+
+        let navController = UINavigationController(rootViewController: annotationController)
+        navController.modalPresentationStyle = .fullScreen
+        presenter.present(navController, animated: true)
+    }
+
+    private func handleScreenshotAnnotationResult(_ result: Result<URL, Error>) {
+        DispatchQueue.main.async {
+            let completion = self.pendingScreenshotCompletion
+            let originalURL = self.pendingScreenshotOriginalURL
+
+            self.pendingScreenshotCompletion = nil
+            self.pendingScreenshotOriginalURL = nil
+
+            guard let completion else { return }
+
+            switch result {
+            case .success(let annotatedURL):
+                if let originalURL,
+                   originalURL != annotatedURL,
+                   FileManager.default.fileExists(atPath: originalURL.path) {
+                    try? FileManager.default.removeItem(at: originalURL)
+                }
+
+                let attachment = MediaAttachment(type: .screenshot, fileURL: annotatedURL)
+                self.sessionMediaAttachments.append(attachment)
+
+                self.sessionBugReportViewController?.addMediaAttachment(attachment)
+
+                let isBugReportVisible = self.sessionBugReportViewController?.viewIfLoaded?.window != nil
+                if !isBugReportVisible {
+                    self.shouldAutoPresentForm = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self.shouldAutoPresentForm = false
+                        self.presentBugReport()
+                    }
+                }
+
+                print("🖍️ QCBugPlugin: Screenshot annotated and saved - \(annotatedURL)")
+                completion(.success(annotatedURL))
+
+            case .failure(let error):
+                if let originalURL,
+                   FileManager.default.fileExists(atPath: originalURL.path) {
+                    try? FileManager.default.removeItem(at: originalURL)
+                }
+
+                print("❌ QCBugPlugin: Screenshot annotation failed - \(error.localizedDescription)")
                 completion(.failure(error))
             }
+        }
+    }
+    
+    private func cleanupScreenshot(at url: URL) {
+        if FileManager.default.fileExists(atPath: url.path) {
+            try? FileManager.default.removeItem(at: url)
         }
     }
     
