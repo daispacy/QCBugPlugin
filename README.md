@@ -4,13 +4,22 @@ A comprehensive iOS framework for QC bug reporting with user interaction trackin
 
 ## 🚀 Features
 
+### Core Features
 - **🎯 User Interaction Tracking**: Automatically tracks screen views, button taps, text input, and navigation
 - **🎥 Screen Recording**: Native screen recording using ReplayKit framework
+- **📸 Screenshot Capture**: Instant screen capture with auto-submit workflow
 - **📱 Rich Bug Reports**: Detailed reports with device info, app info, and user action timeline
 - **🌐 Webhook Integration**: Submit reports to any webhook endpoint with multipart data
 - **🎨 Beautiful UI**: HTML/JS interface with native communication bridge
 - **🔧 Easy Integration**: Simple API that works with any iOS app
-- **🐛 Debug Mode**: Floating button for easy access during testing
+
+### New in v1.1.0 ✨
+- **🎯 Floating Action Buttons**: Multi-button interface with record, screenshot, and bug report actions
+- **📸 One-Tap Screenshot**: Capture screen and auto-present bug report form
+- **🎬 Smart Recording Workflow**: Start/stop recording with automatic form presentation
+- **📦 Multi-File Attachments**: Support for multiple screenshots and recordings per report
+- **🔄 Auto-Present Form**: Automatic bug report form after capture/recording completion
+- **📤 Enhanced Webhook**: Multi-file upload with proper MIME types and field naming
 
 ## 📦 Installation
 
@@ -128,12 +137,81 @@ let config = QCBugPluginConfig(
     ],
     isScreenRecordingEnabled: true,
     maxActionHistoryCount: 100,
-    enableFloatingButton: true
+    enableFloatingButton: true  // Enables new floating action buttons UI
 )
 
 QCBugPlugin.configure(with: config)
 QCBugPlugin.startTracking()
 #endif
+```
+
+## 🎯 Floating Action Buttons (New!)
+
+The new floating action buttons provide a streamlined workflow for bug reporting:
+
+### Features
+- **🐛 Main Button**: Expands to reveal recording and screenshot options
+- **🎥 Record Button**: Start/stop screen recording
+- **📸 Screenshot Button**: Instant screen capture
+- **Drag & Drop**: Reposition anywhere on screen
+- **Auto-Snap**: Automatically snaps to screen edges
+- **Smart Workflow**: Auto-presents bug report form after capture
+
+### Usage
+
+The floating buttons appear automatically when `enableFloatingButton: true`:
+
+```swift
+// 1. User taps main button (🐛)
+//    → Expands to show record and screenshot buttons
+
+// 2. User taps screenshot button (📸)
+//    → Captures screen
+//    → Saves to local storage
+//    → Auto-presents bug report form with screenshot attached
+
+// 3. User taps record button (🎥)
+//    → First tap: Starts recording (button shows ⏹️)
+//    → Second tap: Stops recording
+//    → Auto-presents bug report form with video attached
+
+// 4. User fills out form and submits
+//    → All media files uploaded to webhook
+```
+
+### Programmatic Control
+
+```swift
+// Capture screenshot programmatically
+QCBugPluginManager.shared.captureScreenshot { result in
+    switch result {
+    case .success(let url):
+        print("Screenshot saved: \(url)")
+        // Form auto-presents with screenshot
+    case .failure(let error):
+        print("Error: \(error)")
+    }
+}
+
+// Control recording programmatically
+QCBugPluginManager.shared.startScreenRecording { result in
+    switch result {
+    case .success:
+        print("Recording started")
+    case .failure(let error):
+        print("Error: \(error)")
+    }
+}
+
+QCBugPluginManager.shared.stopScreenRecording { result in
+    switch result {
+    case .success(let url):
+        print("Recording saved: \(url)")
+        // Form auto-presents with recording
+    case .failure(let error):
+        print("Error: \(error)")
+    }
+}
 ```
 
 ### Global Trigger (Shake Gesture)
@@ -618,18 +696,25 @@ QCBugPlugin.enableDebugMode()
 
 The plugin sends bug reports as multipart form data with the following structure:
 
+### HTTP Request
+```
+POST /your-webhook-endpoint
+Content-Type: multipart/form-data; boundary=Boundary-...
+Authorization: Bearer your-api-key
+```
+
 ### JSON Data (bug_report field)
 ```json
 {
   "id": "uuid",
-  "timestamp": "2025-11-03T10:30:00Z",
+  "timestamp": "2025-11-04T10:30:00Z",
   "description": "User description of the bug",
   "priority": "medium",
   "category": "ui",
   "userActions": [
     {
       "id": "action-uuid",
-      "timestamp": "2025-11-03T10:29:45Z",
+      "timestamp": "2025-11-04T10:29:45Z",
       "actionType": "button_tap",
       "screenName": "Home Screen",
       "viewControllerClass": "HomeViewController",
@@ -652,6 +737,22 @@ The plugin sends bug reports as multipart form data with the following structure
     "version": "1.0.0",
     "buildNumber": "123"
   },
+  "mediaAttachments": [
+    {
+      "type": "screenshot",
+      "fileURL": "file:///.../qc_screenshot_1699012345.png",
+      "fileName": "qc_screenshot_1699012345.png",
+      "timestamp": "2025-11-04T10:30:00Z",
+      "fileSize": 524288
+    },
+    {
+      "type": "screen_recording",
+      "fileURL": "file:///.../qc_screen_recording_1699012350.mp4",
+      "fileName": "qc_screen_recording_1699012350.mp4",
+      "timestamp": "2025-11-04T10:30:05Z",
+      "fileSize": 2097152
+    }
+  ],
   "customData": {
     "userId": "12345",
     "environment": "staging"
@@ -659,10 +760,51 @@ The plugin sends bug reports as multipart form data with the following structure
 }
 ```
 
-### Video File (screen_recording field)
-- Format: MP4
-- Codec: H.264
-- Only included if screen recording was enabled and used
+### Multipart Form Data Structure (New!)
+
+The complete multipart payload includes:
+
+```
+--Boundary-...
+Content-Disposition: form-data; name="bug_report"
+Content-Type: application/json
+
+{...JSON data above...}
+--Boundary-...
+Content-Disposition: form-data; name="screenshot_0"; filename="qc_screenshot_1699012345.png"
+Content-Type: image/png
+
+[PNG binary data]
+--Boundary-...
+Content-Disposition: form-data; name="screenshot_1"; filename="qc_screenshot_1699012346.png"
+Content-Type: image/png
+
+[PNG binary data]
+--Boundary-...
+Content-Disposition: form-data; name="screen_recording"; filename="qc_screen_recording_1699012350.mp4"
+Content-Type: video/mp4
+
+[MP4 binary data]
+--Boundary-...--
+```
+
+### Media File Details
+
+#### Screenshots
+- **Field Name**: `screenshot_0`, `screenshot_1`, etc. (indexed)
+- **Format**: PNG
+- **MIME Type**: `image/png`
+- **Naming**: `qc_screenshot_{timestamp}.png`
+- **Location**: Documents directory
+
+#### Screen Recordings
+- **Field Name**: `screen_recording`
+- **Format**: MP4
+- **Codec**: H.264
+- **MIME Type**: `video/mp4`
+- **Naming**: `qc_screen_recording_{timestamp}.mp4`
+- **Location**: Documents directory
+- **⚠️ Device Only**: Screen recording only works on physical devices (iOS limitation)
 
 ## 🔄 Lifecycle Events
 
@@ -736,7 +878,8 @@ QCBugPlugin.printInfo()
 - iOS 12.0+
 - Swift 5.3+
 - Xcode 12.0+
-- Required Frameworks: ReplayKit, WebKit (automatically linked via SPM)
+- Required Frameworks: ReplayKit, WebKit, AVFoundation (automatically linked via SPM)
+- **Physical iOS Device** required for screen recording feature (simulator not supported)
 
 ## 🤝 Integration Examples
 
@@ -785,6 +928,9 @@ extension ProfileViewController {
 5. **Data Sanitization**: Never track passwords, PINs, or full card numbers
 6. **Multiple Triggers**: Provide shake gesture, debug button, and floating button options
 7. **Test Integration**: Verify data collection before deploying to QC team
+8. **Physical Device Testing**: Always test screen recording on physical devices, not simulator
+9. **Webhook Validation**: Verify your webhook can handle multipart/form-data with files
+10. **Media Cleanup**: Old screenshots and recordings are auto-cleaned on app launch
 
 ## 📚 Documentation & Resources
 
@@ -793,9 +939,48 @@ extension ProfileViewController {
 - **[Sample Implementation](SAMPLE_IMPLEMENT.md)** - Real-world integration example
 - **[Architecture Guide](STRUCTURE.md)** - Framework architecture and design patterns
 - **[Public API Reference](SPM_PUBLIC_API.md)** - Complete SPM public API documentation
+- **[Features Update](docs/FEATURES_UPDATE.md)** - New floating buttons and media attachments guide
 - **[Copilot Instructions](.github/copilot-instructions.md)** - AI assistant guidelines
 
+## 🎬 New Features Quick Reference
+
+### Floating Action Buttons
+| Button | Icon | Action | Result |
+|--------|------|--------|--------|
+| Main | 🐛 | Tap to expand | Shows record & screenshot buttons |
+| Record | 🎥/⏹️ | Start/Stop recording | Auto-presents form with video |
+| Screenshot | 📸 | Capture screen | Auto-presents form with image |
+
+### File Organization
+```
+Documents/
+├── qc_screenshot_1699012345.png       # Screenshot files
+├── qc_screenshot_1699012346.png
+└── qc_screen_recording_1699012350.mp4 # Recording files
+```
+
+### Webhook Field Names
+```
+bug_report          → JSON data with mediaAttachments array
+screenshot_0        → First screenshot (PNG)
+screenshot_1        → Second screenshot (PNG)
+screenshot_N        → Nth screenshot (PNG)
+screen_recording    → Screen recording (MP4)
+```
+
 ## 🧪 Testing
+
+### Important: Simulator vs Physical Device
+
+#### ✅ Works on Simulator
+- Screenshot capture
+- Bug report form
+- Webhook submission
+- User interaction tracking
+
+#### ⚠️ Physical Device Required
+- **Screen Recording** - iOS limitation, ReplayKit not available on simulator
+- Full floating button workflow testing
 
 ### Debug Information
 
@@ -805,24 +990,64 @@ extension ProfileViewController {
 print(QCBugPlugin.frameworkInfo)
 
 // Check tracking status
-print("Tracking: \(QCBugPlugin.isTrackingEnabled)")
+print("Tracking: \(QCBugPluginManager.shared.isTrackingEnabled())")
+
+// Check recording availability
+print("Recording available: \(QCBugPluginManager.shared.screenRecorder?.isAvailable ?? false)")
+
+// Test screenshot capture
+QCBugPluginManager.shared.captureScreenshot { result in
+    print("Screenshot result: \(result)")
+}
 
 // Test bug report presentation
-QCBugPlugin.presentBugReport()
+QCBugPluginManager.shared.presentBugReport()
 #endif
 ```
+
+### Testing Workflow
+
+1. **On Simulator** (Development)
+   ```swift
+   // Test screenshot capture
+   QCBugPluginManager.shared.captureScreenshot { result in
+       // Verify form auto-presents
+       // Check screenshot attachment
+   }
+   ```
+
+2. **On Physical Device** (Full Testing)
+   ```swift
+   // Test recording workflow
+   QCBugPluginManager.shared.startScreenRecording { _ in }
+   // ... perform actions ...
+   QCBugPluginManager.shared.stopScreenRecording { result in
+       // Verify form auto-presents
+       // Check recording attachment
+   }
+   ```
 
 ### Mock Webhook for Testing
 
 Use services like:
 - webhook.site
 - requestbin.com
+- httpbin.org/post
 - Your local development server
 
 Example webhook URL format:
 ```
 https://webhook.site/your-unique-id
 ```
+
+### Verifying Webhook Payload
+
+Check that your webhook receives:
+- ✅ `bug_report` field with JSON data
+- ✅ `screenshot_0`, `screenshot_1`, etc. with PNG files
+- ✅ `screen_recording` field with MP4 file
+- ✅ Proper `Content-Type` headers for each part
+- ✅ Correct file sizes and MIME types
 
 ## 📝 License
 
