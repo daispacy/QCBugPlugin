@@ -70,6 +70,7 @@ public final class QCFloatingActionButtons: UIView {
         recordButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
         screenshotButton.alpha = 0
         screenshotButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
+        clipToBounds = false
     }
 
     private func setupMainButton() {
