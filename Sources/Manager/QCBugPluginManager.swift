@@ -239,7 +239,8 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             customData: data,
             isScreenRecordingEnabled: config.isScreenRecordingEnabled,
             maxActionHistoryCount: config.maxActionHistoryCount,
-            enableFloatingButton: config.enableFloatingButton
+            enableFloatingButton: config.enableFloatingButton,
+            gitLabAppConfig: config.gitLabAppConfig
         )
         
         self.configuration = newConfig
@@ -254,7 +255,8 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             customData: config.customData,
             isScreenRecordingEnabled: enabled,
             maxActionHistoryCount: config.maxActionHistoryCount,
-            enableFloatingButton: config.enableFloatingButton
+            enableFloatingButton: config.enableFloatingButton,
+            gitLabAppConfig: config.gitLabAppConfig
         )
 
         self.configuration = newConfig
