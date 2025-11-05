@@ -1,7 +1,8 @@
 (function () {
     var state = {
         actionHistory: [],
-        capturedMedia: []
+        capturedMedia: [],
+        webhookURL: ''
     };
 
     var HANDLER_NAME = 'bugReportHandler';
@@ -94,6 +95,26 @@
         postMessage({
             action: 'updateCategory',
             category: field.value
+        });
+    };
+
+    window.updateWebhookURL = function () {
+        var field = document.getElementById('webhookURL');
+        if (!field) {
+            return;
+        }
+        var value = typeof field.value === 'string' ? field.value : '';
+        var trimmed = value.trim();
+        var previous = state.webhookURL;
+        state.webhookURL = trimmed;
+
+        if (previous === trimmed) {
+            return;
+        }
+
+        postMessage({
+            action: 'updateWebhookURL',
+            webhookURL: trimmed
         });
     };
 

@@ -34,6 +34,7 @@ public final class QCBugReportViewController: UIViewController {
     private var bugDescription = ""
     private var selectedPriority: BugPriority = .medium
     private var selectedCategory: BugCategory = .other
+    private var webhookURL: String
     
     // MARK: - Initialization
     
@@ -45,6 +46,7 @@ public final class QCBugReportViewController: UIViewController {
         self.actionHistory = actionHistory
         self.screenRecorder = screenRecorder
         self.configuration = configuration
+        self.webhookURL = configuration?.webhookURL ?? ""
         super.init(nibName: nil, bundle: nil)
     }
     
@@ -197,10 +199,18 @@ public final class QCBugReportViewController: UIViewController {
         }
     }
     
-    internal func restoreSessionState(description: String, priority: BugPriority, category: BugCategory) {
+    internal func restoreSessionState(
+        description: String,
+        priority: BugPriority,
+        category: BugCategory,
+        webhookURL: String? = nil
+    ) {
         bugDescription = description
         selectedPriority = priority
         selectedCategory = category
+        if let webhookURL = webhookURL {
+            self.webhookURL = webhookURL
+        }
         guard isViewLoaded else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self = self, self.isWebViewLoaded else { return }
@@ -218,6 +228,10 @@ public final class QCBugReportViewController: UIViewController {
     
     internal func getSessionCategory() -> BugCategory {
         return selectedCategory
+    }
+
+    internal func getSessionWebhookURL() -> String {
+        return webhookURL
     }
     
     private func getCurrentScreenName() -> String? {
@@ -261,6 +275,10 @@ extension QCBugReportViewController: WKScriptMessageHandler {
                let category = BugCategory(rawValue: categoryString) {
                 selectedCategory = category
             }
+
+        case "updateWebhookURL":
+            let value = (data["webhookURL"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            webhookURL = value
         
         case "deleteMediaAttachment":
             if let fileURL = data["fileURL"] as? String {
@@ -332,6 +350,9 @@ extension QCBugReportViewController: WKNavigationDelegate {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
             .replacingOccurrences(of: "\n", with: "\\n")
+        let escapedWebhookURL = webhookURL
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
         let script = """
         (function() {
             const descriptionField = document.getElementById('bugDescription');
@@ -346,9 +367,14 @@ extension QCBugReportViewController: WKNavigationDelegate {
             if (categoryField) {
                 categoryField.value = '\(selectedCategory.rawValue)';
             }
+            const webhookField = document.getElementById('webhookURL');
+            if (webhookField) {
+                webhookField.value = '\(escapedWebhookURL)';
+            }
             if (typeof updateDescription === 'function') { updateDescription(); }
             if (typeof updatePriority === 'function') { updatePriority(); }
             if (typeof updateCategory === 'function') { updateCategory(); }
+            if (typeof updateWebhookURL === 'function') { updateWebhookURL(); }
         })();
         """
         webView.evaluateJavaScript(script)

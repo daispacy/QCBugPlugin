@@ -47,6 +47,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     private var sessionBugDescription: String = ""
     private var sessionBugPriority: BugPriority = .medium
     private var sessionBugCategory: BugCategory = .other
+    private var sessionWebhookURL: String?
     private var pendingScreenshotCompletion: ((Result<URL, Error>) -> Void)?
     private var pendingScreenshotOriginalURL: URL?
     private var previewDataSource: SingleAttachmentPreviewDataSource?
@@ -54,6 +55,26 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     // MARK: - Public Properties
     public weak var delegate: QCBugPluginDelegate?
     
+    // MARK: - Helper Methods
+    private func resolvedWebhookURL() -> String {
+        if let override = sessionWebhookURL?.trimmingCharacters(in: .whitespacesAndNewlines), !override.isEmpty {
+            return override
+        }
+        return configuration?.webhookURL ?? ""
+    }
+
+    private func refreshBugReportService() {
+        let webhook = resolvedWebhookURL()
+        guard !webhook.isEmpty else {
+            bugReportService = nil
+            return
+        }
+        bugReportService = BugReportAPIService(
+            webhookURL: webhook,
+            apiKey: configuration?.apiKey
+        )
+    }
+
     // MARK: - Initialization
     private init() {
         setupNotificationObservers()
@@ -75,6 +96,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     
     public func configure(with config: QCBugPluginConfig) {
         self.configuration = config
+        self.sessionWebhookURL = nil
 
         // Initialize services
         self.uiTracker = UITrackingService()
@@ -87,10 +109,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         // Initialize screen capture service
         self.screenCapture = ScreenCaptureService()
 
-        self.bugReportService = BugReportAPIService(
-            webhookURL: config.webhookURL,
-            apiKey: config.apiKey
-        )
+        refreshBugReportService()
 
         // Setup floating action buttons if enabled
         if config.enableFloatingButton {
@@ -180,7 +199,8 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             bugReportVC.restoreSessionState(
                 description: self.sessionBugDescription,
                 priority: self.sessionBugPriority,
-                category: self.sessionBugCategory
+                category: self.sessionBugCategory,
+                webhookURL: self.resolvedWebhookURL()
             )
 
             // Present modally
@@ -605,15 +625,19 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         sessionBugDescription = ""
         sessionBugPriority = .medium
         sessionBugCategory = .other
+        sessionWebhookURL = nil
         
         DispatchQueue.main.async {
             self.sessionBugReportViewController?.clearMediaAttachments()
             self.sessionBugReportViewController?.restoreSessionState(
                 description: "",
                 priority: .medium,
-                category: .other
+                category: .other,
+                webhookURL: self.resolvedWebhookURL()
             )
         }
+
+        refreshBugReportService()
         
         // Notify delegate
         delegate?.bugPluginDidClearSession(self)
@@ -720,8 +744,22 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         self.sessionBugDescription = report.description
         self.sessionBugPriority = report.priority
         self.sessionBugCategory = report.category
-        
-        bugReportService?.submitBugReport(report) { [weak self] result in
+        let userWebhookInput = controller.getSessionWebhookURL().trimmingCharacters(in: .whitespacesAndNewlines)
+        if userWebhookInput.isEmpty || userWebhookInput == configuration?.webhookURL {
+            self.sessionWebhookURL = nil
+        } else {
+            self.sessionWebhookURL = userWebhookInput
+        }
+
+        refreshBugReportService()
+
+        guard let bugReportService = bugReportService else {
+            print("❌ QCBugPlugin: No webhook URL configured. Cannot submit bug report.")
+            controller.dismiss(animated: true)
+            return
+        }
+
+        bugReportService.submitBugReport(report) { [weak self] result in
             guard let self = self else { return }
             
             DispatchQueue.main.async {
@@ -759,6 +797,12 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         self.sessionBugDescription = controller.getSessionDescription()
         self.sessionBugPriority = controller.getSessionPriority()
         self.sessionBugCategory = controller.getSessionCategory()
+        let userWebhookInput = controller.getSessionWebhookURL().trimmingCharacters(in: .whitespacesAndNewlines)
+        if userWebhookInput.isEmpty || userWebhookInput == configuration?.webhookURL {
+            self.sessionWebhookURL = nil
+        } else {
+            self.sessionWebhookURL = userWebhookInput
+        }
         
         controller.dismiss(animated: true)
     }
