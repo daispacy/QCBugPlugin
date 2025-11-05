@@ -553,6 +553,13 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     }
 
     private func presentNativeAttachmentPreview(for url: URL) {
+        if !url.isFileURL {
+            DispatchQueue.main.async {
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            }
+            return
+        }
+
         guard FileManager.default.fileExists(atPath: url.path) else {
             print("❌ QCBugPlugin: Attachment preview failed - file missing at \(url.path)")
             return
