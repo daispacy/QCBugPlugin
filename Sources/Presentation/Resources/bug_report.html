@@ -328,6 +328,57 @@
             text-decoration: underline;
         }
 
+        #gitlabSection {
+            display: none;
+        }
+
+        .gitlab-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .gitlab-status {
+            font-size: 14px;
+            color: #1d1d1f;
+            flex: 1;
+            min-width: 180px;
+        }
+
+        .gitlab-button {
+            padding: 10px 16px;
+            border-radius: 10px;
+            border: none;
+            background: #1b4dd8;
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        .gitlab-button:disabled {
+            background: #9fa7c1;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .gitlab-button:not(:disabled):hover {
+            background: #275eff;
+        }
+
+        .gitlab-button:not(:disabled):active {
+            transform: scale(0.98);
+        }
+
+        .gitlab-error {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #d70015;
+            display: none;
+        }
+
         .info-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -381,6 +432,16 @@
 </head>
 <body>
     <div class="container">
+        <div class="section" id="gitlabSection">
+            <h2>🔐 GitLab</h2>
+            <div class="gitlab-row">
+                <div class="gitlab-status" id="gitlabStatus">GitLab integration unavailable</div>
+                <button type="button" id="gitlabLoginButton" class="gitlab-button" onclick="triggerGitLabLogin()">Log in with GitLab</button>
+            </div>
+            <div class="gitlab-error" id="gitlabError"></div>
+            <p class="field-hint">Connect your GitLab account to include project metadata with this report.</p>
+        </div>
+
         <div class="section">
             <h2>📝 Bug Description</h2>
             <textarea id="bugDescription" placeholder="Describe the bug you encountered..." oninput="updateDescription()"></textarea>

@@ -2,7 +2,15 @@
     var state = {
         actionHistory: [],
         capturedMedia: [],
-        webhookURL: ''
+        webhookURL: '',
+        gitlab: {
+            isAuthenticated: false,
+            requiresLogin: false,
+            isLoading: false,
+            userId: null,
+            error: '',
+            available: false
+        }
     };
 
     var HANDLER_NAME = 'bugReportHandler';
@@ -53,6 +61,61 @@
             screenLabel.textContent = (window.screen.width || '?') + '×' + (window.screen.height || '?');
         }
     }
+
+    function updateGitLabSection() {
+        var section = document.getElementById('gitlabSection');
+        var statusLabel = document.getElementById('gitlabStatus');
+        var button = document.getElementById('gitlabLoginButton');
+        var errorLabel = document.getElementById('gitlabError');
+
+        if (!section || !statusLabel || !button || !errorLabel) {
+            return;
+        }
+
+        var gitlab = state.gitlab;
+        if (!gitlab.available) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+        var buttonLabel = button.textContent;
+
+        if (gitlab.isLoading) {
+            statusLabel.textContent = 'Connecting to GitLab…';
+            button.disabled = true;
+            buttonLabel = 'Opening…';
+        } else if (gitlab.isAuthenticated) {
+            var userLabel = gitlab.userId ? ('#' + gitlab.userId) : 'account';
+            statusLabel.textContent = 'Connected to GitLab ' + userLabel;
+            button.disabled = false;
+            buttonLabel = 'Refresh GitLab Session';
+        } else if (gitlab.requiresLogin) {
+            statusLabel.textContent = 'Not connected to GitLab';
+            button.disabled = false;
+            buttonLabel = 'Log in with GitLab';
+        } else {
+            statusLabel.textContent = 'GitLab integration unavailable';
+            button.disabled = true;
+            buttonLabel = 'Unavailable';
+        }
+
+        button.textContent = buttonLabel;
+        errorLabel.textContent = gitlab.error ? String(gitlab.error) : '';
+        errorLabel.style.display = errorLabel.textContent ? 'block' : 'none';
+    }
+
+    window.triggerGitLabLogin = function () {
+        if (!postMessage({ action: 'gitlabLogin' })) {
+            return;
+        }
+
+        state.gitlab.available = true;
+        state.gitlab.isLoading = true;
+        state.gitlab.error = '';
+        state.gitlab.requiresLogin = true;
+        updateGitLabSection();
+    };
 
     window.qcBugHandleThumbnailError = function (img) {
         if (!img) {
@@ -116,6 +179,17 @@
             action: 'updateWebhookURL',
             webhookURL: trimmed
         });
+    };
+
+    window.onGitLabAuthReady = function (payload) {
+        payload = payload || {};
+        state.gitlab.isAuthenticated = !!payload.isAuthenticated;
+        state.gitlab.requiresLogin = !!payload.requiresLogin;
+        state.gitlab.isLoading = !!payload.isLoading;
+        state.gitlab.userId = typeof payload.userId === 'number' ? payload.userId : null;
+        state.gitlab.error = payload.error ? String(payload.error) : '';
+        state.gitlab.available = state.gitlab.requiresLogin || state.gitlab.isAuthenticated || !!state.gitlab.error || state.gitlab.isLoading;
+        updateGitLabSection();
     };
 
     window.loadActionHistory = function (actions) {
@@ -429,6 +503,7 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         updateSystemInfo();
+        updateGitLabSection();
     });
 
     document.addEventListener('keydown', function (event) {

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 
 /// GitLab authorization information returned by auth providers.
 public struct GitLabAuthorization {
@@ -27,6 +28,12 @@ public protocol GitLabAuthProviding: AnyObject {
 
     /// Clears any cached tokens. Optional for implementations that maintain cache state.
     func clearCache()
+
+    /// Returns true when a valid cached authorization exists.
+    func hasValidAuthorization() -> Bool
+
+    /// Begins an interactive authentication flow if required. Completion executes on the main queue.
+    func authenticateInteractively(from presenter: UIViewController, completion: @escaping (Result<GitLabAuthorization, GitLabAuthError>) -> Void)
 }
 
 /// Errors that can occur when acquiring GitLab credentials.
@@ -36,6 +43,8 @@ public enum GitLabAuthError: Error {
     case invalidResponse
     case tokenGenerationFailed
     case jwtGenerationFailed(String)
+    case userAuthenticationRequired
+    case authenticationCancelled
 }
 
 extension GitLabAuthError: LocalizedError {
@@ -51,6 +60,10 @@ extension GitLabAuthError: LocalizedError {
             return "Failed to obtain GitLab access token"
         case .jwtGenerationFailed(let message):
             return "Failed to generate GitLab JWT: \(message)"
+        case .userAuthenticationRequired:
+            return "Sign in with GitLab to continue"
+        case .authenticationCancelled:
+            return "GitLab authentication was cancelled"
         }
     }
 }

@@ -41,6 +41,8 @@ public final class QCBugReportViewController: UIViewController {
     var pendingGitLabCredentialScript: String?
     var gitLabJWT: String?
     var gitLabUserId: Int?
+    var isGitLabLoginInProgress = false
+    var shouldSubmitAfterGitLabLogin = false
     
     // Bug report data
     private var bugDescription = ""
@@ -154,6 +156,14 @@ public final class QCBugReportViewController: UIViewController {
     }
     
     @objc private func submitTapped() {
+        guard !isGitLabLoginInProgress else { return }
+
+        if gitLabAuthProvider != nil && gitLabJWT == nil {
+            shouldSubmitAfterGitLabLogin = true
+            requestGitLabAuthentication(triggeredBySubmit: true)
+            return
+        }
+
         let report = createBugReport()
         delegate?.bugReportViewController(self, didSubmitReport: report)
     }
@@ -183,6 +193,115 @@ public final class QCBugReportViewController: UIViewController {
             mediaAttachments: mediaAttachments,
             gitLabCredentials: gitLabCredentials
         )
+    }
+
+    private func requestGitLabAuthentication(triggeredBySubmit: Bool = false) {
+        guard let provider = gitLabAuthProvider else {
+            if triggeredBySubmit {
+                shouldSubmitAfterGitLabLogin = false
+                let report = createBugReport()
+                delegate?.bugReportViewController(self, didSubmitReport: report)
+            }
+            emitGitLabState(
+                token: nil,
+                header: nil,
+                userId: nil,
+                requiresLogin: false,
+                isLoading: false,
+                error: "GitLab integration is not configured."
+            )
+            return
+        }
+
+        guard !isGitLabLoginInProgress else { return }
+        isGitLabLoginInProgress = true
+
+        if triggeredBySubmit {
+            shouldSubmitAfterGitLabLogin = true
+        }
+
+        emitGitLabState(
+            token: gitLabJWT,
+            header: gitLabJWT.map { "Bearer \($0)" },
+            userId: gitLabUserId,
+            requiresLogin: false,
+            isLoading: true,
+            error: nil
+        )
+
+        provider.authenticateInteractively(from: self) { [weak self] result in
+            guard let self = self else { return }
+            self.isGitLabLoginInProgress = false
+
+            switch result {
+            case .success(let authorization):
+                self.gitLabJWT = authorization.jwt
+                self.gitLabUserId = authorization.userId
+                self.persistGitLabCredentials(token: authorization.jwt, userId: authorization.userId)
+                self.didInjectGitLabCredentials = false
+                self.emitGitLabState(
+                    token: authorization.jwt,
+                    header: authorization.authorizationHeader.trimmingCharacters(in: .whitespacesAndNewlines),
+                    userId: authorization.userId,
+                    requiresLogin: false,
+                    isLoading: false,
+                    error: nil
+                )
+
+                if self.shouldSubmitAfterGitLabLogin {
+                    self.shouldSubmitAfterGitLabLogin = false
+                    let report = self.createBugReport()
+                    self.delegate?.bugReportViewController(self, didSubmitReport: report)
+                }
+
+            case .failure(let error):
+                self.gitLabJWT = nil
+                self.gitLabUserId = nil
+                self.clearStoredGitLabCredentials()
+                if triggeredBySubmit {
+                    self.shouldSubmitAfterGitLabLogin = false
+                }
+
+                let requiresLogin: Bool
+                let errorMessage: String?
+
+                switch error {
+                case .authenticationCancelled:
+                    requiresLogin = true
+                    errorMessage = nil
+                case .userAuthenticationRequired:
+                    requiresLogin = true
+                    errorMessage = nil
+                default:
+                    requiresLogin = true
+                    errorMessage = error.localizedDescription
+                }
+
+                self.emitGitLabState(
+                    token: nil,
+                    header: nil,
+                    userId: nil,
+                    requiresLogin: requiresLogin,
+                    isLoading: false,
+                    error: errorMessage
+                )
+
+                if triggeredBySubmit {
+                    switch error {
+                    case .authenticationCancelled:
+                        break
+                    default:
+                        self.showGitLabAuthAlert(message: errorMessage ?? "Please sign in to GitLab to continue.")
+                    }
+                }
+            }
+        }
+    }
+
+    private func showGitLabAuthAlert(message: String) {
+        let alert = UIAlertController(title: "GitLab Sign In Required", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 
     // MARK: - Media Attachments
@@ -319,6 +438,9 @@ extension QCBugReportViewController: WKScriptMessageHandler {
                let url = URL(string: fileURLString) {
                 delegate?.bugReportViewController(self, requestNativePreviewFor: url)
             }
+
+        case "gitlabLogin":
+            requestGitLabAuthentication(triggeredBySubmit: false)
             
         default:
             break

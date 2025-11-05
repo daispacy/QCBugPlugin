@@ -58,16 +58,26 @@ extension QCBugReportViewController {
 
         if gitLabAuthProvider == nil {
             guard !didInjectGitLabCredentials else { return }
-            guard let token = gitLabJWT else { return }
+            guard let token = gitLabJWT else {
+                emitGitLabState(
+                    token: nil,
+                    header: nil,
+                    userId: nil,
+                    requiresLogin: false,
+                    isLoading: false,
+                    error: nil
+                )
+                return
+            }
             let headerValue = "Bearer \(token)"
-            let script = makeGitLabCredentialScript(
+            emitGitLabState(
                 token: token,
                 header: headerValue,
                 userId: gitLabUserId,
+                requiresLogin: false,
+                isLoading: false,
                 error: nil
             )
-            didInjectGitLabCredentials = true
-            executeGitLabInjectionScript(script)
             return
         }
 
@@ -75,6 +85,15 @@ extension QCBugReportViewController {
         guard let provider = gitLabAuthProvider else { return }
 
         isFetchingGitLabCredentials = true
+
+        emitGitLabState(
+            token: gitLabJWT,
+            header: gitLabJWT.map { "Bearer \($0)" },
+            userId: gitLabUserId,
+            requiresLogin: false,
+            isLoading: true,
+            error: nil
+        )
 
         provider.fetchAuthorization { [weak self] result in
             guard let self = self else { return }
@@ -87,22 +106,35 @@ extension QCBugReportViewController {
                 self.gitLabJWT = jwt
                 self.gitLabUserId = authorization.userId
                 self.persistGitLabCredentials(token: jwt, userId: authorization.userId)
-                let script = self.makeGitLabCredentialScript(
+                self.emitGitLabState(
                     token: jwt,
                     header: trimmedHeader,
                     userId: authorization.userId,
+                    requiresLogin: false,
+                    isLoading: false,
                     error: nil
                 )
-                self.didInjectGitLabCredentials = true
-                self.executeGitLabInjectionScript(script)
 
             case .failure(let error):
                 self.gitLabJWT = nil
                 self.gitLabUserId = nil
                 self.clearStoredGitLabCredentials()
-                let script = self.makeGitLabCredentialScript(token: nil, header: nil, userId: nil, error: error.localizedDescription)
-                self.didInjectGitLabCredentials = true
-                self.executeGitLabInjectionScript(script)
+                let requiresLogin: Bool
+                switch error {
+                case .userAuthenticationRequired:
+                    requiresLogin = true
+                default:
+                    requiresLogin = true
+                }
+                let errorMessage = requiresLogin ? nil : error.localizedDescription
+                self.emitGitLabState(
+                    token: nil,
+                    header: nil,
+                    userId: nil,
+                    requiresLogin: requiresLogin,
+                    isLoading: false,
+                    error: errorMessage
+                )
             }
         }
     }
@@ -134,11 +166,34 @@ extension QCBugReportViewController {
         }
     }
 
-    private func makeGitLabCredentialScript(token: String?, header: String?, userId: Int?, error: String?) -> String {
+    func emitGitLabState(
+        token: String?,
+        header: String?,
+        userId: Int?,
+        requiresLogin: Bool,
+        isLoading: Bool,
+        error: String?
+    ) {
+        let script = makeGitLabCredentialScript(
+            token: token,
+            header: header,
+            userId: userId,
+            error: error,
+            requiresLogin: requiresLogin,
+            isLoading: isLoading
+        )
+        didInjectGitLabCredentials = true
+        executeGitLabInjectionScript(script)
+    }
+
+    private func makeGitLabCredentialScript(token: String?, header: String?, userId: Int?, error: String?, requiresLogin: Bool, isLoading: Bool) -> String {
         let tokenValue = token.map { "'\(sanitizeForJavaScript($0))'" } ?? "null"
         let headerValue = header.map { "'\(sanitizeForJavaScript($0))'" } ?? "null"
         let userIdValue = userId.map { String($0) } ?? "null"
         let errorValue = error.map { "'\(sanitizeForJavaScript($0))'" } ?? "null"
+        let requiresLoginValue = requiresLogin ? "true" : "false"
+        let isAuthenticatedValue = (!requiresLogin && token != nil) ? "true" : "false"
+        let isLoadingValue = isLoading ? "true" : "false"
 
         return """
         (function() {
@@ -148,6 +203,9 @@ extension QCBugReportViewController {
             window.qcBugGitLab.authorizationHeader = \(headerValue);
             window.qcBugGitLab.userId = \(userIdValue);
             window.qcBugGitLab.error = \(errorValue);
+            window.qcBugGitLab.requiresLogin = \(requiresLoginValue);
+            window.qcBugGitLab.isAuthenticated = \(isAuthenticatedValue);
+            window.qcBugGitLab.isLoading = \(isLoadingValue);
             if (typeof window.onGitLabAuthReady === 'function') {
                 try {
                     window.onGitLabAuthReady(window.qcBugGitLab);
@@ -165,12 +223,12 @@ extension QCBugReportViewController {
         escaped = escaped.replacingOccurrences(of: "\"", with: "\\\"")
         escaped = escaped.replacingOccurrences(of: "\n", with: "\\n")
         escaped = escaped.replacingOccurrences(of: "\r", with: "\\r")
-    escaped = escaped.replacingOccurrences(of: "\u{2028}", with: "\\u2028")
-    escaped = escaped.replacingOccurrences(of: "\u{2029}", with: "\\u2029")
+        escaped = escaped.replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+        escaped = escaped.replacingOccurrences(of: "\u{2029}", with: "\\u2029")
         return escaped
     }
 
-    private func persistGitLabCredentials(token: String, userId: Int?) {
+    func persistGitLabCredentials(token: String, userId: Int?) {
         let defaults = UserDefaults.standard
         defaults.set(token, forKey: GitLabDefaults.jwtKey)
         if let userId = userId {
@@ -180,7 +238,7 @@ extension QCBugReportViewController {
         }
     }
 
-    private func clearStoredGitLabCredentials() {
+    func clearStoredGitLabCredentials() {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: GitLabDefaults.jwtKey)
         defaults.removeObject(forKey: GitLabDefaults.userIdKey)

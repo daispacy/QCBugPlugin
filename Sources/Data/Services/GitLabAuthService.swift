@@ -7,6 +7,8 @@
 
 import CommonCrypto
 import Foundation
+import AuthenticationServices
+import UIKit
 
 /// Concrete implementation responsible for acquiring GitLab access tokens and JWTs.
 public final class GitLabAuthService: GitLabAuthProviding {
@@ -49,6 +51,9 @@ public final class GitLabAuthService: GitLabAuthProviding {
 
     private var cachedAccessToken: CachedAccessToken?
     private var cachedJWT: CachedJWT?
+    private var authSession: ASWebAuthenticationSession?
+    private var pendingAuthState: String?
+    private var presentationContextProvider: AnyObject?
 
     public init(configuration: GitLabAppConfig, session: URLSession = .shared) {
         self.configuration = configuration
@@ -71,9 +76,27 @@ public final class GitLabAuthService: GitLabAuthProviding {
             return
         }
 
-        obtainAuthorization { result in
+        guard let accessToken = currentCachedAccessToken(), accessToken.expiration > Date() else {
             DispatchQueue.main.async {
-                completion(result)
+                completion(.failure(.userAuthenticationRequired))
+            }
+            return
+        }
+
+        switch generateJWT(using: accessToken) {
+        case .failure(let error):
+            DispatchQueue.main.async {
+                completion(.failure(error))
+            }
+        case .success(let cachedJWT):
+            storeCachedJWT(cachedJWT)
+            let authorization = GitLabAuthorization(
+                authorizationHeader: cachedJWT.header,
+                jwt: cachedJWT.jwt,
+                userId: cachedJWT.userId
+            )
+            DispatchQueue.main.async {
+                completion(.success(authorization))
             }
         }
     }
@@ -82,13 +105,193 @@ public final class GitLabAuthService: GitLabAuthProviding {
         stateQueue.async(flags: .barrier) {
             self.cachedAccessToken = nil
             self.cachedJWT = nil
+            self.pendingAuthState = nil
+            self.authSession = nil
+            if #available(iOS 13.0, *) {
+                self.presentationContextProvider = nil
+            }
         }
+    }
+
+    public func hasValidAuthorization() -> Bool {
+        if let jwt = currentCachedJWT(), jwt.expiration > Date() {
+            return true
+        }
+        if let token = currentCachedAccessToken(), token.expiration > Date() {
+            return true
+        }
+        return false
     }
 
     // MARK: - Internal Workflow
 
-    private func obtainAuthorization(completion: @escaping (Result<GitLabAuthorization, GitLabAuthError>) -> Void) {
-        getValidAccessToken { [weak self] result in
+    public func authenticateInteractively(from presenter: UIViewController, completion: @escaping (Result<GitLabAuthorization, GitLabAuthError>) -> Void) {
+        if hasValidAuthorization() {
+            fetchAuthorization(completion: completion)
+            return
+        }
+
+        if pendingAuthState != nil {
+            DispatchQueue.main.async {
+                completion(.failure(.networkError("GitLab authentication is already in progress")))
+            }
+            return
+        }
+
+        guard let redirectURI = configuration.redirectURI,
+              let callbackScheme = redirectURI.scheme else {
+            DispatchQueue.main.async {
+                completion(.failure(.invalidConfiguration))
+            }
+            return
+        }
+
+        guard #available(iOS 12.0, *) else {
+            DispatchQueue.main.async {
+                completion(.failure(.invalidConfiguration))
+            }
+            return
+        }
+
+        let state = UUID().uuidString
+        guard let authorizationURL = authorizationURL(state: state, redirectURI: redirectURI) else {
+            DispatchQueue.main.async {
+                completion(.failure(.invalidConfiguration))
+            }
+            return
+        }
+        pendingAuthState = state
+
+        DispatchQueue.main.async {
+            let session = ASWebAuthenticationSession(url: authorizationURL, callbackURLScheme: callbackScheme) { [weak self] callbackURL, error in
+                guard let self = self else { return }
+                self.authSession = nil
+                self.pendingAuthState = nil
+                if #available(iOS 13.0, *) {
+                    self.presentationContextProvider = nil
+                }
+
+                if let error = error {
+                    if let sessionError = error as? ASWebAuthenticationSessionError,
+                       sessionError.code == .canceledLogin {
+                        DispatchQueue.main.async {
+                            completion(.failure(.authenticationCancelled))
+                        }
+                    } else {
+                        DispatchQueue.main.async {
+                            completion(.failure(.networkError(error.localizedDescription)))
+                        }
+                    }
+                    return
+                }
+
+                guard let callbackURL = callbackURL else {
+                    DispatchQueue.main.async {
+                        completion(.failure(.invalidResponse))
+                    }
+                    return
+                }
+
+                self.processAuthenticationCallback(callbackURL, expectedState: state, redirectURI: redirectURI) { result in
+                    DispatchQueue.main.async {
+                        completion(result)
+                    }
+                }
+            }
+
+            if #available(iOS 13.0, *) {
+                let provider = WebAuthContextProvider()
+                provider.anchor = self.presentationAnchor(for: presenter)
+                session.presentationContextProvider = provider
+                session.prefersEphemeralWebBrowserSession = true
+                self.presentationContextProvider = provider
+            }
+
+            if !session.start() {
+                self.authSession = nil
+                self.pendingAuthState = nil
+                if #available(iOS 13.0, *) {
+                    self.presentationContextProvider = nil
+                }
+                DispatchQueue.main.async {
+                    completion(.failure(.invalidConfiguration))
+                }
+                return
+            }
+
+            self.authSession = session
+        }
+    }
+
+    private func authorizationURL(state: String, redirectURI: URL) -> URL? {
+        guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+
+        var path = components.path
+        if path.hasSuffix("/") {
+            path.removeLast()
+        }
+        components.path = path.isEmpty ? "/oauth/authorize" : path + "/oauth/authorize"
+
+        var queryItems: [URLQueryItem] = [
+            URLQueryItem(name: "response_type", value: "code"),
+            URLQueryItem(name: "client_id", value: configuration.appId),
+            URLQueryItem(name: "redirect_uri", value: redirectURI.absoluteString),
+            URLQueryItem(name: "scope", value: configuration.scopes.joined(separator: " ")),
+            URLQueryItem(name: "state", value: state)
+        ]
+
+        if let audience = configuration.audience {
+            queryItems.append(URLQueryItem(name: "audience", value: audience))
+        }
+
+        components.queryItems = queryItems
+        return components.url
+    }
+
+    private func presentationAnchor(for presenter: UIViewController) -> UIWindow? {
+        if let window = presenter.view.window {
+            return window
+        }
+        if let window = presenter.navigationController?.view.window {
+            return window
+        }
+        if let window = presenter.viewIfLoaded?.window {
+            return window
+        }
+
+        if #available(iOS 13.0, *) {
+            return UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
+                .first { $0.isKeyWindow }
+        } else {
+            return UIApplication.shared.windows.first { $0.isKeyWindow } ?? UIApplication.shared.windows.first
+        }
+    }
+
+    private func processAuthenticationCallback(
+        _ callbackURL: URL,
+        expectedState: String,
+        redirectURI: URL,
+        completion: @escaping (Result<GitLabAuthorization, GitLabAuthError>) -> Void
+    ) {
+        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
+              let queryItems = components.queryItems else {
+            completion(.failure(.invalidResponse))
+            return
+        }
+
+        let code = queryItems.first { $0.name == "code" }?.value
+        let state = queryItems.first { $0.name == "state" }?.value
+
+        guard let authorizationCode = code, state == expectedState else {
+            completion(.failure(.invalidResponse))
+            return
+        }
+
+        requestAccessToken(authorizationCode: authorizationCode, redirectURI: redirectURI.absoluteString) { [weak self] result in
             guard let self = self else { return }
 
             switch result {
@@ -111,20 +314,16 @@ public final class GitLabAuthService: GitLabAuthProviding {
         }
     }
 
-    private func getValidAccessToken(completion: @escaping (Result<CachedAccessToken, GitLabAuthError>) -> Void) {
-        if let cachedToken = currentCachedAccessToken(), cachedToken.expiration > Date() {
-            completion(.success(cachedToken))
-            return
-        }
-
-        requestAccessToken(completion: completion)
-    }
-
-    private func requestAccessToken(completion: @escaping (Result<CachedAccessToken, GitLabAuthError>) -> Void) {
+    private func requestAccessToken(
+        authorizationCode: String,
+        redirectURI: String,
+        completion: @escaping (Result<CachedAccessToken, GitLabAuthError>) -> Void
+    ) {
         guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: false) else {
             completion(.failure(.invalidConfiguration))
             return
         }
+
         var path = components.path
         if path.hasSuffix("/") {
             path.removeLast()
@@ -143,10 +342,11 @@ public final class GitLabAuthService: GitLabAuthProviding {
 
         var bodyComponents = URLComponents()
         bodyComponents.queryItems = [
-            URLQueryItem(name: "grant_type", value: "client_credentials"),
+            URLQueryItem(name: "grant_type", value: "authorization_code"),
+            URLQueryItem(name: "code", value: authorizationCode),
+            URLQueryItem(name: "redirect_uri", value: redirectURI),
             URLQueryItem(name: "client_id", value: configuration.appId),
-            URLQueryItem(name: "client_secret", value: configuration.secret),
-            URLQueryItem(name: "scope", value: configuration.scopes.joined(separator: " "))
+            URLQueryItem(name: "client_secret", value: configuration.secret)
         ]
         request.httpBody = bodyComponents.percentEncodedQuery?.data(using: .utf8)
 
@@ -161,7 +361,6 @@ public final class GitLabAuthService: GitLabAuthProviding {
             if let httpResponse = response as? HTTPURLResponse,
                !(200...299).contains(httpResponse.statusCode) {
                 let message = self.decodeErrorMessage(from: data) ?? "HTTP \(httpResponse.statusCode)"
-                print("❌ GitLabAuthService: Token request failed - \(message)")
                 completion(.failure(.networkError(message)))
                 return
             }
@@ -181,15 +380,16 @@ public final class GitLabAuthService: GitLabAuthProviding {
                     case .failure(let error):
                         completion(.failure(error))
                     case .success(let userId):
-                        let cachedToken = CachedAccessToken(value: response.accessToken, expiration: expiry, userId: userId)
+                        let cachedToken = CachedAccessToken(
+                            value: response.accessToken,
+                            expiration: expiry,
+                            userId: userId
+                        )
                         self.storeCachedAccessToken(cachedToken)
-                        print("✅ GitLabAuthService: Obtained GitLab access token (expires in \(response.expiresIn) seconds) for user #\(userId)")
                         completion(.success(cachedToken))
                     }
                 }
             } catch {
-                let message = error.localizedDescription
-                print("❌ GitLabAuthService: Failed to decode access token response - \(message)")
                 completion(.failure(.tokenGenerationFailed))
             }
         }.resume()
@@ -368,5 +568,14 @@ public final class GitLabAuthService: GitLabAuthProviding {
         stateQueue.async(flags: .barrier) {
             self.cachedJWT = jwt
         }
+    }
+}
+
+@available(iOS 13.0, *)
+private final class WebAuthContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
+    weak var anchor: ASPresentationAnchor?
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        anchor ?? ASPresentationAnchor()
     }
 }

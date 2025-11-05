@@ -355,6 +355,10 @@ public final class BugReportAPIService: BugReportProtocol {
             return .networkError("GitLab token generation failed")
         case .jwtGenerationFailed(let message):
             return .networkError(message)
+        case .userAuthenticationRequired:
+            return .authenticationFailed
+        case .authenticationCancelled:
+            return .authenticationFailed
         }
     }
 
