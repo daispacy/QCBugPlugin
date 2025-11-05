@@ -16,6 +16,7 @@ public struct QCBugPluginConfig: QCBugPluginConfiguration {
     public let isScreenRecordingEnabled: Bool
     public let maxActionHistoryCount: Int
     public let enableFloatingButton: Bool
+    public let gitLabAppConfig: GitLabAppConfig?
     
     public init(
         webhookURL: String,
@@ -23,7 +24,8 @@ public struct QCBugPluginConfig: QCBugPluginConfiguration {
         customData: [String: Any] = [:],
         isScreenRecordingEnabled: Bool = true,
         maxActionHistoryCount: Int = 50,
-        enableFloatingButton: Bool = false
+        enableFloatingButton: Bool = false,
+        gitLabAppConfig: GitLabAppConfig? = nil
     ) {
         self.webhookURL = webhookURL
         self.apiKey = apiKey
@@ -31,6 +33,7 @@ public struct QCBugPluginConfig: QCBugPluginConfiguration {
         self.isScreenRecordingEnabled = isScreenRecordingEnabled
         self.maxActionHistoryCount = maxActionHistoryCount
         self.enableFloatingButton = enableFloatingButton
+        self.gitLabAppConfig = gitLabAppConfig
     }
 }
 

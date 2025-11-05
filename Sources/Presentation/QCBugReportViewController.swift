@@ -6,6 +6,7 @@
 //  Copyright © 2025 VietUnion. All rights reserved.
 //
 
+import Foundation
 import UIKit
 import WebKit
 
@@ -29,6 +30,10 @@ public final class QCBugReportViewController: UIViewController {
     private var webView: WKWebView!
     private var mediaAttachments: [MediaAttachment] = []
     private var isWebViewLoaded = false
+    private var gitLabAuthProvider: GitLabAuthProviding?
+    private var isFetchingGitLabCredentials = false
+    private var didInjectGitLabCredentials = false
+    private var pendingGitLabCredentialScript: String?
     
     // Bug report data
     private var bugDescription = ""
@@ -47,6 +52,9 @@ public final class QCBugReportViewController: UIViewController {
         self.screenRecorder = screenRecorder
         self.configuration = configuration
         self.webhookURL = configuration?.webhookURL ?? ""
+        if let gitLabConfig = configuration?.gitLabAppConfig {
+            self.gitLabAuthProvider = GitLabAuthService(configuration: gitLabConfig)
+        }
         super.init(nibName: nil, bundle: nil)
     }
     
@@ -117,6 +125,9 @@ public final class QCBugReportViewController: UIViewController {
     
     private func loadBugReportInterface() {
         isWebViewLoaded = false
+        didInjectGitLabCredentials = false
+        isFetchingGitLabCredentials = false
+        pendingGitLabCredentialScript = nil
         if let resource = bugReportHTMLResource() {
             webView.loadHTMLString(resource.html, baseURL: resource.baseURL)
         } else {
@@ -316,6 +327,10 @@ extension QCBugReportViewController: WKNavigationDelegate {
         
         // Inject form state
         injectFormState()
+
+        // Resolve GitLab credentials for embedded UI when needed
+        injectGitLabAccessTokenIfNeeded()
+        executePendingGitLabInjectionScriptIfNeeded()
     }
     
     private func injectActionHistory() {

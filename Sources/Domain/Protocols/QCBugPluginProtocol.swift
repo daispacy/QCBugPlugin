@@ -55,6 +55,7 @@ public protocol QCBugPluginConfiguration {
     var isScreenRecordingEnabled: Bool { get }
     var maxActionHistoryCount: Int { get }
     var enableFloatingButton: Bool { get }
+    var gitLabAppConfig: GitLabAppConfig? { get }
 }
 
 /// Delegate protocol for plugin events

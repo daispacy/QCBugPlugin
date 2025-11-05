@@ -38,6 +38,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     private var screenRecorder: ScreenRecordingProtocol?
     private var screenCapture: ScreenCaptureProtocol?
     private var bugReportService: BugReportProtocol?
+    private var gitLabAuthService: GitLabAuthProviding?
     private var isConfigured: Bool = false
     private var floatingButton: QCFloatingButton?
     private var floatingActionButtons: QCFloatingActionButtons?
@@ -71,7 +72,8 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         }
         bugReportService = BugReportAPIService(
             webhookURL: webhook,
-            apiKey: configuration?.apiKey
+            apiKey: configuration?.apiKey,
+            gitLabAuthProvider: gitLabAuthService
         )
     }
 
@@ -108,6 +110,12 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
 
         // Initialize screen capture service
         self.screenCapture = ScreenCaptureService()
+
+        if let gitLabConfig = config.gitLabAppConfig {
+            self.gitLabAuthService = GitLabAuthService(configuration: gitLabConfig)
+        } else {
+            self.gitLabAuthService = nil
+        }
 
         refreshBugReportService()
 

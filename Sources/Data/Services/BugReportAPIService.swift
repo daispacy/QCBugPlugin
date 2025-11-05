@@ -27,7 +27,7 @@ public final class BugReportAPIService: BugReportProtocol {
     }
 
     private struct BugReportPayload: Encodable {
-        let whtype: String
+        let wktype: String
         struct MediaAttachmentDTO: Encodable {
             let type: MediaType
             let fileName: String
@@ -57,7 +57,7 @@ public final class BugReportAPIService: BugReportProtocol {
         let attachments: [AttachmentPayload]
 
         init(report: BugReport, attachments: [AttachmentPayload]) {
-            self.whtype = "report_issue"
+            self.wktype = report.wktype
             let mediaDTO = report.mediaAttachments.map { attachment in
                 MediaAttachmentDTO(
                     type: attachment.type,
@@ -89,7 +89,7 @@ public final class BugReportAPIService: BugReportProtocol {
     }
 
     private struct FileUploadPayload: Encodable {
-        let whtype: String
+        let wktype: String
         let reportId: String
         let attachment: AttachmentPayload
     }
@@ -98,6 +98,7 @@ public final class BugReportAPIService: BugReportProtocol {
 
     private let webhookURL: String
     private let apiKey: String?
+    private let gitLabAuthProvider: GitLabAuthProviding?
     private let session: URLSession
     private let jsonEncoder: JSONEncoder
     private let isoFormatter: ISO8601DateFormatter
@@ -106,9 +107,10 @@ public final class BugReportAPIService: BugReportProtocol {
 
     // MARK: - Initialization
 
-    public init(webhookURL: String, apiKey: String? = nil) {
+    public init(webhookURL: String, apiKey: String? = nil, gitLabAuthProvider: GitLabAuthProviding? = nil) {
         self.webhookURL = webhookURL
         self.apiKey = apiKey
+        self.gitLabAuthProvider = gitLabAuthProvider
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
@@ -135,74 +137,84 @@ public final class BugReportAPIService: BugReportProtocol {
     // MARK: - BugReportProtocol Implementation
 
     public func submitBugReport(_ report: BugReport, completion: @escaping (Result<String, BugReportError>) -> Void) {
-        guard !webhookURL.isEmpty, let url = URL(string: webhookURL) else {
-            completion(.failure(.invalidURL))
+        guard !webhookURL.isEmpty, let endpointURL = URL(string: webhookURL) else {
+            DispatchQueue.main.async {
+                completion(.failure(.invalidURL))
+            }
             return
         }
 
-        preparePayload(for: report) { [weak self] result in
+        resolveAuthorizationHeader { [weak self] authResult in
             guard let self = self else { return }
 
-            switch result {
+            switch authResult {
             case .failure(let error):
                 DispatchQueue.main.async {
                     completion(.failure(error))
                 }
 
-            case .success(let payloadData):
-                var request = self.createJSONRequest(url: url)
-                request.httpBody = payloadData
+            case .success(let authorizationHeader):
+                self.preparePayload(for: report) { result in
+                    switch result {
+                    case .failure(let error):
+                        DispatchQueue.main.async {
+                            completion(.failure(error))
+                        }
 
-                print("📤 BugReportAPIService: Submitting bug report JSON to \(self.webhookURL)")
-
-                self.session.dataTask(with: request) { data, response, error in
-                    DispatchQueue.main.async {
-                        self.handleResponse(data: data, response: response, error: error, completion: completion)
+                    case .success(let payloadData):
+                        self.performSubmit(
+                            url: endpointURL,
+                            payloadData: payloadData,
+                            authorizationHeader: authorizationHeader,
+                            completion: completion
+                        )
                     }
-                }.resume()
+                }
             }
         }
     }
 
     public func uploadFile(_ fileURL: URL, for reportId: String, completion: @escaping (Result<String, BugReportError>) -> Void) {
-        guard !webhookURL.isEmpty, let url = URL(string: webhookURL + "/upload") else {
-            completion(.failure(.invalidURL))
+        guard !webhookURL.isEmpty, let endpointURL = URL(string: webhookURL + "/upload") else {
+            DispatchQueue.main.async {
+                completion(.failure(.invalidURL))
+            }
             return
         }
 
         guard let type = inferMediaType(from: fileURL) else {
-            completion(.failure(.invalidData))
+            DispatchQueue.main.async {
+                completion(.failure(.invalidData))
+            }
             return
         }
 
-        let attachment = MediaAttachment(type: type, fileURL: fileURL)
-        processAttachment(attachment) { [weak self] result in
+        resolveAuthorizationHeader { [weak self] authResult in
             guard let self = self else { return }
 
-            switch result {
+            switch authResult {
             case .failure(let error):
                 DispatchQueue.main.async {
                     completion(.failure(error))
                 }
 
-            case .success(let payload):
-                let uploadPayload = FileUploadPayload(whtype: "report_issue", reportId: reportId, attachment: payload)
-
-                do {
-                    let payloadData = try self.jsonEncoder.encode(uploadPayload)
-                    var request = self.createJSONRequest(url: url)
-                    request.httpBody = payloadData
-
-                    print("📤 BugReportAPIService: Uploading attachment for report \(reportId) via JSON")
-
-                    self.session.dataTask(with: request) { data, response, error in
+            case .success(let authorizationHeader):
+                let attachment = MediaAttachment(type: type, fileURL: fileURL)
+                self.processAttachment(attachment) { result in
+                    switch result {
+                    case .failure(let error):
                         DispatchQueue.main.async {
-                            self.handleResponse(data: data, response: response, error: error, completion: completion)
+                            completion(.failure(error))
                         }
-                    }.resume()
-                } catch {
-                    DispatchQueue.main.async {
-                        completion(.failure(.invalidData))
+
+                    case .success(let payload):
+                        self.performUpload(
+                            url: endpointURL,
+                            payload: payload,
+                            reportId: reportId,
+                            authorizationHeader: authorizationHeader,
+                            completion: completion
+                        )
                     }
                 }
             }
@@ -210,6 +222,91 @@ public final class BugReportAPIService: BugReportProtocol {
     }
 
     // MARK: - Payload Preparation
+
+    private func performSubmit(
+        url: URL,
+        payloadData: Data,
+        authorizationHeader: String?,
+        completion: @escaping (Result<String, BugReportError>) -> Void
+    ) {
+        var request = createJSONRequest(url: url, authorizationHeader: authorizationHeader)
+        request.httpBody = payloadData
+
+        print("📤 BugReportAPIService: Submitting bug report JSON to \(webhookURL)")
+
+        session.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                self.handleResponse(data: data, response: response, error: error, completion: completion)
+            }
+        }.resume()
+    }
+
+    private func performUpload(
+        url: URL,
+        payload: AttachmentPayload,
+        reportId: String,
+        authorizationHeader: String?,
+        completion: @escaping (Result<String, BugReportError>) -> Void
+    ) {
+        let uploadPayload = FileUploadPayload(wktype: "report_issue", reportId: reportId, attachment: payload)
+
+        do {
+            let payloadData = try jsonEncoder.encode(uploadPayload)
+            var request = createJSONRequest(url: url, authorizationHeader: authorizationHeader)
+            request.httpBody = payloadData
+
+            print("📤 BugReportAPIService: Uploading attachment for report \(reportId) via JSON")
+
+            session.dataTask(with: request) { [weak self] data, response, error in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    self.handleResponse(data: data, response: response, error: error, completion: completion)
+                }
+            }.resume()
+        } catch {
+            DispatchQueue.main.async {
+                completion(.failure(.invalidData))
+            }
+        }
+    }
+
+    private func resolveAuthorizationHeader(
+        completion: @escaping (Result<String?, BugReportError>) -> Void
+    ) {
+        guard let provider = gitLabAuthProvider else {
+            DispatchQueue.main.async {
+                completion(.success(nil))
+            }
+            return
+        }
+
+        provider.fetchAuthorizationHeader { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let header):
+                    completion(.success(header))
+                case .failure(let error):
+                    completion(.failure(self.mapGitLabError(error)))
+                }
+            }
+        }
+    }
+
+    private func mapGitLabError(_ error: GitLabAuthError) -> BugReportError {
+        switch error {
+        case .invalidConfiguration:
+            return .invalidData
+        case .networkError(let message):
+            return .networkError(message)
+        case .invalidResponse:
+            return .networkError("GitLab invalid response")
+        case .tokenGenerationFailed:
+            return .networkError("GitLab token generation failed")
+        case .jwtGenerationFailed(let message):
+            return .networkError(message)
+        }
+    }
 
     private func preparePayload(for report: BugReport, completion: @escaping (Result<Data, BugReportError>) -> Void) {
         processingQueue.async {
@@ -382,13 +479,15 @@ public final class BugReportAPIService: BugReportProtocol {
 
     // MARK: - Request Helpers
 
-    private func createJSONRequest(url: URL) -> URLRequest {
+    private func createJSONRequest(url: URL, authorizationHeader: String?) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        if let apiKey = apiKey {
+        if let authorizationHeader = authorizationHeader {
+            request.setValue(authorizationHeader, forHTTPHeaderField: "Authorization")
+        } else if let apiKey = apiKey {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
 
