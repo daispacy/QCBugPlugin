@@ -2,313 +2,573 @@
 //  BugReportAPIService.swift
 //  QCBugPlugin
 //
-//  Created by PayooMerchant on 11/3/25.
-//  Copyright © 2025 VietUnion. All rights reserved.
+//  Created by GitHub Copilot on 11/5/25.
 //
 
+import AVFoundation
 import Foundation
+import UIKit
 
 /// Service for submitting bug reports via webhook API
 public final class BugReportAPIService: BugReportProtocol {
-    
+
+    // MARK: - Nested Types
+
+    private struct AttachmentPayload: Encodable {
+        let type: String
+        let fileName: String
+        let mimeType: String
+        let timestamp: String
+        let size: Int
+        let width: Int?
+        let height: Int?
+        let duration: Double?
+        let data: String
+    }
+
+    private struct BugReportPayload: Encodable {
+        struct MediaAttachmentDTO: Encodable {
+            let type: MediaType
+            let fileName: String
+            let timestamp: Date
+            let fileSize: Int64?
+        }
+
+        struct ReportDTO: Encodable {
+            let id: String
+            let timestamp: Date
+            let description: String
+            let priority: BugPriority
+            let category: BugCategory
+            let userActions: [UserAction]
+            let deviceInfo: DeviceInfo
+            let appInfo: AppInfo
+            let screenshots: [String]
+            let screenRecordingURL: String?
+            let mediaAttachments: [MediaAttachmentDTO]
+            let customData: [String: String]
+            let currentScreen: String?
+            let networkInfo: NetworkInfo?
+            let memoryInfo: MemoryInfo?
+        }
+
+        let report: ReportDTO
+        let attachments: [AttachmentPayload]
+
+        init(report: BugReport, attachments: [AttachmentPayload]) {
+            let mediaDTO = report.mediaAttachments.map { attachment in
+                MediaAttachmentDTO(
+                    type: attachment.type,
+                    fileName: attachment.fileName,
+                    timestamp: attachment.timestamp,
+                    fileSize: attachment.fileSize
+                )
+            }
+
+            self.report = ReportDTO(
+                id: report.id,
+                timestamp: report.timestamp,
+                description: report.description,
+                priority: report.priority,
+                category: report.category,
+                userActions: report.userActions,
+                deviceInfo: report.deviceInfo,
+                appInfo: report.appInfo,
+                screenshots: report.screenshots,
+                screenRecordingURL: report.screenRecordingURL,
+                mediaAttachments: mediaDTO,
+                customData: report.customData,
+                currentScreen: report.currentScreen,
+                networkInfo: report.networkInfo,
+                memoryInfo: report.memoryInfo
+            )
+            self.attachments = attachments
+        }
+    }
+
+    private struct FileUploadPayload: Encodable {
+        let reportId: String
+        let attachment: AttachmentPayload
+    }
+
     // MARK: - Properties
+
     private let webhookURL: String
     private let apiKey: String?
     private let session: URLSession
     private let jsonEncoder: JSONEncoder
-    
+    private let isoFormatter: ISO8601DateFormatter
+    private let processingQueue = DispatchQueue(label: "com.qcbugplugin.report-processing", qos: .userInitiated)
+    private let screenSize: CGSize
+
     // MARK: - Initialization
-    
+
     public init(webhookURL: String, apiKey: String? = nil) {
         self.webhookURL = webhookURL
         self.apiKey = apiKey
-        
+
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
         self.session = URLSession(configuration: config)
-        
+
         self.jsonEncoder = JSONEncoder()
         self.jsonEncoder.dateEncodingStrategy = .iso8601
+
+        self.isoFormatter = ISO8601DateFormatter()
+        self.isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        if Thread.isMainThread {
+            self.screenSize = UIScreen.main.bounds.size
+        } else {
+            var resolved = CGSize(width: 1280, height: 720)
+            DispatchQueue.main.sync {
+                resolved = UIScreen.main.bounds.size
+            }
+            self.screenSize = resolved
+        }
     }
-    
+
     // MARK: - BugReportProtocol Implementation
-    
+
     public func submitBugReport(_ report: BugReport, completion: @escaping (Result<String, BugReportError>) -> Void) {
-        guard let url = URL(string: webhookURL) else {
+        guard !webhookURL.isEmpty, let url = URL(string: webhookURL) else {
             completion(.failure(.invalidURL))
             return
         }
-        
-        // Create multipart form data
-        let boundary = "Boundary-\(UUID().uuidString)"
-        var request = createMultipartRequest(url: url, boundary: boundary)
-        
-        do {
-            let reportData = try jsonEncoder.encode(report)
-            let bodyData = createMultipartBody(
-                report: reportData,
-                screenRecordingURL: report.screenRecordingURL.flatMap { URL(string: $0) },
-                boundary: boundary
-            )
-            
-            request.httpBody = bodyData
-            
-            print("📤 BugReportAPIService: Submitting bug report to \(webhookURL)")
-            
-            session.dataTask(with: request) { data, response, error in
+
+        preparePayload(for: report) { [weak self] result in
+            guard let self = self else { return }
+
+            switch result {
+            case .failure(let error):
                 DispatchQueue.main.async {
-                    self.handleResponse(data: data, response: response, error: error, completion: completion)
+                    completion(.failure(error))
                 }
-            }.resume()
-            
-        } catch {
-            completion(.failure(.invalidData))
+
+            case .success(let payloadData):
+                var request = self.createJSONRequest(url: url)
+                request.httpBody = payloadData
+
+                print("📤 BugReportAPIService: Submitting bug report JSON to \(self.webhookURL)")
+
+                self.session.dataTask(with: request) { data, response, error in
+                    DispatchQueue.main.async {
+                        self.handleResponse(data: data, response: response, error: error, completion: completion)
+                    }
+                }.resume()
+            }
         }
     }
-    
+
     public func uploadFile(_ fileURL: URL, for reportId: String, completion: @escaping (Result<String, BugReportError>) -> Void) {
-        guard let url = URL(string: webhookURL + "/upload") else {
+        guard !webhookURL.isEmpty, let url = URL(string: webhookURL + "/upload") else {
             completion(.failure(.invalidURL))
             return
         }
-        
-        let boundary = "Boundary-\(UUID().uuidString)"
-        var request = createMultipartRequest(url: url, boundary: boundary)
-        
-        do {
-            let fileData = try Data(contentsOf: fileURL)
-            let bodyData = createFileUploadBody(
-                fileData: fileData,
-                fileName: fileURL.lastPathComponent,
-                reportId: reportId,
-                boundary: boundary
-            )
-            
-            request.httpBody = bodyData
-            
-            print("📤 BugReportAPIService: Uploading file \(fileURL.lastPathComponent) for report \(reportId)")
-            
-            session.dataTask(with: request) { data, response, error in
+
+        guard let type = inferMediaType(from: fileURL) else {
+            completion(.failure(.invalidData))
+            return
+        }
+
+        let attachment = MediaAttachment(type: type, fileURL: fileURL)
+        processAttachment(attachment) { [weak self] result in
+            guard let self = self else { return }
+
+            switch result {
+            case .failure(let error):
                 DispatchQueue.main.async {
-                    self.handleResponse(data: data, response: response, error: error, completion: completion)
+                    completion(.failure(error))
                 }
-            }.resume()
-            
-        } catch {
-            completion(.failure(.fileUploadFailed(error.localizedDescription)))
-        }
-    }
-    
-    // MARK: - Private Methods
-    
-    private func createMultipartRequest(url: URL, boundary: String) -> URLRequest {
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        
-        // Add API key if available
-        if let apiKey = apiKey {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        }
-        
-        // Add custom headers
-        request.setValue("QCBugPlugin/1.0", forHTTPHeaderField: "User-Agent")
-        request.setValue(UUID().uuidString, forHTTPHeaderField: "X-Request-ID")
-        
-        return request
-    }
-    
-    private func createMultipartBody(
-        report: Data,
-        screenRecordingURL: URL?,
-        boundary: String
-    ) -> Data {
-        var body = Data()
 
-        // Add bug report JSON data
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"bug_report\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: application/json\r\n\r\n".data(using: .utf8)!)
-        body.append(report)
-        body.append("\r\n".data(using: .utf8)!)
+            case .success(let payload):
+                let uploadPayload = FileUploadPayload(reportId: reportId, attachment: payload)
 
-        // Parse media attachments from report JSON
-        if let reportDict = try? JSONSerialization.jsonObject(with: report) as? [String: Any],
-           let mediaAttachmentsArray = reportDict["mediaAttachments"] as? [[String: Any]] {
+                do {
+                    let payloadData = try self.jsonEncoder.encode(uploadPayload)
+                    var request = self.createJSONRequest(url: url)
+                    request.httpBody = payloadData
 
-            // Add each media attachment
-            for (index, attachmentDict) in mediaAttachmentsArray.enumerated() {
-                if let fileURLString = attachmentDict["fileURL"] as? String,
-                   let fileURL = URL(string: fileURLString),
-                   let fileData = try? Data(contentsOf: fileURL),
-                   let typeString = attachmentDict["type"] as? String {
+                    print("📤 BugReportAPIService: Uploading attachment for report \(reportId) via JSON")
 
-                    let fileName = fileURL.lastPathComponent
-                    let fieldName = typeString == "screenshot" ? "screenshot_\(index)" : "screen_recording"
-                    let contentType = typeString == "screenshot" ? "image/png" : "video/mp4"
-
-                    body.append("--\(boundary)\r\n".data(using: .utf8)!)
-                    body.append("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
-                    body.append("Content-Type: \(contentType)\r\n\r\n".data(using: .utf8)!)
-                    body.append(fileData)
-                    body.append("\r\n".data(using: .utf8)!)
+                    self.session.dataTask(with: request) { data, response, error in
+                        DispatchQueue.main.async {
+                            self.handleResponse(data: data, response: response, error: error, completion: completion)
+                        }
+                    }.resume()
+                } catch {
+                    DispatchQueue.main.async {
+                        completion(.failure(.invalidData))
+                    }
                 }
             }
         }
+    }
 
-        // Add screen recording if available (backward compatibility)
-        if let videoURL = screenRecordingURL,
-           let videoData = try? Data(contentsOf: videoURL) {
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"screen_recording\"; filename=\"\(videoURL.lastPathComponent)\"\r\n".data(using: .utf8)!)
-            body.append("Content-Type: video/mp4\r\n\r\n".data(using: .utf8)!)
-            body.append(videoData)
-            body.append("\r\n".data(using: .utf8)!)
+    // MARK: - Payload Preparation
+
+    private func preparePayload(for report: BugReport, completion: @escaping (Result<Data, BugReportError>) -> Void) {
+        processingQueue.async {
+            if report.mediaAttachments.isEmpty {
+                do {
+                    let payload = BugReportPayload(report: report, attachments: [])
+                    let data = try self.jsonEncoder.encode(payload)
+                    completion(.success(data))
+                } catch {
+                    completion(.failure(.invalidData))
+                }
+                return
+            }
+
+            var attachments = Array<AttachmentPayload?>(repeating: nil, count: report.mediaAttachments.count)
+            var processingError: BugReportError?
+            let group = DispatchGroup()
+            let lock = NSLock()
+
+            for (index, attachment) in report.mediaAttachments.enumerated() {
+                group.enter()
+                self.processAttachment(attachment) { result in
+                    lock.lock()
+                    defer { lock.unlock() }
+
+                    switch result {
+                    case .success(let payload):
+                        attachments[index] = payload
+                    case .failure(let error):
+                        processingError = error
+                    }
+                    group.leave()
+                }
+            }
+
+            group.notify(queue: self.processingQueue) {
+                if let error = processingError {
+                    completion(.failure(error))
+                    return
+                }
+
+                let flattened = attachments.compactMap { $0 }
+
+                do {
+                    let payload = BugReportPayload(report: report, attachments: flattened)
+                    let data = try self.jsonEncoder.encode(payload)
+                    completion(.success(data))
+                } catch {
+                    completion(.failure(.invalidData))
+                }
+            }
+        }
+    }
+
+    private func processAttachment(_ attachment: MediaAttachment, completion: @escaping (Result<AttachmentPayload, BugReportError>) -> Void) {
+        guard let url = URL(string: attachment.fileURL) else {
+            completion(.failure(.invalidData))
+            return
         }
 
-        // Add closing boundary
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        switch attachment.type {
+        case .screenshot:
+            processImageAttachment(url: url, attachment: attachment, completion: completion)
+        case .screenRecording:
+            processVideoAttachment(url: url, attachment: attachment, completion: completion)
+        }
+    }
 
-        return body
+    private func processImageAttachment(
+        url: URL,
+        attachment: MediaAttachment,
+        completion: @escaping (Result<AttachmentPayload, BugReportError>) -> Void
+    ) {
+        processingQueue.async {
+            guard let image = UIImage(contentsOfFile: url.path) else {
+                completion(.failure(.fileUploadFailed("Unable to load image at \(url.path)")))
+                return
+            }
+
+            let scaledImage = self.scaledImage(image, toFit: self.screenSize)
+            guard let jpegData = scaledImage.jpegData(compressionQuality: 0.8) else {
+                completion(.failure(.fileUploadFailed("Unable to encode image")))
+                return
+            }
+
+            let baseName = (attachment.fileName as NSString).deletingPathExtension
+            let recompressedName = baseName.isEmpty ? "attachment.jpg" : baseName + ".jpg"
+
+            let payload = AttachmentPayload(
+                type: attachment.type.rawValue,
+                fileName: recompressedName,
+                mimeType: "image/jpeg",
+                timestamp: self.isoFormatter.string(from: attachment.timestamp),
+                size: jpegData.count,
+                width: Int(scaledImage.size.width),
+                height: Int(scaledImage.size.height),
+                duration: nil,
+                data: jpegData.base64EncodedString()
+            )
+
+            completion(.success(payload))
+        }
     }
-    
-    private func createFileUploadBody(
-        fileData: Data,
-        fileName: String,
-        reportId: String,
-        boundary: String
-    ) -> Data {
-        var body = Data()
-        
-        // Add report ID
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"report_id\"\r\n\r\n".data(using: .utf8)!)
-        body.append(reportId.data(using: .utf8)!)
-        body.append("\r\n".data(using: .utf8)!)
-        
-        // Add file data
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
-        
-        // Determine content type based on file extension
-        let contentType = mimeType(for: fileName)
-        body.append("Content-Type: \(contentType)\r\n\r\n".data(using: .utf8)!)
-        body.append(fileData)
-        body.append("\r\n".data(using: .utf8)!)
-        
-        // Add closing boundary
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        
-        return body
+
+    private func processVideoAttachment(
+        url: URL,
+        attachment: MediaAttachment,
+        completion: @escaping (Result<AttachmentPayload, BugReportError>) -> Void
+    ) {
+        let asset = AVURLAsset(url: url)
+        guard asset.isReadable else {
+            completion(.failure(.fileUploadFailed("Unable to read video asset")))
+            return
+        }
+
+        let preset = exportPreset(for: screenSize)
+        guard let exportSession = AVAssetExportSession(asset: asset, presetName: preset) else {
+            completion(.failure(.fileUploadFailed("Unable to create export session")))
+            return
+        }
+
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("mp4")
+        exportSession.outputURL = tempURL
+        exportSession.outputFileType = .mp4
+        exportSession.shouldOptimizeForNetworkUse = true
+
+        if let composition = videoComposition(for: asset, targetSize: screenSize) {
+            exportSession.videoComposition = composition
+        }
+
+        exportSession.exportAsynchronously { [weak self] in
+            guard let self = self else { return }
+
+            switch exportSession.status {
+            case .completed:
+                do {
+                    let videoData = try Data(contentsOf: tempURL)
+                    let duration = CMTimeGetSeconds(asset.duration)
+                    let dimensions = self.outputDimensions(for: exportSession, asset: asset)
+
+                    let payload = AttachmentPayload(
+                        type: attachment.type.rawValue,
+                        fileName: attachment.fileName,
+                        mimeType: "video/mp4",
+                        timestamp: self.isoFormatter.string(from: attachment.timestamp),
+                        size: videoData.count,
+                        width: dimensions.width,
+                        height: dimensions.height,
+                        duration: duration.isFinite ? duration : nil,
+                        data: videoData.base64EncodedString()
+                    )
+
+                    try? FileManager.default.removeItem(at: tempURL)
+                    completion(.success(payload))
+                } catch {
+                    try? FileManager.default.removeItem(at: tempURL)
+                    completion(.failure(.fileUploadFailed(error.localizedDescription)))
+                }
+
+            case .failed, .cancelled:
+                let errorMessage = exportSession.error?.localizedDescription ?? "Unknown export failure"
+                try? FileManager.default.removeItem(at: tempURL)
+                completion(.failure(.fileUploadFailed(errorMessage)))
+
+            default:
+                break
+            }
+        }
     }
-    
-    private func mimeType(for fileName: String) -> String {
-        let pathExtension = (fileName as NSString).pathExtension.lowercased()
-        
-        switch pathExtension {
-        case "mp4":
-            return "video/mp4"
-        case "mov":
-            return "video/quicktime"
-        case "png":
-            return "image/png"
-        case "jpg", "jpeg":
-            return "image/jpeg"
-        case "json":
-            return "application/json"
-        case "txt":
-            return "text/plain"
+
+    // MARK: - Request Helpers
+
+    private func createJSONRequest(url: URL) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        if let apiKey = apiKey {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+
+        request.setValue("QCBugPlugin/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue(UUID().uuidString, forHTTPHeaderField: "X-Request-ID")
+        return request
+    }
+
+    // MARK: - Utility
+
+    private func scaledImage(_ image: UIImage, toFit targetSize: CGSize) -> UIImage {
+        let sourceSize = image.size
+        guard sourceSize.width > 0, sourceSize.height > 0 else { return image }
+
+        let widthScale = targetSize.width / sourceSize.width
+        let heightScale = targetSize.height / sourceSize.height
+        let scale = min(widthScale, heightScale, 1.0)
+
+        guard scale < 1.0 else { return image }
+
+        let newSize = CGSize(width: sourceSize.width * scale, height: sourceSize.height * scale)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+
+    private func exportPreset(for targetSize: CGSize) -> String {
+        let maxDimension = max(targetSize.width, targetSize.height)
+
+        if maxDimension <= 720 {
+            return AVAssetExportPreset640x480
+        } else if maxDimension <= 1080 {
+            return AVAssetExportPreset1280x720
+        } else if maxDimension <= 1920 {
+            return AVAssetExportPreset1920x1080
+        } else {
+            return AVAssetExportPresetHighestQuality
+        }
+    }
+
+    private func videoComposition(for asset: AVAsset, targetSize: CGSize) -> AVMutableVideoComposition? {
+        guard let track = asset.tracks(withMediaType: .video).first else { return nil }
+
+        let naturalRect = CGRect(origin: .zero, size: track.naturalSize).applying(track.preferredTransform)
+        let videoWidth = abs(naturalRect.width)
+        let videoHeight = abs(naturalRect.height)
+
+        let widthScale = targetSize.width / videoWidth
+        let heightScale = targetSize.height / videoHeight
+        let scale = min(widthScale, heightScale, 1.0)
+
+        guard scale < 1.0 else { return nil }
+
+        let composition = AVMutableVideoComposition()
+        composition.renderSize = CGSize(width: videoWidth * scale, height: videoHeight * scale)
+        composition.frameDuration = CMTime(value: 1, timescale: 30)
+
+        let instruction = AVMutableVideoCompositionInstruction()
+        instruction.timeRange = CMTimeRange(start: .zero, duration: asset.duration)
+
+        let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: track)
+        var transform = track.preferredTransform.concatenating(CGAffineTransform(scaleX: scale, y: scale))
+        let scaledRect = naturalRect.applying(CGAffineTransform(scaleX: scale, y: scale))
+        transform = transform.concatenating(CGAffineTransform(translationX: -scaledRect.origin.x, y: -scaledRect.origin.y))
+        layerInstruction.setTransform(transform, at: .zero)
+
+        instruction.layerInstructions = [layerInstruction]
+        composition.instructions = [instruction]
+        return composition
+    }
+
+    private func outputDimensions(for exportSession: AVAssetExportSession, asset: AVAsset) -> (width: Int?, height: Int?) {
+        if let composition = exportSession.videoComposition {
+            return (Int(composition.renderSize.width), Int(composition.renderSize.height))
+        }
+
+        guard let track = asset.tracks(withMediaType: .video).first else {
+            return (nil, nil)
+        }
+
+        let naturalRect = CGRect(origin: .zero, size: track.naturalSize).applying(track.preferredTransform)
+        return (Int(abs(naturalRect.width)), Int(abs(naturalRect.height)))
+    }
+
+    private func inferMediaType(from url: URL) -> MediaType? {
+        let ext = url.pathExtension.lowercased()
+        switch ext {
+        case "png", "jpg", "jpeg", "heic", "heif":
+            return .screenshot
+        case "mp4", "mov", "m4v":
+            return .screenRecording
         default:
-            return "application/octet-stream"
+            return nil
         }
     }
-    
+
     private func handleResponse(
         data: Data?,
         response: URLResponse?,
         error: Error?,
         completion: @escaping (Result<String, BugReportError>) -> Void
     ) {
-        // Handle network error
         if let error = error {
             print("❌ BugReportAPIService: Network error: \(error.localizedDescription)")
             completion(.failure(.networkError(error.localizedDescription)))
             return
         }
-        
-        // Handle HTTP response
-        guard let httpResponse = response as? HTTPURLResponse else {
+
+        guard let data = data,
+              let responseObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             completion(.failure(.networkError("Invalid response")))
             return
         }
-        
-        let statusCode = httpResponse.statusCode
-        print("📡 BugReportAPIService: Response status code: \(statusCode)")
-        
-        // Handle different status codes
-        switch statusCode {
-        case 200...299:
-            // Success
-            if let data = data,
-               let responseDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let reportId = responseDict["id"] as? String ?? responseDict["report_id"] as? String {
-                print("✅ BugReportAPIService: Bug report submitted successfully with ID: \(reportId)")
-                completion(.success(reportId))
-            } else {
-                // Success but no report ID returned
-                let reportId = UUID().uuidString
-                print("✅ BugReportAPIService: Bug report submitted successfully (generated ID: \(reportId))")
-                completion(.success(reportId))
+
+        let code = responseObject["code"] as? Int ?? -1
+        let message = (responseObject["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let codeMessage = message?.isEmpty == false ? message! : "Unexpected response"
+
+        if code == 200 {
+            if let dataField = responseObject["data"] {
+                if let reportId = dataField as? String {
+                    print("✅ BugReportAPIService: Bug report submitted successfully with ID: \(reportId)")
+                    completion(.success(reportId))
+                    return
+                } else if let dataDict = dataField as? [String: Any],
+                          let reportId = dataDict["id"] as? String ?? dataDict["report_id"] as? String {
+                    print("✅ BugReportAPIService: Bug report submitted successfully with ID: \(reportId)")
+                    completion(.success(reportId))
+                    return
+                }
             }
-            
-        case 401:
-            print("❌ BugReportAPIService: Authentication failed")
+
+            let reportId = UUID().uuidString
+            print("✅ BugReportAPIService: Bug report submitted successfully (generated ID: \(reportId))")
+            completion(.success(reportId))
+            return
+        }
+
+        if code == 401 {
+            print("❌ BugReportAPIService: Authentication failed (code 401)")
             completion(.failure(.authenticationFailed))
-            
-        case 400...499:
-            let message = extractErrorMessage(from: data) ?? "Client error"
-            print("❌ BugReportAPIService: Client error (\(statusCode)): \(message)")
-            completion(.failure(.serverError(statusCode, message)))
-            
-        case 500...599:
-            let message = extractErrorMessage(from: data) ?? "Server error"
-            print("❌ BugReportAPIService: Server error (\(statusCode)): \(message)")
-            completion(.failure(.serverError(statusCode, message)))
-            
-        default:
-            let message = "Unexpected status code: \(statusCode)"
-            print("❌ BugReportAPIService: \(message)")
-            completion(.failure(.serverError(statusCode, message)))
+            return
+        }
+
+        let finalMessage = extractErrorMessage(from: data) ?? codeMessage
+        let errorCode = code <= 0 ? 500 : code
+
+        if errorCode >= 400 && errorCode < 500 {
+            print("❌ BugReportAPIService: Client error (code \(errorCode)): \(finalMessage)")
+            completion(.failure(.serverError(errorCode, finalMessage)))
+        } else {
+            print("❌ BugReportAPIService: Server error (code \(errorCode)): \(finalMessage)")
+            completion(.failure(.serverError(errorCode, finalMessage)))
         }
     }
-    
+
     private func extractErrorMessage(from data: Data?) -> String? {
         guard let data = data,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
-        
-        // Try different common error message keys
+
         return json["error"] as? String ??
-               json["message"] as? String ??
-               json["detail"] as? String ??
-               json["description"] as? String
+            json["message"] as? String ??
+            json["detail"] as? String ??
+            json["description"] as? String
     }
 }
 
 // MARK: - Mock Implementation for Testing
 
 public final class MockBugReportAPIService: BugReportProtocol {
-    
+
     public var shouldSucceed: Bool = true
     public var mockReportId: String = "mock-report-123"
     public var mockError: BugReportError = .networkError("Mock network error")
     public var delay: TimeInterval = 1.0
-    
+
     public init() {}
-    
+
     public func submitBugReport(_ report: BugReport, completion: @escaping (Result<String, BugReportError>) -> Void) {
         DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
             DispatchQueue.main.async {
@@ -322,7 +582,7 @@ public final class MockBugReportAPIService: BugReportProtocol {
             }
         }
     }
-    
+
     public func uploadFile(_ fileURL: URL, for reportId: String, completion: @escaping (Result<String, BugReportError>) -> Void) {
         DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
             DispatchQueue.main.async {
