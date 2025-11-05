@@ -55,7 +55,9 @@ public struct BugReport: Codable {
     
     /// Memory usage information
     public let memoryInfo: MemoryInfo?
-    
+
+    public let wkType: String
+
     public init(
         description: String,
         priority: BugPriority,
@@ -69,7 +71,8 @@ public struct BugReport: Codable {
         currentScreen: String? = nil,
         networkInfo: NetworkInfo? = nil,
         memoryInfo: MemoryInfo? = nil,
-        mediaAttachments: [MediaAttachment] = []
+        mediaAttachments: [MediaAttachment] = [],
+        wkType: String = "report_issue"
     ) {
         self.id = UUID().uuidString
         self.timestamp = Date()
@@ -86,6 +89,7 @@ public struct BugReport: Codable {
         self.networkInfo = networkInfo
         self.memoryInfo = memoryInfo
         self.mediaAttachments = mediaAttachments
+        self.wkType = wkType
     }
 }
 
