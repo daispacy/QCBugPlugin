@@ -115,8 +115,11 @@ public final class QCBugReportViewController: UIViewController {
     
     private func loadBugReportInterface() {
         isWebViewLoaded = false
-        let htmlContent = generateBugReportHTML()
-        webView.loadHTMLString(htmlContent, baseURL: nil)
+        if let resource = bugReportHTMLResource() {
+            webView.loadHTMLString(resource.html, baseURL: resource.baseURL)
+        } else {
+            webView.loadHTMLString(bugReportHTMLFallback(), baseURL: nil)
+        }
     }
     
     // MARK: - Actions
@@ -330,12 +333,23 @@ extension QCBugReportViewController: WKNavigationDelegate {
             .replacingOccurrences(of: "'", with: "\\'")
             .replacingOccurrences(of: "\n", with: "\\n")
         let script = """
-        document.getElementById('bugDescription').value = '\(escapedDescription)';
-        document.getElementById('prioritySelect').value = '\(selectedPriority.rawValue)';
-        document.querySelector('.section:nth-of-type(3) select').value = '\(selectedCategory.rawValue)';
-        updateDescription();
-        updatePriority();
-        updateCategory();
+        (function() {
+            const descriptionField = document.getElementById('bugDescription');
+            if (descriptionField) {
+                descriptionField.value = '\(escapedDescription)';
+            }
+            const priorityField = document.getElementById('prioritySelect');
+            if (priorityField) {
+                priorityField.value = '\(selectedPriority.rawValue)';
+            }
+            const categoryField = document.getElementById('categorySelect');
+            if (categoryField) {
+                categoryField.value = '\(selectedCategory.rawValue)';
+            }
+            if (typeof updateDescription === 'function') { updateDescription(); }
+            if (typeof updatePriority === 'function') { updatePriority(); }
+            if (typeof updateCategory === 'function') { updateCategory(); }
+        })();
         """
         webView.evaluateJavaScript(script)
     }
