@@ -27,6 +27,7 @@ public final class BugReportAPIService: BugReportProtocol {
     }
 
     private struct BugReportPayload: Encodable {
+        let wktype: String
         struct MediaAttachmentDTO: Encodable {
             let type: MediaType
             let fileName: String
@@ -56,6 +57,7 @@ public final class BugReportAPIService: BugReportProtocol {
         let attachments: [AttachmentPayload]
 
         init(report: BugReport, attachments: [AttachmentPayload]) {
+            self.wktype = "report_issue"
             let mediaDTO = report.mediaAttachments.map { attachment in
                 MediaAttachmentDTO(
                     type: attachment.type,
@@ -87,6 +89,7 @@ public final class BugReportAPIService: BugReportProtocol {
     }
 
     private struct FileUploadPayload: Encodable {
+        let wktype: String
         let reportId: String
         let attachment: AttachmentPayload
     }
@@ -183,7 +186,7 @@ public final class BugReportAPIService: BugReportProtocol {
                 }
 
             case .success(let payload):
-                let uploadPayload = FileUploadPayload(reportId: reportId, attachment: payload)
+                let uploadPayload = FileUploadPayload(wktype: "report_issue", reportId: reportId, attachment: payload)
 
                 do {
                     let payloadData = try self.jsonEncoder.encode(uploadPayload)
