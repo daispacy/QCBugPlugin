@@ -8,6 +8,7 @@
             requiresLogin: false,
             isLoading: false,
             userId: null,
+            username: null,
             error: '',
             available: false
         }
@@ -86,7 +87,7 @@
             button.disabled = true;
             buttonLabel = 'Opening…';
         } else if (gitlab.isAuthenticated) {
-            var userLabel = gitlab.userId ? ('#' + gitlab.userId) : 'account';
+            var userLabel = gitlab.username ? ('@' + gitlab.username) : (gitlab.userId ? ('#' + gitlab.userId) : 'account');
             statusLabel.textContent = 'Connected to GitLab ' + userLabel;
             button.disabled = false;
             buttonLabel = 'Refresh GitLab Session';
@@ -187,6 +188,7 @@
         state.gitlab.requiresLogin = !!payload.requiresLogin;
         state.gitlab.isLoading = !!payload.isLoading;
         state.gitlab.userId = typeof payload.userId === 'number' ? payload.userId : null;
+        state.gitlab.username = typeof payload.username === 'string' && payload.username.length ? payload.username : null;
         state.gitlab.error = payload.error ? String(payload.error) : '';
         state.gitlab.available = state.gitlab.requiresLogin || state.gitlab.isAuthenticated || !!state.gitlab.error || state.gitlab.isLoading;
         updateGitLabSection();

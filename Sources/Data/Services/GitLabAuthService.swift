@@ -17,6 +17,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
         let value: String
         let expiration: Date
         let userId: Int
+        let username: String?
     }
 
     private struct CachedJWT {
@@ -24,6 +25,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
         let jwt: String
         let expiration: Date
         let userId: Int
+        let username: String?
     }
 
     private struct AccessTokenResponse: Decodable {
@@ -42,6 +44,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
 
     private struct GitLabUserResponse: Decodable {
         let id: Int
+        let username: String?
     }
 
     private let configuration: GitLabAppConfig
@@ -68,7 +71,8 @@ public final class GitLabAuthService: GitLabAuthProviding {
             let authorization = GitLabAuthorization(
                 authorizationHeader: cachedJWT.header,
                 jwt: cachedJWT.jwt,
-                userId: cachedJWT.userId
+                userId: cachedJWT.userId,
+                username: cachedJWT.username
             )
             DispatchQueue.main.async {
                 completion(.success(authorization))
@@ -93,7 +97,8 @@ public final class GitLabAuthService: GitLabAuthProviding {
             let authorization = GitLabAuthorization(
                 authorizationHeader: cachedJWT.header,
                 jwt: cachedJWT.jwt,
-                userId: cachedJWT.userId
+                userId: cachedJWT.userId,
+                username: cachedJWT.username
             )
             DispatchQueue.main.async {
                 completion(.success(authorization))
@@ -306,7 +311,8 @@ public final class GitLabAuthService: GitLabAuthProviding {
                     let authorization = GitLabAuthorization(
                         authorizationHeader: cachedJWT.header,
                         jwt: cachedJWT.jwt,
-                        userId: cachedJWT.userId
+                        userId: cachedJWT.userId,
+                        username: cachedJWT.username
                     )
                     completion(.success(authorization))
                 }
@@ -375,15 +381,16 @@ public final class GitLabAuthService: GitLabAuthProviding {
                 let lifetime = TimeInterval(response.expiresIn)
                 let expiry = Date().addingTimeInterval(max(lifetime - 30, 30))
 
-                self.fetchUserId(accessToken: response.accessToken) { userResult in
+                self.fetchUserProfile(accessToken: response.accessToken) { userResult in
                     switch userResult {
                     case .failure(let error):
                         completion(.failure(error))
-                    case .success(let userId):
+                    case .success(let userProfile):
                         let cachedToken = CachedAccessToken(
                             value: response.accessToken,
                             expiration: expiry,
-                            userId: userId
+                            userId: userProfile.id,
+                            username: userProfile.username
                         )
                         self.storeCachedAccessToken(cachedToken)
                         completion(.success(cachedToken))
@@ -406,7 +413,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
             json["message"] as? String
     }
 
-    private func fetchUserId(accessToken: String, completion: @escaping (Result<Int, GitLabAuthError>) -> Void) {
+    private func fetchUserProfile(accessToken: String, completion: @escaping (Result<GitLabUserResponse, GitLabAuthError>) -> Void) {
         guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: false) else {
             completion(.failure(.invalidConfiguration))
             return
@@ -450,7 +457,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
 
             do {
                 let user = try self.jsonDecoder.decode(GitLabUserResponse.self, from: data)
-                completion(.success(user.id))
+                completion(.success(user))
             } catch {
                 print("❌ GitLabAuthService: Failed to decode GitLab user response - \(error.localizedDescription)")
                 completion(.failure(.invalidResponse))
@@ -508,7 +515,8 @@ public final class GitLabAuthService: GitLabAuthProviding {
                 header: "Bearer \(jwt)",
                 jwt: jwt,
                 expiration: expiration,
-                userId: token.userId
+                userId: token.userId,
+                username: token.username
             )
             print("✅ GitLabAuthService: Generated GitLab session JWT expiring at \(expiration)")
             return .success(cachedJWT)
