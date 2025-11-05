@@ -7,7 +7,7 @@
 
 import Foundation
 
-private struct BugReportHTMLResource {
+struct BugReportHTMLResource {
     let html: String
     let baseURL: URL
 }
