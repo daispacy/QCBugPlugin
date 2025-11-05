@@ -9,6 +9,17 @@
 import Foundation
 import UIKit
 
+/// GitLab credentials associated with a bug report submission
+public struct GitLabCredentials: Codable {
+    public let pat: String
+    public let userId: Int?
+
+    public init(pat: String, userId: Int?) {
+        self.pat = pat
+        self.userId = userId
+    }
+}
+
 /// Represents a complete bug report
 public struct BugReport: Codable {
     /// Unique identifier for the bug report
@@ -57,6 +68,7 @@ public struct BugReport: Codable {
     public let memoryInfo: MemoryInfo?
 
     public let wktype: String
+    public let gitLabCredentials: GitLabCredentials?
 
     public init(
         description: String,
@@ -72,7 +84,8 @@ public struct BugReport: Codable {
         networkInfo: NetworkInfo? = nil,
         memoryInfo: MemoryInfo? = nil,
         mediaAttachments: [MediaAttachment] = [],
-        wktype: String = "report_issue"
+        wktype: String = "report_issue",
+        gitLabCredentials: GitLabCredentials? = nil
     ) {
         self.id = UUID().uuidString
         self.timestamp = Date()
@@ -90,6 +103,7 @@ public struct BugReport: Codable {
         self.memoryInfo = memoryInfo
         self.mediaAttachments = mediaAttachments
         self.wktype = wktype
+        self.gitLabCredentials = gitLabCredentials
     }
 }
 

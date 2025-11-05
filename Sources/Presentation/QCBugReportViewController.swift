@@ -10,6 +10,11 @@ import Foundation
 import UIKit
 import WebKit
 
+enum GitLabDefaults {
+    static let jwtKey = "com.qcbugplugin.gitlab.jwt"
+    static let userIdKey = "com.qcbugplugin.gitlab.userid"
+}
+
 /// Delegate protocol for bug report view controller
 public protocol QCBugReportViewControllerDelegate: AnyObject {
     func bugReportViewController(_ controller: QCBugReportViewController, didSubmitReport report: BugReport)
@@ -27,13 +32,15 @@ public final class QCBugReportViewController: UIViewController {
     private let screenRecorder: ScreenRecordingProtocol?
     private let configuration: QCBugPluginConfiguration?
     
-    private var webView: WKWebView!
-    private var mediaAttachments: [MediaAttachment] = []
-    private var isWebViewLoaded = false
-    private var gitLabAuthProvider: GitLabAuthProviding?
-    private var isFetchingGitLabCredentials = false
-    private var didInjectGitLabCredentials = false
-    private var pendingGitLabCredentialScript: String?
+    var webView: WKWebView!
+    var mediaAttachments: [MediaAttachment] = []
+    var isWebViewLoaded = false
+    var gitLabAuthProvider: GitLabAuthProviding?
+    var isFetchingGitLabCredentials = false
+    var didInjectGitLabCredentials = false
+    var pendingGitLabCredentialScript: String?
+    var gitLabJWT: String?
+    var gitLabUserId: Int?
     
     // Bug report data
     private var bugDescription = ""
@@ -52,6 +59,11 @@ public final class QCBugReportViewController: UIViewController {
         self.screenRecorder = screenRecorder
         self.configuration = configuration
         self.webhookURL = configuration?.webhookURL ?? ""
+        let defaults = UserDefaults.standard
+        self.gitLabJWT = defaults.string(forKey: GitLabDefaults.jwtKey)
+        if let storedUserId = defaults.object(forKey: GitLabDefaults.userIdKey) as? Int {
+            self.gitLabUserId = storedUserId
+        }
         if let gitLabConfig = configuration?.gitLabAppConfig {
             self.gitLabAuthProvider = GitLabAuthService(configuration: gitLabConfig)
         }
@@ -152,6 +164,10 @@ public final class QCBugReportViewController: UIViewController {
         let deviceInfo = DeviceInfo()
         let appInfo = AppInfo()
         let customData = configuration?.customData.compactMapValues { "\($0)" } ?? [:]
+        let gitLabCredentials: GitLabCredentials? = {
+            guard let token = gitLabJWT else { return nil }
+            return GitLabCredentials(pat: token, userId: gitLabUserId)
+        }()
 
         return BugReport(
             description: bugDescription,
@@ -164,7 +180,8 @@ public final class QCBugReportViewController: UIViewController {
             currentScreen: getCurrentScreenName(),
             networkInfo: NetworkInfo(),
             memoryInfo: MemoryInfo(),
-            mediaAttachments: mediaAttachments
+            mediaAttachments: mediaAttachments,
+            gitLabCredentials: gitLabCredentials
         )
     }
 

@@ -7,10 +7,23 @@
 
 import Foundation
 
+/// GitLab authorization information returned by auth providers.
+public struct GitLabAuthorization {
+    public let authorizationHeader: String
+    public let jwt: String
+    public let userId: Int?
+
+    public init(authorizationHeader: String, jwt: String, userId: Int?) {
+        self.authorizationHeader = authorizationHeader
+        self.jwt = jwt
+        self.userId = userId
+    }
+}
+
 /// Abstraction for retrieving GitLab authorization credentials.
 public protocol GitLabAuthProviding: AnyObject {
-    /// Resolves an authorization header value. Implementations should cache values when appropriate.
-    func fetchAuthorizationHeader(completion: @escaping (Result<String, GitLabAuthError>) -> Void)
+    /// Resolves GitLab authorization credentials. Implementations should cache values when appropriate.
+    func fetchAuthorization(completion: @escaping (Result<GitLabAuthorization, GitLabAuthError>) -> Void)
 
     /// Clears any cached tokens. Optional for implementations that maintain cache state.
     func clearCache()

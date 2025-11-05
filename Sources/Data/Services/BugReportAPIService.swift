@@ -28,6 +28,7 @@ public final class BugReportAPIService: BugReportProtocol {
 
     private struct BugReportPayload: Encodable {
         let wktype: String
+
         struct MediaAttachmentDTO: Encodable {
             let type: MediaType
             let fileName: String
@@ -53,10 +54,21 @@ public final class BugReportAPIService: BugReportProtocol {
             let memoryInfo: MemoryInfo?
         }
 
+        struct GitLabPayload: Encodable {
+            let pat: String
+            let userid: Int?
+
+            init(credentials: GitLabCredentials) {
+                self.pat = credentials.pat
+                self.userid = credentials.userId
+            }
+        }
+
         let report: ReportDTO
         let attachments: [AttachmentPayload]
+        let gitlab: GitLabPayload?
 
-        init(report: BugReport, attachments: [AttachmentPayload]) {
+        init(report: BugReport, attachments: [AttachmentPayload], gitLabCredentials: GitLabCredentials?) {
             self.wktype = report.wktype
             let mediaDTO = report.mediaAttachments.map { attachment in
                 MediaAttachmentDTO(
@@ -85,6 +97,7 @@ public final class BugReportAPIService: BugReportProtocol {
                 memoryInfo: report.memoryInfo
             )
             self.attachments = attachments
+            self.gitlab = gitLabCredentials.map { GitLabPayload(credentials: $0) }
         }
     }
 
@@ -92,6 +105,26 @@ public final class BugReportAPIService: BugReportProtocol {
         let wktype: String
         let reportId: String
         let attachment: AttachmentPayload
+        let gitlab: BugReportPayload.GitLabPayload?
+
+        init(wktype: String, reportId: String, attachment: AttachmentPayload, gitLabCredentials: GitLabCredentials?) {
+            self.wktype = wktype
+            self.reportId = reportId
+            self.attachment = attachment
+            self.gitlab = gitLabCredentials.map { BugReportPayload.GitLabPayload(credentials: $0) }
+        }
+    }
+
+    private enum AttachmentLimits {
+        static let maxImageBytes = 320 * 1024
+        static let maxVideoBytes = 5 * 1024 * 1024
+        static let minImageDimension: CGFloat = 60
+        static let minVideoDimension: CGFloat = 120
+    }
+
+    private struct VideoCompressionOption {
+        let targetSize: CGSize?
+        let presetName: String
     }
 
     // MARK: - Properties
@@ -104,6 +137,7 @@ public final class BugReportAPIService: BugReportProtocol {
     private let isoFormatter: ISO8601DateFormatter
     private let processingQueue = DispatchQueue(label: "com.qcbugplugin.report-processing", qos: .userInitiated)
     private let screenSize: CGSize
+    private var cachedGitLabCredentialsForSession: GitLabCredentials?
 
     // MARK: - Initialization
 
@@ -144,7 +178,9 @@ public final class BugReportAPIService: BugReportProtocol {
             return
         }
 
-        resolveAuthorizationHeader { [weak self] authResult in
+        cachedGitLabCredentialsForSession = nil
+
+        resolveGitLabAuthorization { [weak self] authResult in
             guard let self = self else { return }
 
             switch authResult {
@@ -153,8 +189,11 @@ public final class BugReportAPIService: BugReportProtocol {
                     completion(.failure(error))
                 }
 
-            case .success(let authorizationHeader):
-                self.preparePayload(for: report) { result in
+            case .success(let authorization):
+                let gitLabCredentials = self.mergedGitLabCredentials(report: report, authorization: authorization)
+                self.cachedGitLabCredentialsForSession = gitLabCredentials
+
+                self.preparePayload(for: report, gitLabCredentials: gitLabCredentials) { result in
                     switch result {
                     case .failure(let error):
                         DispatchQueue.main.async {
@@ -165,7 +204,7 @@ public final class BugReportAPIService: BugReportProtocol {
                         self.performSubmit(
                             url: endpointURL,
                             payloadData: payloadData,
-                            authorizationHeader: authorizationHeader,
+                            authorization: authorization,
                             completion: completion
                         )
                     }
@@ -189,7 +228,7 @@ public final class BugReportAPIService: BugReportProtocol {
             return
         }
 
-        resolveAuthorizationHeader { [weak self] authResult in
+        resolveGitLabAuthorization { [weak self] authResult in
             guard let self = self else { return }
 
             switch authResult {
@@ -198,7 +237,7 @@ public final class BugReportAPIService: BugReportProtocol {
                     completion(.failure(error))
                 }
 
-            case .success(let authorizationHeader):
+            case .success(let authorization):
                 let attachment = MediaAttachment(type: type, fileURL: fileURL)
                 self.processAttachment(attachment) { result in
                     switch result {
@@ -208,11 +247,16 @@ public final class BugReportAPIService: BugReportProtocol {
                         }
 
                     case .success(let payload):
+                        let gitLabCredentials = authorization.flatMap { GitLabCredentials(pat: $0.jwt, userId: $0.userId) } ?? self.cachedGitLabCredentialsForSession
+                        if let credentials = gitLabCredentials {
+                            self.cachedGitLabCredentialsForSession = credentials
+                        }
                         self.performUpload(
                             url: endpointURL,
                             payload: payload,
                             reportId: reportId,
-                            authorizationHeader: authorizationHeader,
+                            authorization: authorization,
+                            gitLabCredentials: gitLabCredentials,
                             completion: completion
                         )
                     }
@@ -226,10 +270,10 @@ public final class BugReportAPIService: BugReportProtocol {
     private func performSubmit(
         url: URL,
         payloadData: Data,
-        authorizationHeader: String?,
+        authorization: GitLabAuthorization?,
         completion: @escaping (Result<String, BugReportError>) -> Void
     ) {
-        var request = createJSONRequest(url: url, authorizationHeader: authorizationHeader)
+        var request = createJSONRequest(url: url, authorizationHeader: authorization?.authorizationHeader)
         request.httpBody = payloadData
 
         print("📤 BugReportAPIService: Submitting bug report JSON to \(webhookURL)")
@@ -246,14 +290,20 @@ public final class BugReportAPIService: BugReportProtocol {
         url: URL,
         payload: AttachmentPayload,
         reportId: String,
-        authorizationHeader: String?,
+        authorization: GitLabAuthorization?,
+        gitLabCredentials: GitLabCredentials?,
         completion: @escaping (Result<String, BugReportError>) -> Void
     ) {
-        let uploadPayload = FileUploadPayload(wktype: "report_issue", reportId: reportId, attachment: payload)
+        let uploadPayload = FileUploadPayload(
+            wktype: "report_issue",
+            reportId: reportId,
+            attachment: payload,
+            gitLabCredentials: gitLabCredentials
+        )
 
         do {
             let payloadData = try jsonEncoder.encode(uploadPayload)
-            var request = createJSONRequest(url: url, authorizationHeader: authorizationHeader)
+            var request = createJSONRequest(url: url, authorizationHeader: authorization?.authorizationHeader)
             request.httpBody = payloadData
 
             print("📤 BugReportAPIService: Uploading attachment for report \(reportId) via JSON")
@@ -271,8 +321,8 @@ public final class BugReportAPIService: BugReportProtocol {
         }
     }
 
-    private func resolveAuthorizationHeader(
-        completion: @escaping (Result<String?, BugReportError>) -> Void
+    private func resolveGitLabAuthorization(
+        completion: @escaping (Result<GitLabAuthorization?, BugReportError>) -> Void
     ) {
         guard let provider = gitLabAuthProvider else {
             DispatchQueue.main.async {
@@ -281,11 +331,11 @@ public final class BugReportAPIService: BugReportProtocol {
             return
         }
 
-        provider.fetchAuthorizationHeader { result in
+        provider.fetchAuthorization { result in
             DispatchQueue.main.async {
                 switch result {
-                case .success(let header):
-                    completion(.success(header))
+                case .success(let authorization):
+                    completion(.success(authorization))
                 case .failure(let error):
                     completion(.failure(self.mapGitLabError(error)))
                 }
@@ -308,11 +358,30 @@ public final class BugReportAPIService: BugReportProtocol {
         }
     }
 
-    private func preparePayload(for report: BugReport, completion: @escaping (Result<Data, BugReportError>) -> Void) {
+    private func mergedGitLabCredentials(
+        report: BugReport,
+        authorization: GitLabAuthorization?
+    ) -> GitLabCredentials? {
+        if let credentials = report.gitLabCredentials {
+            return credentials
+        }
+
+        guard let authorization = authorization else {
+            return nil
+        }
+
+        return GitLabCredentials(pat: authorization.jwt, userId: authorization.userId)
+    }
+
+    private func preparePayload(
+        for report: BugReport,
+        gitLabCredentials: GitLabCredentials?,
+        completion: @escaping (Result<Data, BugReportError>) -> Void
+    ) {
         processingQueue.async {
             if report.mediaAttachments.isEmpty {
                 do {
-                    let payload = BugReportPayload(report: report, attachments: [])
+                    let payload = BugReportPayload(report: report, attachments: [], gitLabCredentials: gitLabCredentials)
                     let data = try self.jsonEncoder.encode(payload)
                     completion(.success(data))
                 } catch {
@@ -351,7 +420,7 @@ public final class BugReportAPIService: BugReportProtocol {
                 let flattened = attachments.compactMap { $0 }
 
                 do {
-                    let payload = BugReportPayload(report: report, attachments: flattened)
+                    let payload = BugReportPayload(report: report, attachments: flattened, gitLabCredentials: gitLabCredentials)
                     let data = try self.jsonEncoder.encode(payload)
                     completion(.success(data))
                 } catch {
@@ -386,11 +455,12 @@ public final class BugReportAPIService: BugReportProtocol {
                 return
             }
 
-            let scaledImage = self.scaledImage(image, toFit: self.screenSize)
-            guard let jpegData = scaledImage.jpegData(compressionQuality: 0.8) else {
-                completion(.failure(.fileUploadFailed("Unable to encode image")))
+            guard let result = self.compressImageForUpload(image) else {
+                completion(.failure(.fileUploadFailed("Screenshot exceeds maximum size of 320 KB")))
                 return
             }
+
+            let (finalImage, jpegData) = result
 
             let baseName = (attachment.fileName as NSString).deletingPathExtension
             let recompressedName = baseName.isEmpty ? "attachment.jpg" : baseName + ".jpg"
@@ -401,8 +471,8 @@ public final class BugReportAPIService: BugReportProtocol {
                 mimeType: "image/jpeg",
                 timestamp: self.isoFormatter.string(from: attachment.timestamp),
                 size: jpegData.count,
-                width: Int(scaledImage.size.width),
-                height: Int(scaledImage.size.height),
+                width: Int(finalImage.size.width),
+                height: Int(finalImage.size.height),
                 duration: nil,
                 data: jpegData.base64EncodedString()
             )
@@ -422,28 +492,70 @@ public final class BugReportAPIService: BugReportProtocol {
             return
         }
 
-        let preset = exportPreset(for: screenSize)
-        guard let exportSession = AVAssetExportSession(asset: asset, presetName: preset) else {
-            completion(.failure(.fileUploadFailed("Unable to create export session")))
+        let options = videoCompressionOptions(for: asset)
+        attemptVideoExport(asset: asset, attachment: attachment, options: options, index: 0, completion: completion)
+    }
+
+    private func attemptVideoExport(
+        asset: AVAsset,
+        attachment: MediaAttachment,
+        options: [VideoCompressionOption],
+        index: Int,
+        completion: @escaping (Result<AttachmentPayload, BugReportError>) -> Void
+    ) {
+        guard index < options.count else {
+            completion(.failure(.fileUploadFailed("Screen recording exceeds maximum size of 5 MB")))
             return
         }
 
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("mp4")
+        let option = options[index]
+        let compatiblePresets = AVAssetExportSession.exportPresets(compatibleWith: asset)
+
+        guard compatiblePresets.contains(option.presetName),
+              let exportSession = AVAssetExportSession(asset: asset, presetName: option.presetName) else {
+            attemptVideoExport(asset: asset, attachment: attachment, options: options, index: index + 1, completion: completion)
+            return
+        }
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("mp4")
+
         exportSession.outputURL = tempURL
         exportSession.outputFileType = .mp4
         exportSession.shouldOptimizeForNetworkUse = true
 
-        if let composition = videoComposition(for: asset, targetSize: screenSize) {
+        if let targetSize = option.targetSize,
+           let composition = videoComposition(for: asset, targetSize: targetSize) {
             exportSession.videoComposition = composition
+        } else {
+            exportSession.videoComposition = nil
+        }
+
+        if #available(iOS 13.0, *) {
+            exportSession.fileLengthLimit = Int64(AttachmentLimits.maxVideoBytes)
         }
 
         exportSession.exportAsynchronously { [weak self] in
             guard let self = self else { return }
 
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+
             switch exportSession.status {
             case .completed:
                 do {
                     let videoData = try Data(contentsOf: tempURL)
+                    if videoData.count > AttachmentLimits.maxVideoBytes {
+                        self.attemptVideoExport(
+                            asset: asset,
+                            attachment: attachment,
+                            options: options,
+                            index: index + 1,
+                            completion: completion
+                        )
+                        return
+                    }
+
                     let duration = CMTimeGetSeconds(asset.duration)
                     let dimensions = self.outputDimensions(for: exportSession, asset: asset)
 
@@ -459,22 +571,65 @@ public final class BugReportAPIService: BugReportProtocol {
                         data: videoData.base64EncodedString()
                     )
 
-                    try? FileManager.default.removeItem(at: tempURL)
                     completion(.success(payload))
                 } catch {
-                    try? FileManager.default.removeItem(at: tempURL)
                     completion(.failure(.fileUploadFailed(error.localizedDescription)))
                 }
 
             case .failed, .cancelled:
-                let errorMessage = exportSession.error?.localizedDescription ?? "Unknown export failure"
-                try? FileManager.default.removeItem(at: tempURL)
-                completion(.failure(.fileUploadFailed(errorMessage)))
+                if index + 1 < options.count {
+                    self.attemptVideoExport(
+                        asset: asset,
+                        attachment: attachment,
+                        options: options,
+                        index: index + 1,
+                        completion: completion
+                    )
+                } else {
+                    let message = exportSession.error?.localizedDescription ?? "Unknown export failure"
+                    completion(.failure(.fileUploadFailed(message)))
+                }
 
             default:
                 break
             }
         }
+    }
+
+    private func videoCompressionOptions(for asset: AVAsset) -> [VideoCompressionOption] {
+        let naturalSize = assetNaturalSize(for: asset)
+        let baseSize = CGSize(
+            width: min(screenSize.width, naturalSize.width),
+            height: min(screenSize.height, naturalSize.height)
+        )
+
+        let scaleFactors: [CGFloat] = [1.0, 0.75, 0.6, 0.45, 0.35]
+        var options: [VideoCompressionOption] = scaleFactors.compactMap { factor in
+            let scaledSize = CGSize(width: baseSize.width * factor, height: baseSize.height * factor)
+            guard scaledSize.width >= AttachmentLimits.minVideoDimension,
+                  scaledSize.height >= AttachmentLimits.minVideoDimension else {
+                return nil
+            }
+            return VideoCompressionOption(targetSize: scaledSize, presetName: exportPreset(for: scaledSize))
+        }
+
+        options.append(VideoCompressionOption(targetSize: nil, presetName: AVAssetExportPresetMediumQuality))
+        options.append(VideoCompressionOption(targetSize: nil, presetName: AVAssetExportPresetLowQuality))
+
+        if options.isEmpty {
+            options.append(VideoCompressionOption(targetSize: nil, presetName: AVAssetExportPresetLowQuality))
+        }
+
+        return options
+    }
+
+    private func assetNaturalSize(for asset: AVAsset) -> CGSize {
+        guard let track = asset.tracks(withMediaType: .video).first else {
+            return screenSize
+        }
+
+        let naturalRect = CGRect(origin: .zero, size: track.naturalSize).applying(track.preferredTransform)
+        return CGSize(width: abs(naturalRect.width), height: abs(naturalRect.height))
     }
 
     // MARK: - Request Helpers
@@ -514,6 +669,57 @@ public final class BugReportAPIService: BugReportProtocol {
         let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
         return renderer.image { _ in
             image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+
+    private func compressImageForUpload(_ image: UIImage) -> (UIImage, Data)? {
+        var currentImage = scaledImage(image, toFit: screenSize)
+        var compression: CGFloat = 0.9
+        let minCompression: CGFloat = 0.35
+        let scaleStep: CGFloat = 0.85
+
+        guard let initialData = currentImage.jpegData(compressionQuality: compression) else {
+            return nil
+        }
+
+        var currentData = initialData
+
+        while currentData.count > AttachmentLimits.maxImageBytes {
+            if compression > minCompression {
+                compression = max(compression * 0.8, minCompression)
+                if let recompressed = currentImage.jpegData(compressionQuality: compression) {
+                    currentData = recompressed
+                    continue
+                } else {
+                    return nil
+                }
+            }
+
+            let newWidth = currentImage.size.width * scaleStep
+            let newHeight = currentImage.size.height * scaleStep
+
+            if newWidth < AttachmentLimits.minImageDimension || newHeight < AttachmentLimits.minImageDimension {
+                return nil
+            }
+
+            currentImage = redrawImage(currentImage, to: CGSize(width: newWidth, height: newHeight))
+            compression = 0.9
+
+            guard let resizedData = currentImage.jpegData(compressionQuality: compression) else {
+                return nil
+            }
+            currentData = resizedData
+        }
+
+        return (currentImage, currentData)
+    }
+
+    private func redrawImage(_ image: UIImage, to size: CGSize) -> UIImage {
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
         }
     }
 

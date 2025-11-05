@@ -16,10 +16,12 @@ public struct GitLabAppConfig {
     public let audience: String?
     public let jwtExpiration: TimeInterval
     public let additionalClaims: [String: Any]
+    public let signingKey: String
 
     public init(
         appId: String,
         secret: String,
+        signingKey: String,
         baseURL: URL = URL(string: "https://gitlab.com")!,
         scopes: [String] = ["api"],
         audience: String? = nil,
@@ -28,6 +30,7 @@ public struct GitLabAppConfig {
     ) {
         self.appId = appId
         self.secret = secret
+        self.signingKey = signingKey
         self.baseURL = baseURL
         self.scopes = scopes
         self.audience = audience
