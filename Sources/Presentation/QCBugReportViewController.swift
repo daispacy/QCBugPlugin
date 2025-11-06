@@ -511,6 +511,11 @@ extension QCBugReportViewController: WKScriptMessageHandler {
 
         case "gitlabLogout":
             performGitLabLogout()
+
+        case "logMessage":
+            if let message = data["message"] as? String, !message.isEmpty {
+                print("🪵 QCBugPlugin WebView: \(message)")
+            }
             
         default:
             break

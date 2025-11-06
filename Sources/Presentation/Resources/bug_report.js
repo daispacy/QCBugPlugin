@@ -26,6 +26,24 @@
     var HANDLER_NAME = 'bugReportHandler';
     var assignFetchTimeout = null;
 
+    function getWebhookInputValue() {
+        var field = document.getElementById('webhookURL');
+        if (!field || typeof field.value !== 'string') {
+            return '';
+        }
+        return field.value.trim();
+    }
+
+    function notifyNativeLog(message) {
+        if (!message) {
+            return;
+        }
+        postMessage({
+            action: 'logMessage',
+            message: String(message)
+        });
+    }
+
     function deriveMembersEndpoint(url) {
         if (!url || typeof url !== 'string') {
             return null;
@@ -131,7 +149,10 @@
             clearTimeout(assignFetchTimeout);
         }
 
-        var endpoint = deriveMembersEndpoint(state.webhookURL);
+        var currentWebhook = getWebhookInputValue();
+        state.webhookURL = currentWebhook;
+
+        var endpoint = deriveMembersEndpoint(currentWebhook);
         if (!endpoint) {
             return;
         }
@@ -148,8 +169,16 @@
     }
 
     function fetchAssignees(force) {
-        var endpoint = deriveMembersEndpoint(state.webhookURL);
+        var currentWebhook = getWebhookInputValue();
+        state.webhookURL = currentWebhook;
+
+        var endpoint = deriveMembersEndpoint(currentWebhook);
         if (!endpoint) {
+            return;
+        }
+
+        var projectValue = typeof state.gitlab.project === 'string' ? state.gitlab.project.trim() : '';
+        if (!projectValue.length) {
             return;
         }
 
@@ -167,8 +196,11 @@
 
         var payload = {
             team: 'ios',
-            whtype: 'get_members'
+            whtype: 'get_members',
+            project: projectValue
         };
+
+        notifyNativeLog('Fetching GitLab members (endpoint=' + endpoint + ', project=' + projectValue + ')');
 
         fetch(endpoint, {
             method: 'POST',
@@ -208,11 +240,13 @@
                         state.assign.selected = null;
                         postMessage({ action: 'updateAssignee', username: null });
                     }
+                    notifyNativeLog('Loaded GitLab members: count=' + usernames.length);
                 } else {
                     var message = (json && typeof json.message === 'string' && json.message.trim()) ? json.message.trim() : 'Unable to load team members.';
                     state.assign.options = [];
                     state.assign.error = message;
                     state.assign.lastFetchKey = null;
+                    notifyNativeLog('GitLab member fetch failed: ' + message);
                 }
 
                 renderAssignControls();
@@ -226,6 +260,7 @@
                 state.assign.error = 'Unable to load team members.';
                 state.assign.lastFetchKey = null;
                 renderAssignControls();
+                notifyNativeLog('GitLab member fetch encountered a network error.');
             });
     }
 
@@ -399,12 +434,7 @@
     };
 
     window.updateWebhookURL = function () {
-        var field = document.getElementById('webhookURL');
-        if (!field) {
-            return;
-        }
-        var value = typeof field.value === 'string' ? field.value : '';
-        var trimmed = value.trim();
+        var trimmed = getWebhookInputValue();
         var previous = state.webhookURL;
         state.webhookURL = trimmed;
         renderAssignControls();
