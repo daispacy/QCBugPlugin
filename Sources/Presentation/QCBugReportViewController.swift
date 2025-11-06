@@ -179,7 +179,7 @@ public final class QCBugReportViewController: UIViewController {
         let customData = configuration?.customData.compactMapValues { "\($0)" } ?? [:]
         let gitLabCredentials: GitLabCredentials? = {
             guard let token = gitLabJWT else { return nil }
-            return GitLabCredentials(pat: token, userId: gitLabUserId, username: gitLabUsername)
+            return GitLabCredentials(pat: token)
         }()
 
         return BugReport(

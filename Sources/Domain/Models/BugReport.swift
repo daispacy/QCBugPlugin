@@ -12,13 +12,9 @@ import UIKit
 /// GitLab credentials associated with a bug report submission
 public struct GitLabCredentials: Codable {
     public let pat: String
-    public let userId: Int?
-    public let username: String?
 
-    public init(pat: String, userId: Int?, username: String?) {
+    public init(pat: String) {
         self.pat = pat
-        self.userId = userId
-        self.username = username
     }
 }
 

@@ -56,13 +56,9 @@ public final class BugReportAPIService: BugReportProtocol {
 
         struct GitLabPayload: Encodable {
             let pat: String
-            let userid: Int?
-            let username: String?
 
             init(credentials: GitLabCredentials) {
                 self.pat = credentials.pat
-                self.userid = credentials.userId
-                self.username = credentials.username
             }
         }
 
@@ -249,7 +245,7 @@ public final class BugReportAPIService: BugReportProtocol {
                         }
 
                     case .success(let payload):
-                        let gitLabCredentials = authorization.flatMap { GitLabCredentials(pat: $0.jwt, userId: $0.userId, username: $0.username) } ?? self.cachedGitLabCredentialsForSession
+                        let gitLabCredentials = authorization.map { GitLabCredentials(pat: $0.jwt) } ?? self.cachedGitLabCredentialsForSession
                         if let credentials = gitLabCredentials {
                             self.cachedGitLabCredentialsForSession = credentials
                         }
@@ -376,7 +372,7 @@ public final class BugReportAPIService: BugReportProtocol {
             return nil
         }
 
-        return GitLabCredentials(pat: authorization.jwt, userId: authorization.userId, username: authorization.username)
+        return GitLabCredentials(pat: authorization.jwt)
     }
 
     private func preparePayload(
