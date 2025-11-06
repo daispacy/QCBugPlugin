@@ -569,26 +569,13 @@
 
         <div class="section">
             <h2>⚠️ Priority</h2>
-            <select id="prioritySelect" onchange="updatePriority()">
-                <option value="low">🟢 Low</option>
-                <option value="medium" selected>🟡 Medium</option>
-                <option value="high">🟠 High</option>
-                <option value="critical">🔴 Critical</option>
-            </select>
-        </div>
-
-        <div class="section">
-            <h2>📂 Category</h2>
-            <select id="categorySelect" onchange="updateCategory()">
-                <option value="ui">🎨 UI/UX Issue</option>
-                <option value="functionality">⚙️ Functionality</option>
-                <option value="performance">🚀 Performance</option>
-                <option value="crash">💥 Crash</option>
-                <option value="data">🗃️ Data Issue</option>
-                <option value="network">🌐 Network</option>
-                <option value="security">🔒 Security</option>
-                <option value="other" selected>❓ Other</option>
-            </select>
+            <div class="field-group">
+                <label class="field-label" for="prioritySelect">Priority</label>
+                <select id="prioritySelect" onchange="updatePriority()">
+                    <option value="">Select priority</option>
+                </select>
+                <div class="assign-status" id="priorityStatus"></div>
+            </div>
         </div>
 
         <div class="section">

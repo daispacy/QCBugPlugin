@@ -67,9 +67,18 @@ public final class BugReportAPIService: BugReportProtocol {
             }
         }
 
+        struct MetadataPayload: Encodable {
+            let gitlab: GitLabPayload
+
+            init(gitlab: GitLabPayload) {
+                self.gitlab = gitlab
+            }
+        }
+
         let report: ReportDTO
         let attachments: [AttachmentPayload]
         let gitlab: GitLabPayload?
+        let metadata: MetadataPayload?
 
         init(report: BugReport, attachments: [AttachmentPayload], gitLabCredentials: GitLabCredentials?) {
             self.whtype = report.whtype
@@ -104,6 +113,7 @@ public final class BugReportAPIService: BugReportProtocol {
             )
             self.attachments = attachments
             self.gitlab = gitLabCredentials.map { GitLabPayload(credentials: $0) }
+            self.metadata = gitLabCredentials.map { MetadataPayload(gitlab: GitLabPayload(credentials: $0)) }
         }
     }
 

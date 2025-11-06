@@ -467,12 +467,6 @@ extension QCBugReportViewController: WKScriptMessageHandler {
                 selectedPriority = priority
             }
             
-        case "updateCategory":
-            if let categoryString = data["category"] as? String,
-               let category = BugCategory(rawValue: categoryString) {
-                selectedCategory = category
-            }
-
         case "updateWebhookURL":
             let value = (data["webhookURL"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             webhookURL = value
@@ -592,23 +586,14 @@ extension QCBugReportViewController: WKNavigationDelegate {
             if (descriptionField) {
                 descriptionField.value = '\(escapedDescription)';
             }
-            const priorityField = document.getElementById('prioritySelect');
-            if (priorityField) {
-                priorityField.value = '\(selectedPriority.rawValue)';
-            }
-            const categoryField = document.getElementById('categorySelect');
-            if (categoryField) {
-                categoryField.value = '\(selectedCategory.rawValue)';
-            }
             const webhookField = document.getElementById('webhookURL');
             if (webhookField) {
                 webhookField.value = '\(escapedWebhookURL)';
             }
             if (typeof setInitialAssignee === 'function') { setInitialAssignee('\(escapedAssignee)'); }
+            if (typeof setInitialPriority === 'function') { setInitialPriority('\(selectedPriority.rawValue)'); }
             if (typeof setInitialIssueNumber === 'function') { setInitialIssueNumber('\(issueNumberString)'); }
             if (typeof updateDescription === 'function') { updateDescription(); }
-            if (typeof updatePriority === 'function') { updatePriority(); }
-            if (typeof updateCategory === 'function') { updateCategory(); }
             if (typeof updateWebhookURL === 'function') { updateWebhookURL(); }
         })();
         """

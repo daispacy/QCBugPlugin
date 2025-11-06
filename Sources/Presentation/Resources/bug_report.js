@@ -11,6 +11,14 @@
             lastFetchKey: null,
             requestId: 0
         },
+        priority: {
+            options: [],
+            isLoading: false,
+            error: '',
+            selected: null,
+            lastFetchKey: null,
+            requestId: 0
+        },
         issueNumber: '',
         gitlab: {
             isAuthenticated: false,
@@ -25,6 +33,7 @@
 
     var HANDLER_NAME = 'bugReportHandler';
     var assignFetchTimeout = null;
+    var priorityFetchTimeout = null;
 
     function getWebhookInputValue() {
         var field = document.getElementById('webhookURL');
@@ -262,6 +271,207 @@
             });
     }
 
+    function resetPriorityState(shouldNotify) {
+        if (priorityFetchTimeout) {
+            clearTimeout(priorityFetchTimeout);
+            priorityFetchTimeout = null;
+        }
+        var previousSelection = state.priority.selected;
+        state.priority.options = [];
+        state.priority.isLoading = false;
+        state.priority.error = '';
+        state.priority.lastFetchKey = null;
+        state.priority.requestId = 0;
+        state.priority.selected = shouldNotify ? null : state.priority.selected;
+        renderPriorityControls();
+        if (shouldNotify && previousSelection) {
+            postMessage({ action: 'updatePriority', priority: null });
+        }
+    }
+
+    function renderPriorityControls() {
+        var select = document.getElementById('prioritySelect');
+        var status = document.getElementById('priorityStatus');
+        if (!select || !status) {
+            return;
+        }
+
+        var options = Array.isArray(state.priority.options) ? state.priority.options.slice() : [];
+        var endpoint = deriveMembersEndpoint(state.webhookURL);
+        var hasEndpoint = !!endpoint;
+        var projectValue = typeof state.gitlab.project === 'string' ? state.gitlab.project.trim() : '';
+        var hasProject = projectValue.length > 0;
+
+        while (select.firstChild) {
+            select.removeChild(select.firstChild);
+        }
+
+        var placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Select priority';
+        select.appendChild(placeholder);
+
+        options.forEach(function (option) {
+            var opt = document.createElement('option');
+            opt.value = option.value;
+            opt.textContent = option.title;
+            select.appendChild(opt);
+        });
+
+        var selectedValue = '';
+        if (state.priority.selected && options.some(function (option) { return option.value === state.priority.selected; })) {
+            selectedValue = state.priority.selected;
+        }
+        select.value = selectedValue;
+        select.disabled = !!state.priority.isLoading || !hasEndpoint || !hasProject;
+
+        status.textContent = '';
+        status.className = 'assign-status';
+        if (state.priority.isLoading) {
+            status.textContent = 'Loading priorities…';
+            status.classList.add('assign-status--loading');
+        } else if (state.priority.error) {
+            status.textContent = state.priority.error;
+            status.classList.add('assign-status--error');
+        } else if (state.priority.lastFetchKey && options.length === 0) {
+            status.textContent = 'No priority labels found.';
+        } else if (!hasEndpoint) {
+            status.textContent = 'Enter a webhook URL to load priorities.';
+        } else if (!hasProject) {
+            status.textContent = 'Set a GitLab project to load priorities.';
+        }
+    }
+
+    function schedulePriorityFetch(force) {
+        if (priorityFetchTimeout) {
+            clearTimeout(priorityFetchTimeout);
+        }
+
+        var endpoint = deriveMembersEndpoint(state.webhookURL);
+        if (!endpoint) {
+            return;
+        }
+
+        var projectValue = typeof state.gitlab.project === 'string' ? state.gitlab.project.trim() : '';
+        if (!projectValue.length) {
+            return;
+        }
+
+        priorityFetchTimeout = setTimeout(function () {
+            fetchPriorities(force);
+            priorityFetchTimeout = null;
+        }, 400);
+    }
+
+    function fetchPriorities(force) {
+        var currentWebhook = getWebhookInputValue();
+        state.webhookURL = currentWebhook;
+
+        var endpoint = deriveMembersEndpoint(currentWebhook);
+        if (!endpoint) {
+            return;
+        }
+
+        var projectValue = typeof state.gitlab.project === 'string' ? state.gitlab.project.trim() : '';
+        if (!projectValue.length) {
+            return;
+        }
+
+        var cacheKey = endpoint + '::labels::' + projectValue;
+
+        if (!force && state.priority.lastFetchKey === cacheKey && state.priority.options.length && !state.priority.error) {
+            return;
+        }
+
+        var requestId = state.priority.requestId + 1;
+        state.priority.requestId = requestId;
+        state.priority.isLoading = true;
+        state.priority.error = '';
+        renderPriorityControls();
+
+        var payload = {
+            whtype: 'get_labels',
+            project: projectValue
+        };
+
+        notifyNativeLog('Fetching GitLab priorities (endpoint=' + endpoint + ', project=' + projectValue + ')');
+
+        fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+            .then(function (response) {
+                if (state.priority.requestId !== requestId) {
+                    return null;
+                }
+                return response.json().catch(function () {
+                    return null;
+                });
+            })
+            .then(function (json) {
+                if (state.priority.requestId !== requestId) {
+                    return;
+                }
+
+                state.priority.isLoading = false;
+
+                if (json && json.code === 200 && Array.isArray(json.data)) {
+                    var prefix = 'priority::';
+                    var labels = [];
+                    json.data.forEach(function (item) {
+                        var title = item && typeof item.title === 'string' ? item.title.trim() : '';
+                        if (!title.length) {
+                            return;
+                        }
+                        var normalized = title.toLowerCase();
+                        if (normalized.indexOf(prefix) !== 0) {
+                            return;
+                        }
+                        var rawValue = title.substring(prefix.length).trim().toLowerCase();
+                        if (!rawValue.length) {
+                            return;
+                        }
+                        if (labels.some(function (label) { return label.value === rawValue; })) {
+                            return;
+                        }
+                        labels.push({ title: title, value: rawValue });
+                    });
+
+                    var previousSelection = state.priority.selected;
+                    state.priority.options = labels;
+                    state.priority.error = '';
+                    state.priority.lastFetchKey = cacheKey;
+                    if (previousSelection && !labels.some(function (label) { return label.value === previousSelection; })) {
+                        state.priority.selected = null;
+                        postMessage({ action: 'updatePriority', priority: null });
+                    }
+                    notifyNativeLog('Loaded GitLab priorities: count=' + labels.length);
+                } else {
+                    var message = (json && typeof json.message === 'string' && json.message.trim()) ? json.message.trim() : 'Unable to load priorities.';
+                    state.priority.options = [];
+                    state.priority.error = message;
+                    state.priority.lastFetchKey = null;
+                    notifyNativeLog('GitLab priority fetch failed: ' + message);
+                }
+
+                renderPriorityControls();
+            })
+            .catch(function () {
+                if (state.priority.requestId !== requestId) {
+                    return;
+                }
+                state.priority.isLoading = false;
+                state.priority.options = [];
+                state.priority.error = 'Unable to load priorities.';
+                state.priority.lastFetchKey = null;
+                renderPriorityControls();
+                notifyNativeLog('GitLab priority fetch encountered a network error.');
+            });
+    }
+
     function postMessage(message) {
         if (!window.webkit || !window.webkit.messageHandlers) {
             return false;
@@ -414,21 +624,26 @@
         if (!field) {
             return;
         }
+        var value = typeof field.value === 'string' ? field.value.trim().toLowerCase() : '';
+        var priority = value.length ? value : null;
+        state.priority.selected = priority;
+        renderPriorityControls();
         postMessage({
             action: 'updatePriority',
-            priority: field.value
+            priority: priority
         });
     };
 
-    window.updateCategory = function () {
-        var field = document.getElementById('categorySelect');
-        if (!field) {
-            return;
+    window.setInitialPriority = function (value) {
+        var priority = null;
+        if (typeof value === 'string') {
+            var trimmed = value.trim().toLowerCase();
+            if (trimmed.length) {
+                priority = trimmed;
+            }
         }
-        postMessage({
-            action: 'updateCategory',
-            category: field.value
-        });
+        state.priority.selected = priority;
+        renderPriorityControls();
     };
 
     window.updateWebhookURL = function () {
@@ -436,12 +651,15 @@
         var previous = state.webhookURL;
         state.webhookURL = trimmed;
         renderAssignControls();
+        renderPriorityControls();
 
         if (previous !== trimmed) {
             if (!trimmed) {
                 resetAssignState(true);
+                resetPriorityState(true);
             } else {
                 scheduleAssigneeFetch(true);
+                schedulePriorityFetch(true);
             }
         }
 
@@ -523,10 +741,15 @@
         if (state.gitlab.project !== previousProject) {
             if (state.gitlab.project) {
                 scheduleAssigneeFetch(true);
+                schedulePriorityFetch(true);
             } else {
                 resetAssignState(true);
+                resetPriorityState(true);
             }
         }
+
+        renderAssignControls();
+        renderPriorityControls();
     };
 
     window.loadActionHistory = function (actions) {
@@ -842,6 +1065,7 @@
         updateSystemInfo();
         updateGitLabSection();
         renderAssignControls();
+        renderPriorityControls();
     });
 
     document.addEventListener('keydown', function (event) {
