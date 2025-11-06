@@ -28,20 +28,14 @@ echo ""
 echo "2. Verifying public API..."
 
 # Check public initializers
-INIT_COUNT=$(grep -r "public override init()" Sources/Data/Services/*.swift | wc -l | tr -d ' ')
-echo "  Public initializers: $INIT_COUNT/2"
+INIT_COUNT=$(grep -r "public override init()" Sources/Data/Services/ScreenRecordingService.swift | wc -l | tr -d ' ')
+echo "  Public service initializers: $INIT_COUNT/1"
 
 # Check public delegate methods
 DELEGATE_COUNT=$(grep -r "public func bugReportViewController" Sources/Manager/QCBugPluginManager.swift | wc -l | tr -d ' ')
 echo "  Public delegate methods: $DELEGATE_COUNT/2"
 
-# Check internal helpers
-INTERNAL_COUNT=$(grep -r "internal func\|internal var" Sources/Data/Services/UITrackingService.swift | wc -l | tr -d ' ')
-echo "  Internal helpers: $INTERNAL_COUNT/3"
 
-# Check dynamic swizzled methods
-DYNAMIC_COUNT=$(grep -r "@objc dynamic" Sources/Data/Services/UITrackingService.swift | wc -l | tr -d ' ')
-echo "  Dynamic swizzled methods: $DYNAMIC_COUNT/5"
 
 echo ""
 echo "3. Checking Package.swift..."
@@ -59,7 +53,6 @@ echo "4. Checking critical files..."
 FILES=(
     "Sources/QCBugPlugin.swift"
     "Sources/Manager/QCBugPluginManager.swift"
-    "Sources/Data/Services/UITrackingService.swift"
     "Sources/Data/Services/ScreenRecordingService.swift"
     "Sources/Data/Services/BugReportAPIService.swift"
 )

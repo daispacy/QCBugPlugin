@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import UIKit
 
 /// Main entry point for the QC Bug Plugin framework
 public final class QCBugPlugin {
@@ -39,46 +40,19 @@ public final class QCBugPlugin {
     
     // MARK: - Quick Setup Methods
     
-    /// Quick setup with webhook URL only
-    /// - Parameter webhookURL: The webhook URL to send bug reports to
-    public static func configure(webhookURL: String) {
-        shared.configure(webhookURL: webhookURL, apiKey: nil)
-    }
-    
-    /// Quick setup with webhook URL and API key
+    /// Configure the plugin by supplying the host window and configuration
     /// - Parameters:
-    ///   - webhookURL: The webhook URL to send bug reports to
-    ///   - apiKey: Optional API key for authentication
-    public static func configure(webhookURL: String, apiKey: String?) {
-        shared.configure(webhookURL: webhookURL, apiKey: apiKey)
-    }
-    
-    /// Advanced configuration
-    /// - Parameter config: Complete configuration object
-    public static func configure(with config: QCBugPluginConfig) {
-        (shared as? QCBugPluginManager)?.configure(with: config)
+    ///   - window: The root application window to attach plugin UI elements to
+    ///   - configuration: Complete configuration describing integration behaviour
+    public static func configure(using window: UIWindow, configuration: QCBugPluginConfig) {
+        shared.configure(using: window, configuration: configuration)
     }
     
     // MARK: - Convenience Methods
     
-    /// Start tracking user interactions
-    public static func startTracking() {
-        shared.startTracking()
-    }
-    
-    /// Stop tracking user interactions
-    public static func stopTracking() {
-        shared.stopTracking()
-    }
-    
     /// Present the bug report interface
     public static func presentBugReport() {
         shared.presentBugReport()
-    }
-    
-    /// Check if tracking is enabled
-    public static var isTrackingEnabled: Bool {
-        return shared.isTrackingEnabled()
     }
     
     /// Set custom data to include with bug reports
@@ -121,13 +95,12 @@ public final class QCBugPlugin {
     
     #if DEBUG
     /// Enable debug mode with floating button (Debug builds only)
-    public static func enableDebugMode() {
+    public static func enableDebugMode(using window: UIWindow) {
         let config = QCBugPluginConfig(
             webhookURL: "https://webhook.site/debug",
             enableFloatingButton: true
         )
-        configure(with: config)
-        startTracking()
+        configure(using: window, configuration: config)
         
         print("🐛 QCBugPlugin: Debug mode enabled with floating button")
     }
@@ -145,20 +118,11 @@ public final class QCBugPlugin {
 // MARK: - Global Extensions
 
 public extension Notification.Name {
-    /// Posted when QC Bug Plugin starts tracking
-    static let QCBugPluginDidStartTracking = Notification.Name.qcBugPluginDidStartTracking
-
-    /// Posted when QC Bug Plugin stops tracking
-    static let QCBugPluginDidStopTracking = Notification.Name.qcBugPluginDidStopTracking
-
     /// Posted when a bug report is submitted successfully
     static let QCBugPluginDidSubmitReport = Notification.Name.qcBugPluginDidSubmitReport
 
     /// Posted when bug report submission fails
     static let QCBugPluginDidFailToSubmitReport = Notification.Name.qcBugPluginDidFailToSubmitReport
-
-    /// Posted when a user action is tracked
-    static let QCBugPluginDidTrackUserAction = Notification.Name.qcBugPluginDidTrackUserAction
 
     // MARK: - Screen Recording Notifications
 
@@ -185,9 +149,8 @@ public extension Notification.Name {
  A comprehensive bug reporting framework for iOS applications that provides:
  
  ## Features
- - 🎯 **User Interaction Tracking**: Automatically tracks screen views, button taps, and user actions
- - 🎥 **Screen Recording**: Native screen recording using ReplayKit framework
- - 📱 **Rich Bug Reports**: Detailed reports including device info, app info, and user action timeline
+ -  **Screen Recording**: Native screen recording using ReplayKit framework
+    - 📱 **Rich Bug Reports**: Detailed reports including device info, app info, and captured context
  - 🌐 **Webhook Integration**: Submit reports to any webhook endpoint
  - 🎨 **Customizable UI**: Beautiful HTML/JS interface with native bridge communication
  - 🔧 **Easy Integration**: Simple API that works with any iOS app
@@ -197,11 +160,11 @@ public extension Notification.Name {
  ```swift
  import QCBugPlugin
  
- // Configure the plugin
- QCBugPlugin.configure(webhookURL: "https://your-webhook-url.com/bugs")
- 
- // Start tracking user interactions
- QCBugPlugin.startTracking()
+ // Configure the plugin once you have access to the app window
+ let config = QCBugPluginConfig(
+     webhookURL: "https://your-webhook-url.com/bugs"
+ )
+ QCBugPlugin.configure(using: window, configuration: config)
  
  // Present bug report interface (can be triggered by shake gesture, button, etc.)
  QCBugPlugin.presentBugReport()
@@ -215,23 +178,27 @@ public extension Notification.Name {
      apiKey: "your-api-key",
      customData: ["userId": "12345", "environment": "staging"],
      isScreenRecordingEnabled: true,
-     maxActionHistoryCount: 100,
      enableFloatingButton: true // Debug builds only
  )
  
- QCBugPlugin.configure(with: config)
+ QCBugPlugin.configure(using: window, configuration: config)
  ```
  
  ## Integration with App Delegate
  
  ```swift
  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-     
+     window = UIWindow(frame: UIScreen.main.bounds)
+     window?.rootViewController = RootViewController()
+     window?.makeKeyAndVisible()
+
      #if DEBUG || STAGING
-     QCBugPlugin.configure(webhookURL: "https://your-webhook-url.com/bugs")
-     QCBugPlugin.startTracking()
+     if let window {
+         let config = QCBugPluginConfig(webhookURL: "https://your-webhook-url.com/bugs", enableFloatingButton: true)
+         QCBugPlugin.configure(using: window, configuration: config)
+     }
      #endif
-     
+
      return true
  }
  ```

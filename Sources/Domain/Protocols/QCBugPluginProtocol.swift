@@ -11,20 +11,14 @@ import UIKit
 
 /// Main protocol for the QC Bug Plugin functionality
 public protocol QCBugPluginProtocol: AnyObject {
-    /// Start tracking user interactions and screen transitions
-    func startTracking()
-    
-    /// Stop tracking user interactions
-    func stopTracking()
-    
     /// Present the bug report interface
     func presentBugReport()
-    
-    /// Check if tracking is currently enabled
-    func isTrackingEnabled() -> Bool
-    
-    /// Configure the plugin with webhook URL and API key
-    func configure(webhookURL: String, apiKey: String?)
+
+    /// Configure the plugin with the primary application window and configuration
+    /// - Parameters:
+    ///   - window: The host application's root window to attach UI affordances to
+    ///   - configuration: The configuration describing integration options
+    func configure(using window: UIWindow, configuration: QCBugPluginConfig)
     
     /// Set custom data to be included with bug reports
     func setCustomData(_ data: [String: Any])
@@ -53,19 +47,12 @@ public protocol QCBugPluginConfiguration {
     var apiKey: String? { get }
     var customData: [String: Any] { get }
     var isScreenRecordingEnabled: Bool { get }
-    var maxActionHistoryCount: Int { get }
     var enableFloatingButton: Bool { get }
     var gitLabAppConfig: GitLabAppConfig? { get }
 }
 
 /// Delegate protocol for plugin events
 public protocol QCBugPluginDelegate: AnyObject {
-    /// Called when tracking starts
-    func bugPluginDidStartTracking(_ plugin: QCBugPluginProtocol)
-
-    /// Called when tracking stops
-    func bugPluginDidStopTracking(_ plugin: QCBugPluginProtocol)
-
     /// Called when a bug report is submitted successfully
     func bugPlugin(_ plugin: QCBugPluginProtocol, didSubmitBugReport reportId: String)
 

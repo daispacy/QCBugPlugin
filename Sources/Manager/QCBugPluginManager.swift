@@ -34,13 +34,12 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     
     // MARK: - Private Properties
     private var configuration: QCBugPluginConfig?
-    private var uiTracker: UITrackingProtocol?
+    private weak var hostWindow: UIWindow?
     private var screenRecorder: ScreenRecordingProtocol?
     private var screenCapture: ScreenCaptureProtocol?
     private var bugReportService: BugReportProtocol?
     private var gitLabAuthService: GitLabAuthProviding?
     private var isConfigured: Bool = false
-    private var floatingButton: QCFloatingButton?
     private var floatingActionButtons: QCFloatingActionButtons?
     private var sessionMediaAttachments: [MediaAttachment] = []
     private var shouldAutoPresentForm: Bool = false
@@ -90,26 +89,18 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     
     // MARK: - QCBugPluginProtocol Implementation
     
-    public func configure(webhookURL: String, apiKey: String?) {
-        let config = QCBugPluginConfig(
-            webhookURL: webhookURL,
-            apiKey: apiKey
-        )
-        configure(with: config)
-    }
-    
-    public func configure(with config: QCBugPluginConfig) {
+    public func configure(using window: UIWindow, configuration config: QCBugPluginConfig) {
+        self.hostWindow = window
         self.configuration = config
         self.sessionWebhookURL = nil
         self.sessionAssigneeUsername = nil
         self.sessionIssueNumber = nil
 
         // Initialize services
-        self.uiTracker = UITrackingService()
-        self.uiTracker?.maxActionHistoryCount = config.maxActionHistoryCount
-
         if config.isScreenRecordingEnabled {
             self.screenRecorder = ScreenRecordingService()
+        } else {
+            self.screenRecorder = nil
         }
 
         // Initialize screen capture service
@@ -126,6 +117,8 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         // Setup floating action buttons if enabled
         if config.enableFloatingButton {
             setupFloatingActionButtons()
+        } else {
+            teardownFloatingActionButtons()
         }
 
         self.isConfigured = true
@@ -133,42 +126,6 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         print("✅ QCBugPlugin configured successfully")
     }
     
-    public func startTracking() {
-        guard isConfigured else {
-            print("❌ QCBugPlugin: Plugin not configured. Call configure() first.")
-            return
-        }
-        
-        uiTracker?.startTracking()
-        
-        NotificationCenter.default.post(
-            name: .qcBugPluginDidStartTracking,
-            object: self
-        )
-        
-        delegate?.bugPluginDidStartTracking(self)
-        
-        print("🎯 QCBugPlugin: Started tracking user interactions")
-    }
-    
-    public func stopTracking() {
-        uiTracker?.stopTracking()
-
-        // Stop screen recording if active and owned by this service
-        if screenRecorder?.isRecordingOwnedByService == true {
-            screenRecorder?.stopRecording { _ in }
-        }
-
-        NotificationCenter.default.post(
-            name: .qcBugPluginDidStopTracking,
-            object: self
-        )
-
-        delegate?.bugPluginDidStopTracking(self)
-
-        print("⏹️ QCBugPlugin: Stopped tracking user interactions")
-    }
-
     func invalidateGitLabSession() {
         gitLabAuthService?.clearCache()
 
@@ -189,7 +146,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             return
         }
 
-        let actionHistory = uiTracker?.getActionHistory() ?? []
+    let actionHistory: [UserAction] = []
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -240,10 +197,6 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         }
     }
     
-    public func isTrackingEnabled() -> Bool {
-        return uiTracker?.isTracking ?? false
-    }
-    
     public func setCustomData(_ data: [String: Any]) {
         guard let config = configuration else { return }
 
@@ -253,7 +206,6 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             apiKey: config.apiKey,
             customData: data,
             isScreenRecordingEnabled: config.isScreenRecordingEnabled,
-            maxActionHistoryCount: config.maxActionHistoryCount,
             enableFloatingButton: config.enableFloatingButton,
             gitLabAppConfig: config.gitLabAppConfig
         )
@@ -269,7 +221,6 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             apiKey: config.apiKey,
             customData: config.customData,
             isScreenRecordingEnabled: enabled,
-            maxActionHistoryCount: config.maxActionHistoryCount,
             enableFloatingButton: config.enableFloatingButton,
             gitLabAppConfig: config.gitLabAppConfig
         )
@@ -398,81 +349,42 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
             object: nil
         )
         
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(appWillEnterForeground),
-            name: UIApplication.willEnterForegroundNotification,
-            object: nil
-        )
     }
     
-    private func setupFloatingButton() {
-        #if DEBUG
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-
-            if self.floatingButton == nil {
-                self.floatingButton = QCFloatingButton()
-                self.floatingButton?.addTarget(
-                    self,
-                    action: #selector(self.floatingButtonTapped),
-                    for: .touchUpInside
-                )
-
-                // iOS 12 compatible window access
-                if #available(iOS 13.0, *) {
-                    if let window = UIApplication.shared.windows.first {
-                        window.addSubview(self.floatingButton!)
-                    }
-                } else {
-                    if let window = UIApplication.shared.keyWindow {
-                        window.addSubview(self.floatingButton!)
-                    }
-                }
-            }
-        }
-        #endif
-    }
-
     private func setupFloatingActionButtons() {
-        #if DEBUG
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-
-            if self.floatingActionButtons == nil {
-                self.floatingActionButtons = QCFloatingActionButtons()
-                self.floatingActionButtons?.delegate = self
-
-                // iOS 12 compatible window access
-                if #available(iOS 13.0, *) {
-                    if let window = UIApplication.shared.windows.first {
-                        window.addSubview(self.floatingActionButtons!)
-                    }
-                } else {
-                    if let window = UIApplication.shared.keyWindow {
-                        window.addSubview(self.floatingActionButtons!)
-                    }
-                }
+            guard let window = self.hostWindow else {
+                print("⚠️ QCBugPlugin: Cannot attach floating controls without a host window.")
+                return
             }
+
+            if let controls = self.floatingActionButtons {
+                if controls.superview !== window {
+                    controls.removeFromSuperview()
+                    window.addSubview(controls)
+                }
+                return
+            }
+
+            let controls = QCFloatingActionButtons()
+            controls.delegate = self
+            window.addSubview(controls)
+            self.floatingActionButtons = controls
         }
-        #endif
     }
 
-    @objc private func floatingButtonTapped() {
-        presentBugReport()
+    private func teardownFloatingActionButtons() {
+        DispatchQueue.main.async { [weak self] in
+            self?.floatingActionButtons?.removeFromSuperview()
+            self?.floatingActionButtons = nil
+        }
     }
-    
+
     @objc private func appDidEnterBackground() {
         // Stop screen recording when app goes to background (only if owned by this service)
         if screenRecorder?.isRecordingOwnedByService == true {
             screenRecorder?.stopRecording { _ in }
-        }
-    }
-
-    @objc private func appWillEnterForeground() {
-        // Resume tracking if it was enabled
-        if let tracker = uiTracker, tracker.isTracking {
-            // Tracking continues automatically
         }
     }
 

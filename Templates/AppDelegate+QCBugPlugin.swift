@@ -74,13 +74,15 @@ extension AppDelegate {
                 "appLaunchTime": Date().timeIntervalSince1970
             ],
             isScreenRecordingEnabled: true,
-            maxActionHistoryCount: 100,
             enableFloatingButton: true // Show floating debug button
         )
         
-        // Configure and start tracking
-        QCBugPlugin.configure(with: config)
-        QCBugPlugin.startTracking()
+        guard let window = self.window ?? UIApplication.shared.windows.first else {
+            print("⚠️ QCBugPlugin: Unable to configure without a valid window")
+            return
+        }
+
+        QCBugPlugin.configure(using: window, configuration: config)
         
         print("🐛 QCBugPlugin configured for \(appName) - \(environment)")
     }
@@ -169,7 +171,6 @@ extension UIWindow {
  - apiKey: Optional authentication key for your webhook
  - customData: App-level data included in all bug reports
  - isScreenRecordingEnabled: Enable/disable screen recording feature
- - maxActionHistoryCount: Number of user actions to track (default: 100)
  - enableFloatingButton: Show floating debug button (true/false)
  
  CUSTOM DATA SUGGESTIONS:

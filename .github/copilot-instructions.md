@@ -2,12 +2,12 @@
 
 ## Architecture Overview
 
-QCBugPlugin is an iOS Swift Package Manager framework for QC bug reporting with automatic user interaction tracking, screen recording, and webhook integration. It follows Clean Architecture with protocol-based design and method swizzling for non-intrusive UI tracking.
+QCBugPlugin is an iOS Swift Package Manager framework for QC bug reporting with optional screen recording and webhook integration. It follows Clean Architecture with protocol-based design and native floating controls managed internally by the framework.
 
 **Key Architecture Layers:**
 - **Entry Point**: `QCBugPlugin.swift` - Static convenience API that delegates to `QCBugPluginManager.shared`
 - **Manager**: `QCBugPluginManager` - Singleton coordinator managing all services and state
-- **Services**: UI tracking (method swizzling), screen recording (ReplayKit), API submission (multipart webhooks)
+- **Services**: Screen recording (ReplayKit), API submission (multipart webhooks)
 - **Presentation**: Hybrid WKWebView + HTML/JS interface with native bridge communication
 
 ## SPM Public API Requirements
@@ -18,8 +18,8 @@ QCBugPlugin is an iOS Swift Package Manager framework for QC bug reporting with 
 - `QCBugPluginManager.shared` property (typed as `QCBugPluginProtocol`)
 
 **All Protocols:**
-- `QCBugPluginProtocol`, `UITrackingProtocol`, `ScreenRecordingProtocol`, `BugReportProtocol`
-- `QCBugPluginDelegate`, `UITrackingDelegate`, `QCBugReportViewControllerDelegate`
+- `QCBugPluginProtocol`, `ScreenRecordingProtocol`, `BugReportProtocol`
+- `QCBugPluginDelegate`, `QCBugReportViewControllerDelegate`
 - `QCBugPluginConfiguration`
 
 **All Models & Enums:**
@@ -30,15 +30,14 @@ QCBugPlugin is an iOS Swift Package Manager framework for QC bug reporting with 
 - All model initializers (with `public init()`)
 
 **Service Classes (for extensibility):**
-- `UITrackingService`, `ScreenRecordingService`, `BugReportAPIService`
+- `ScreenRecordingService`, `BugReportAPIService`
 - `QCBugReportViewController`, `QCFloatingButton`
 - All protocol-conforming methods
 
 **Notifications:**
-- `Notification.Name` extensions (`.qcBugPluginDidStartTracking`, etc.)
+- `Notification.Name` extensions (`.qcBugPluginDidSubmitReport`, etc.)
 
 ### What SHOULD Be Internal/Private
-- Method swizzling implementations (extensions on UIViewController, UIButton, UITextField)
 - Private helper methods in services
 - Internal state management properties
 - HTML/CSS/JS generation internals (can be `internal` for testing)
@@ -46,21 +45,10 @@ QCBugPlugin is an iOS Swift Package Manager framework for QC bug reporting with 
 ## Critical Patterns & Conventions
 
 ### Protocol-First Design
-All major components implement protocols (`QCBugPluginProtocol`, `UITrackingProtocol`, `ScreenRecordingProtocol`, `BugReportProtocol`). When extending functionality:
+All major components implement protocols (`QCBugPluginProtocol`, `ScreenRecordingProtocol`, `BugReportProtocol`). When extending functionality:
 - Define protocol in `Domain/Protocols/` first (mark `public`)
 - Implement service in `Data/Services/` (class is `public final`, methods are `public`)
 - Wire through `QCBugPluginManager`
-
-### Method Swizzling Architecture
-`UITrackingService` uses runtime method replacement for non-intrusive tracking:
-```swift
-// Pattern: Original → Swizzled method (with qcBugPlugin_ prefix to avoid conflicts)
-viewDidAppear(_:) → qcBugPlugin_viewDidAppear(_:)
-sendAction(_:to:for:) → qcBugPlugin_sendAction(_:to:for:)
-becomeFirstResponder() → qcBugPlugin_becomeFirstResponder()
-touchesBegan(_:with:) → qcBugPlugin_touchesBegan(_:with:)
-```
-**Critical**: Always call original implementation in swizzled methods, use `actionQueue` for thread safety. Swizzling extensions should be `internal` or `private`. All swizzled methods use `qcBugPlugin_` prefix to prevent conflicts with other frameworks.
 
 ### Native-Web Bridge Communication
 `QCBugReportViewController` uses WKScriptMessageHandler pattern:
@@ -70,24 +58,17 @@ touchesBegan(_:with:) → qcBugPlugin_touchesBegan(_:with:)
 
 ### Threading Model
 - **Main Queue**: UI operations, delegate callbacks, notifications
-- **actionQueue**: User action processing (utility QoS)
 - **Background**: Screen recording, API calls
 
 ## Essential Workflows
 
 ### Bug Report Submission Flow
 1. User triggers via floating button/shake gesture → `QCBugPluginManager.presentBugReport()`
-2. Collect data: user actions, device info, custom data
+2. Collect data: device info, custom data, any captured media
 3. Present WKWebView with HTML form
 4. User fills form → JS → native bridge → validation
 5. Optional screen recording via ReplayKit
 6. Package as `BugReport` model → multipart HTTP POST to webhook
-
-### Adding New User Action Types
-1. Add `public` case to `UserAction.ActionType` enum
-2. Update `displayName` computed property
-3. Implement swizzling in `UITrackingService` (internal extension)
-4. Update HTML timeline display in `generateJavaScript()`
 
 ### Integration Points
 **Host App Setup:**
@@ -95,9 +76,19 @@ touchesBegan(_:with:) → qcBugPlugin_touchesBegan(_:with:)
 // AppDelegate - typical integration
 import QCBugPlugin
 
-func application(...) -> Bool {
-    QCBugPlugin.configure(webhookURL: "https://...", apiKey: "...")
-    QCBugPlugin.startTracking()
+func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+) -> Bool {
+    window = UIWindow(frame: UIScreen.main.bounds)
+    window?.rootViewController = RootViewController()
+    window?.makeKeyAndVisible()
+
+    if let window {
+        let config = QCBugPluginConfig(webhookURL: "https://...", enableFloatingButton: true)
+        QCBugPlugin.configure(using: window, configuration: config)
+    }
+
     return true
 }
 ```
@@ -119,7 +110,6 @@ QCBugPlugin.setCustomData([
 ## Key Implementation Details
 
 ### Memory Management
-- Action history limited by `maxActionHistoryCount` (default: 50) with automatic trimming
 - Screen recordings stored temporarily, cleaned after submission
 - Weak delegate references throughout
 
@@ -137,7 +127,7 @@ QCBugPlugin.setCustomData([
 - Local processing only, direct webhook submission
 - Optional API key authentication
 - HTTPS webhook URLs recommended
-- No sensitive data in UI tracking (coordinates/element info only)
+- Avoid collecting sensitive user data in custom fields
 
 ## File Organization Logic
 
