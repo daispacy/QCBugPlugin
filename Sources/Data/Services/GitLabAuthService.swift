@@ -23,7 +23,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
         let header: String
         let jwt: String
         let expiration: Date
-        let username: String
+        let username: String?
     }
 
     private struct AccessTokenResponse: Decodable {
@@ -47,6 +47,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
     private let configuration: GitLabAppConfig
     private let session: URLSession
     private let jsonDecoder: JSONDecoder
+    private let sessionStore: GitLabSessionStore
     private let stateQueue = DispatchQueue(label: "com.qcbugplugin.gitlab-auth", attributes: .concurrent)
 
     private var cachedAccessToken: CachedAccessToken?
@@ -55,10 +56,23 @@ public final class GitLabAuthService: GitLabAuthProviding {
     private var pendingAuthState: String?
     private var presentationContextProvider: AnyObject?
 
-    public init(configuration: GitLabAppConfig, session: URLSession = .shared) {
+    public convenience init(
+        configuration: GitLabAppConfig,
+        session: URLSession = .shared
+    ) {
+        self.init(configuration: configuration, session: session, sessionStore: GitLabSessionStore.shared)
+    }
+
+    init(
+        configuration: GitLabAppConfig,
+        session: URLSession,
+        sessionStore: GitLabSessionStore
+    ) {
         self.configuration = configuration
         self.session = session
         self.jsonDecoder = JSONDecoder()
+        self.sessionStore = sessionStore
+        restorePersistedState()
     }
 
     // MARK: - GitLabAuthProviding
@@ -111,6 +125,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
                 self.presentationContextProvider = nil
             }
         }
+        sessionStore.clearAll()
     }
 
     public func hasValidAuthorization() -> Bool {
@@ -568,6 +583,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
         stateQueue.sync(flags: .barrier) {
             self.cachedAccessToken = token
         }
+        sessionStore.saveAccessToken(value: token.value, expiration: token.expiration, username: token.username)
     }
 
     private func currentCachedJWT() -> CachedJWT? {
@@ -577,6 +593,33 @@ public final class GitLabAuthService: GitLabAuthProviding {
     private func storeCachedJWT(_ jwt: CachedJWT) {
         stateQueue.sync(flags: .barrier) {
             self.cachedJWT = jwt
+        }
+        sessionStore.saveJWT(jwt: jwt.jwt, header: jwt.header, expiration: jwt.expiration, username: jwt.username)
+    }
+
+    private func restorePersistedState() {
+        if let storedToken = sessionStore.loadAccessToken() {
+            let token = CachedAccessToken(
+                value: storedToken.value,
+                expiration: storedToken.expiration,
+                username: storedToken.username
+            )
+            stateQueue.sync(flags: .barrier) {
+                self.cachedAccessToken = token
+            }
+        }
+
+        if let storedJWT = sessionStore.loadJWT() {
+            let expiration = storedJWT.expiration ?? Date.distantFuture
+            let jwt = CachedJWT(
+                header: storedJWT.header,
+                jwt: storedJWT.jwt,
+                expiration: expiration,
+                username: storedJWT.username
+            )
+            stateQueue.sync(flags: .barrier) {
+                self.cachedJWT = jwt
+            }
         }
     }
 }

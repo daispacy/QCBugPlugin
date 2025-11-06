@@ -366,6 +366,22 @@
             min-width: 190px;
         }
 
+        .gitlab-auth-state {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #1d1d1f;
+        }
+
+        .gitlab-username {
+            font-weight: 600;
+        }
+
+        .gitlab-divider {
+            color: #8e8e93;
+        }
+
         .gitlab-button {
             padding: 8px 14px;
             border-radius: 10px;
@@ -378,6 +394,14 @@
             transition: background 0.2s ease, transform 0.1s ease;
         }
 
+        .gitlab-button--link {
+            background: transparent;
+            color: #1b4dd8;
+            padding: 0;
+            border: none;
+            border-radius: 0;
+        }
+
         .gitlab-button:disabled {
             background: #9fa7c1;
             color: #ffffff;
@@ -385,12 +409,25 @@
             transform: none;
         }
 
+        .gitlab-button--link:disabled {
+            color: #9fa7c1;
+        }
+
         .gitlab-button:not(:disabled):hover {
             background: #275eff;
         }
 
+        .gitlab-button--link:not(:disabled):hover {
+            background: transparent;
+            text-decoration: underline;
+        }
+
         .gitlab-button:not(:disabled):active {
             transform: scale(0.98);
+        }
+
+        .gitlab-button--link:not(:disabled):active {
+            transform: none;
         }
 
         .gitlab-error {
@@ -467,7 +504,11 @@
                     <span>GitLab</span>
                 </div>
                 <div class="gitlab-row">
-                    <div class="gitlab-status" id="gitlabStatus">GitLab integration unavailable</div>
+                    <div class="gitlab-auth-state" id="gitlabAuthState">
+                        <span class="gitlab-username" id="gitlabUsernameLabel">@username</span>
+                        <span class="gitlab-divider">|</span>
+                        <button type="button" id="gitlabLogoutButton" class="gitlab-button gitlab-button--link" onclick="logoutGitLab()">Logout</button>
+                    </div>
                     <button type="button" id="gitlabLoginButton" class="gitlab-button" onclick="triggerGitLabLogin()">Log in with GitLab</button>
                 </div>
                 <div class="gitlab-error" id="gitlabError"></div>

@@ -10,11 +10,6 @@ import Foundation
 import UIKit
 import WebKit
 
-enum GitLabDefaults {
-    static let jwtKey = "com.qcbugplugin.gitlab.jwt"
-    static let usernameKey = "com.qcbugplugin.gitlab.username"
-}
-
 /// Delegate protocol for bug report view controller
 public protocol QCBugReportViewControllerDelegate: AnyObject {
     func bugReportViewController(_ controller: QCBugReportViewController, didSubmitReport report: BugReport)
@@ -62,9 +57,9 @@ public final class QCBugReportViewController: UIViewController {
         self.screenRecorder = screenRecorder
         self.configuration = configuration
         self.webhookURL = configuration?.webhookURL ?? ""
-        let defaults = UserDefaults.standard
-        self.gitLabJWT = defaults.string(forKey: GitLabDefaults.jwtKey)
-        self.gitLabUsername = defaults.string(forKey: GitLabDefaults.usernameKey)
+    let sessionStore = GitLabSessionStore.shared
+    self.gitLabJWT = sessionStore.currentJWT()
+    self.gitLabUsername = sessionStore.currentUsername()
         if let injectedProvider = gitLabAuthProvider {
             self.gitLabAuthProvider = injectedProvider
         } else if let gitLabConfig = configuration?.gitLabAppConfig {
@@ -238,14 +233,11 @@ public final class QCBugReportViewController: UIViewController {
             case .success(let authorization):
                 self.gitLabJWT = authorization.jwt
                 self.gitLabUsername = authorization.username
-                self.persistGitLabCredentials(
-                    token: authorization.jwt,
-                    username: authorization.username
-                )
+                let trimmedHeader = authorization.authorizationHeader.trimmingCharacters(in: .whitespacesAndNewlines)
                 self.didInjectGitLabCredentials = false
                 self.emitGitLabState(
                     token: authorization.jwt,
-                    header: authorization.authorizationHeader.trimmingCharacters(in: .whitespacesAndNewlines),
+                    header: trimmedHeader,
                     username: authorization.username,
                     requiresLogin: false,
                     isLoading: false,
@@ -262,6 +254,7 @@ public final class QCBugReportViewController: UIViewController {
                 self.gitLabJWT = nil
                 self.gitLabUsername = nil
                 self.clearStoredGitLabCredentials()
+                self.gitLabAuthProvider?.clearCache()
                 if triggeredBySubmit {
                     self.shouldSubmitAfterGitLabLogin = false
                 }

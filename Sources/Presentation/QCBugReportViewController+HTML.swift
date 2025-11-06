@@ -105,10 +105,6 @@ extension QCBugReportViewController {
                 let jwt = authorization.jwt
                 self.gitLabJWT = jwt
                 self.gitLabUsername = authorization.username
-                self.persistGitLabCredentials(
-                    token: jwt,
-                    username: authorization.username
-                )
                 self.emitGitLabState(
                     token: jwt,
                     header: trimmedHeader,
@@ -122,6 +118,7 @@ extension QCBugReportViewController {
                 self.gitLabJWT = nil
                 self.gitLabUsername = nil
                 self.clearStoredGitLabCredentials()
+                self.gitLabAuthProvider?.clearCache()
                 let requiresLogin: Bool
                 switch error {
                 case .userAuthenticationRequired:
@@ -238,19 +235,7 @@ extension QCBugReportViewController {
         return escaped
     }
 
-    func persistGitLabCredentials(token: String, username: String?) {
-        let defaults = UserDefaults.standard
-        defaults.set(token, forKey: GitLabDefaults.jwtKey)
-        if let username = username, !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            defaults.set(username, forKey: GitLabDefaults.usernameKey)
-        } else {
-            defaults.removeObject(forKey: GitLabDefaults.usernameKey)
-        }
-    }
-
     func clearStoredGitLabCredentials() {
-        let defaults = UserDefaults.standard
-        defaults.removeObject(forKey: GitLabDefaults.jwtKey)
-        defaults.removeObject(forKey: GitLabDefaults.usernameKey)
+        GitLabSessionStore.shared.clearAll()
     }
 }

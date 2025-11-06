@@ -64,10 +64,13 @@
 
     function updateGitLabSection() {
         var section = document.getElementById('gitlabSection');
-        var statusLabel = document.getElementById('gitlabStatus');
-        var button = document.getElementById('gitlabLoginButton');
+        var loginButton = document.getElementById('gitlabLoginButton');
+        var logoutButton = document.getElementById('gitlabLogoutButton');
+        var authState = document.getElementById('gitlabAuthState');
+        var usernameLabel = document.getElementById('gitlabUsernameLabel');
         var errorLabel = document.getElementById('gitlabError');
-        if (!section || !statusLabel || !button || !errorLabel) {
+
+        if (!section || !loginButton || !logoutButton || !authState || !usernameLabel || !errorLabel) {
             return;
         }
 
@@ -78,28 +81,35 @@
         }
 
         section.style.display = 'block';
-        var buttonLabel = button.textContent || 'Log in with GitLab';
+        loginButton.style.display = 'inline-flex';
+        loginButton.disabled = false;
+        loginButton.textContent = 'Log in with GitLab';
+
+        authState.style.display = 'none';
+        logoutButton.disabled = false;
 
         if (gitlab.isLoading) {
-            statusLabel.textContent = 'Updating GitLab session…';
-            button.disabled = true;
-            buttonLabel = 'Opening…';
+            if (gitlab.isAuthenticated && gitlab.username) {
+                usernameLabel.textContent = '@' + gitlab.username;
+                authState.style.display = 'flex';
+                logoutButton.disabled = true;
+                loginButton.style.display = 'none';
+            } else {
+                loginButton.disabled = true;
+                loginButton.textContent = 'Opening…';
+            }
         } else if (gitlab.isAuthenticated) {
-            var userLabel = gitlab.username ? ('@' + gitlab.username) : 'account';
-            statusLabel.textContent = 'Connected to GitLab ' + userLabel;
-            button.disabled = false;
-            buttonLabel = 'Refresh GitLab Session';
+            var label = gitlab.username ? ('@' + gitlab.username) : 'GitLab account';
+            usernameLabel.textContent = label;
+            authState.style.display = 'flex';
+            loginButton.style.display = 'none';
         } else if (gitlab.requiresLogin) {
-            statusLabel.textContent = 'Not connected to GitLab';
-            button.disabled = false;
-            buttonLabel = 'Log in with GitLab';
+            loginButton.style.display = 'inline-flex';
         } else {
-            statusLabel.textContent = 'GitLab integration unavailable';
-            button.disabled = true;
-            buttonLabel = 'Unavailable';
+            section.style.display = 'none';
+            return;
         }
 
-        button.textContent = buttonLabel;
         errorLabel.textContent = gitlab.error ? String(gitlab.error) : '';
         errorLabel.style.display = errorLabel.textContent ? 'block' : 'none';
     }
@@ -113,6 +123,20 @@
         state.gitlab.isLoading = true;
         state.gitlab.error = '';
         state.gitlab.requiresLogin = true;
+        updateGitLabSection();
+    };
+
+    window.logoutGitLab = function () {
+        if (!postMessage({ action: 'gitlabLogout' })) {
+            return;
+        }
+
+        state.gitlab.isLoading = true;
+        state.gitlab.error = '';
+        state.gitlab.isAuthenticated = false;
+        state.gitlab.requiresLogin = true;
+        state.gitlab.username = null;
+        state.gitlab.available = true;
         updateGitLabSection();
     };
 
