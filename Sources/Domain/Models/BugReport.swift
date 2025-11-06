@@ -65,6 +65,12 @@ public struct BugReport: Codable {
     /// Memory usage information
     public let memoryInfo: MemoryInfo?
 
+    /// Username assigned to handle the bug, if provided
+    public let assigneeUsername: String?
+
+    /// External issue tracker number associated with the bug
+    public let issueNumber: Int?
+
     public let whtype: String
     public let gitLabCredentials: GitLabCredentials?
 
@@ -82,6 +88,8 @@ public struct BugReport: Codable {
         networkInfo: NetworkInfo? = nil,
         memoryInfo: MemoryInfo? = nil,
         mediaAttachments: [MediaAttachment] = [],
+        assigneeUsername: String? = nil,
+        issueNumber: Int? = nil,
         whtype: String = "report_issue",
         gitLabCredentials: GitLabCredentials? = nil
     ) {
@@ -100,6 +108,8 @@ public struct BugReport: Codable {
         self.networkInfo = networkInfo
         self.memoryInfo = memoryInfo
         self.mediaAttachments = mediaAttachments
+        self.assigneeUsername = assigneeUsername
+        self.issueNumber = issueNumber
         self.whtype = whtype
         self.gitLabCredentials = gitLabCredentials
     }

@@ -44,6 +44,8 @@ public final class QCBugReportViewController: UIViewController {
     private var selectedPriority: BugPriority = .medium
     private var selectedCategory: BugCategory = .other
     private var webhookURL: String
+    private var selectedAssigneeUsername: String?
+    private var issueNumber: Int?
     
     // MARK: - Initialization
     
@@ -57,9 +59,9 @@ public final class QCBugReportViewController: UIViewController {
         self.screenRecorder = screenRecorder
         self.configuration = configuration
         self.webhookURL = configuration?.webhookURL ?? ""
-    let sessionStore = GitLabSessionStore.shared
-    self.gitLabJWT = sessionStore.currentJWT()
-    self.gitLabUsername = sessionStore.currentUsername()
+        let sessionStore = GitLabSessionStore.shared
+        self.gitLabJWT = sessionStore.currentJWT()
+        self.gitLabUsername = sessionStore.currentUsername()
         if let injectedProvider = gitLabAuthProvider {
             self.gitLabAuthProvider = injectedProvider
         } else if let gitLabConfig = configuration?.gitLabAppConfig {
@@ -187,6 +189,8 @@ public final class QCBugReportViewController: UIViewController {
             networkInfo: NetworkInfo(),
             memoryInfo: MemoryInfo(),
             mediaAttachments: mediaAttachments,
+            assigneeUsername: selectedAssigneeUsername,
+            issueNumber: issueNumber,
             gitLabCredentials: gitLabCredentials
         )
     }
@@ -369,7 +373,9 @@ public final class QCBugReportViewController: UIViewController {
         description: String,
         priority: BugPriority,
         category: BugCategory,
-        webhookURL: String? = nil
+        webhookURL: String? = nil,
+        assigneeUsername: String? = nil,
+        issueNumber: Int? = nil
     ) {
         bugDescription = description
         selectedPriority = priority
@@ -377,6 +383,8 @@ public final class QCBugReportViewController: UIViewController {
         if let webhookURL = webhookURL {
             self.webhookURL = webhookURL
         }
+        selectedAssigneeUsername = assigneeUsername
+        self.issueNumber = issueNumber
         guard isViewLoaded else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self = self, self.isWebViewLoaded else { return }
@@ -398,6 +406,14 @@ public final class QCBugReportViewController: UIViewController {
 
     internal func getSessionWebhookURL() -> String {
         return webhookURL
+    }
+
+    internal func getSessionAssigneeUsername() -> String? {
+        return selectedAssigneeUsername
+    }
+
+    internal func getSessionIssueNumber() -> Int? {
+        return issueNumber
     }
     
     private func getCurrentScreenName() -> String? {
@@ -445,6 +461,23 @@ extension QCBugReportViewController: WKScriptMessageHandler {
         case "updateWebhookURL":
             let value = (data["webhookURL"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             webhookURL = value
+
+        case "updateAssignee":
+            if let username = data["username"] as? String {
+                let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
+                selectedAssigneeUsername = trimmed.isEmpty ? nil : trimmed
+            } else {
+                selectedAssigneeUsername = nil
+            }
+
+        case "updateIssueNumber":
+            if let number = data["issueNumber"] as? Int {
+                issueNumber = number >= 0 ? number : nil
+            } else if let stringValue = data["issueNumber"] as? String, let parsed = Int(stringValue) {
+                issueNumber = parsed >= 0 ? parsed : nil
+            } else {
+                issueNumber = nil
+            }
         
         case "deleteMediaAttachment":
             if let fileURL = data["fileURL"] as? String {
@@ -529,6 +562,10 @@ extension QCBugReportViewController: WKNavigationDelegate {
         let escapedWebhookURL = webhookURL
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
+        let escapedAssignee = (selectedAssigneeUsername ?? "")
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+        let issueNumberString = issueNumber.map(String.init) ?? ""
         let script = """
         (function() {
             const descriptionField = document.getElementById('bugDescription');
@@ -547,6 +584,8 @@ extension QCBugReportViewController: WKNavigationDelegate {
             if (webhookField) {
                 webhookField.value = '\(escapedWebhookURL)';
             }
+            if (typeof setInitialAssignee === 'function') { setInitialAssignee('\(escapedAssignee)'); }
+            if (typeof setInitialIssueNumber === 'function') { setInitialIssueNumber('\(issueNumberString)'); }
             if (typeof updateDescription === 'function') { updateDescription(); }
             if (typeof updatePriority === 'function') { updatePriority(); }
             if (typeof updateCategory === 'function') { updateCategory(); }

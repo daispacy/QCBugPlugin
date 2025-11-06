@@ -49,6 +49,8 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     private var sessionBugPriority: BugPriority = .medium
     private var sessionBugCategory: BugCategory = .other
     private var sessionWebhookURL: String?
+    private var sessionAssigneeUsername: String?
+    private var sessionIssueNumber: Int?
     private var pendingScreenshotCompletion: ((Result<URL, Error>) -> Void)?
     private var pendingScreenshotOriginalURL: URL?
     private var previewDataSource: SingleAttachmentPreviewDataSource?
@@ -99,6 +101,8 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     public func configure(with config: QCBugPluginConfig) {
         self.configuration = config
         self.sessionWebhookURL = nil
+        self.sessionAssigneeUsername = nil
+        self.sessionIssueNumber = nil
 
         // Initialize services
         self.uiTracker = UITrackingService()
@@ -217,7 +221,9 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
                 description: self.sessionBugDescription,
                 priority: self.sessionBugPriority,
                 category: self.sessionBugCategory,
-                webhookURL: self.resolvedWebhookURL()
+                webhookURL: self.resolvedWebhookURL(),
+                assigneeUsername: self.sessionAssigneeUsername,
+                issueNumber: self.sessionIssueNumber
             )
 
             // Present modally
@@ -645,6 +651,8 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         sessionBugPriority = .medium
         sessionBugCategory = .other
         sessionWebhookURL = nil
+        sessionAssigneeUsername = nil
+        sessionIssueNumber = nil
         
         DispatchQueue.main.async {
             self.sessionBugReportViewController?.clearMediaAttachments()
@@ -652,7 +660,9 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
                 description: "",
                 priority: .medium,
                 category: .other,
-                webhookURL: self.resolvedWebhookURL()
+                webhookURL: self.resolvedWebhookURL(),
+                assigneeUsername: nil,
+                issueNumber: nil
             )
         }
 
@@ -763,6 +773,8 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         self.sessionBugDescription = report.description
         self.sessionBugPriority = report.priority
         self.sessionBugCategory = report.category
+        self.sessionAssigneeUsername = report.assigneeUsername
+        self.sessionIssueNumber = report.issueNumber
         let userWebhookInput = controller.getSessionWebhookURL().trimmingCharacters(in: .whitespacesAndNewlines)
         if userWebhookInput.isEmpty || userWebhookInput == configuration?.webhookURL {
             self.sessionWebhookURL = nil
@@ -816,6 +828,8 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         self.sessionBugDescription = controller.getSessionDescription()
         self.sessionBugPriority = controller.getSessionPriority()
         self.sessionBugCategory = controller.getSessionCategory()
+        self.sessionAssigneeUsername = controller.getSessionAssigneeUsername()
+        self.sessionIssueNumber = controller.getSessionIssueNumber()
         let userWebhookInput = controller.getSessionWebhookURL().trimmingCharacters(in: .whitespacesAndNewlines)
         if userWebhookInput.isEmpty || userWebhookInput == configuration?.webhookURL {
             self.sessionWebhookURL = nil

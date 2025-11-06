@@ -52,6 +52,8 @@ public final class BugReportAPIService: BugReportProtocol {
             let currentScreen: String?
             let networkInfo: NetworkInfo?
             let memoryInfo: MemoryInfo?
+            let assigneeUsername: String?
+            let issueNumber: Int?
         }
 
         struct GitLabPayload: Encodable {
@@ -92,7 +94,9 @@ public final class BugReportAPIService: BugReportProtocol {
                 customData: report.customData,
                 currentScreen: report.currentScreen,
                 networkInfo: report.networkInfo,
-                memoryInfo: report.memoryInfo
+                memoryInfo: report.memoryInfo,
+                assigneeUsername: report.assigneeUsername,
+                issueNumber: report.issueNumber
             )
             self.attachments = attachments
             self.gitlab = gitLabCredentials.map { GitLabPayload(credentials: $0) }

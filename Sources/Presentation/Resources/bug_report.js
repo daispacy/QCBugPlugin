@@ -3,6 +3,15 @@
         actionHistory: [],
         capturedMedia: [],
         webhookURL: '',
+        assign: {
+            options: [],
+            isLoading: false,
+            error: '',
+            selected: null,
+            lastFetchKey: null,
+            requestId: 0
+        },
+        issueNumber: '',
         gitlab: {
             isAuthenticated: false,
             requiresLogin: false,
@@ -14,6 +23,190 @@
     };
 
     var HANDLER_NAME = 'bugReportHandler';
+    var assignFetchTimeout = null;
+
+    function deriveMembersEndpoint(url) {
+        if (!url || typeof url !== 'string') {
+            return null;
+        }
+        var trimmed = url.trim();
+        if (!trimmed) {
+            return null;
+        }
+        try {
+            var parsed = new URL(trimmed);
+            return parsed.origin;
+        } catch (error) {
+            return /^https?:\/\//i.test(trimmed) ? trimmed : null;
+        }
+    }
+
+    function resetAssignState(shouldNotify) {
+        if (assignFetchTimeout) {
+            clearTimeout(assignFetchTimeout);
+            assignFetchTimeout = null;
+        }
+        var previousSelection = state.assign.selected;
+        state.assign.options = [];
+        state.assign.isLoading = false;
+        state.assign.error = '';
+        state.assign.lastFetchKey = null;
+        state.assign.requestId = 0;
+        state.assign.selected = shouldNotify ? null : state.assign.selected;
+        renderAssignControls();
+        if (shouldNotify && previousSelection) {
+            postMessage({ action: 'updateAssignee', username: null });
+        }
+    }
+
+    function renderAssignControls() {
+        var select = document.getElementById('assigneeSelect');
+        var status = document.getElementById('assignStatus');
+        if (!select || !status) {
+            return;
+        }
+
+        var options = Array.isArray(state.assign.options) ? state.assign.options.slice() : [];
+        var selected = state.assign.selected;
+        if (selected && options.indexOf(selected) === -1) {
+            options.unshift(selected);
+        }
+
+        var needsRebuild = select.options.length !== options.length + 1;
+        if (!needsRebuild) {
+            for (var i = 1; i < select.options.length; i += 1) {
+                if (select.options[i].value !== options[i - 1]) {
+                    needsRebuild = true;
+                    break;
+                }
+            }
+        }
+
+        if (needsRebuild) {
+            while (select.firstChild) {
+                select.removeChild(select.firstChild);
+            }
+
+            var defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'Unassigned';
+            select.appendChild(defaultOption);
+
+            options.forEach(function (username) {
+                var option = document.createElement('option');
+                option.value = username;
+                option.textContent = username;
+                select.appendChild(option);
+            });
+        }
+
+        var desiredValue = selected && options.indexOf(selected) !== -1 ? selected : '';
+        select.value = desiredValue;
+        select.disabled = !!state.assign.isLoading;
+
+        status.textContent = '';
+        status.className = 'assign-status';
+        if (state.assign.isLoading) {
+            status.textContent = 'Loading assignees…';
+            status.classList.add('assign-status--loading');
+        } else if (state.assign.error) {
+            status.textContent = state.assign.error;
+            status.classList.add('assign-status--error');
+        } else if (state.assign.lastFetchKey && options.length === 0) {
+            status.textContent = 'No team members found for this webhook.';
+        }
+    }
+
+    function scheduleAssigneeFetch(force) {
+        if (assignFetchTimeout) {
+            clearTimeout(assignFetchTimeout);
+        }
+
+        var endpoint = deriveMembersEndpoint(state.webhookURL);
+        if (!endpoint) {
+            return;
+        }
+
+        assignFetchTimeout = setTimeout(function () {
+            fetchAssignees(force);
+            assignFetchTimeout = null;
+        }, 400);
+    }
+
+    function fetchAssignees(force) {
+        var endpoint = deriveMembersEndpoint(state.webhookURL);
+        if (!endpoint) {
+            return;
+        }
+
+        if (!force && state.assign.lastFetchKey === endpoint && state.assign.options.length && !state.assign.error) {
+            return;
+        }
+
+        var requestId = state.assign.requestId + 1;
+        state.assign.requestId = requestId;
+        state.assign.isLoading = true;
+        state.assign.error = '';
+        renderAssignControls();
+
+        fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ team: 'ios', whtype: 'get_members' })
+        })
+            .then(function (response) {
+                if (state.assign.requestId !== requestId) {
+                    return null;
+                }
+                return response.json().catch(function () {
+                    return null;
+                });
+            })
+            .then(function (json) {
+                if (state.assign.requestId !== requestId) {
+                    return;
+                }
+
+                state.assign.isLoading = false;
+
+                if (json && json.code === 200 && Array.isArray(json.data)) {
+                    var usernames = [];
+                    json.data.forEach(function (member) {
+                        var username = member && typeof member.username === 'string' ? member.username.trim() : '';
+                        if (username && usernames.indexOf(username) === -1) {
+                            usernames.push(username);
+                        }
+                    });
+                    var previousSelection = state.assign.selected;
+                    state.assign.options = usernames;
+                    state.assign.error = '';
+                    state.assign.lastFetchKey = endpoint;
+                    if (previousSelection && usernames.indexOf(previousSelection) === -1) {
+                        state.assign.selected = null;
+                        postMessage({ action: 'updateAssignee', username: null });
+                    }
+                } else {
+                    var message = (json && typeof json.message === 'string' && json.message.trim()) ? json.message.trim() : 'Unable to load team members.';
+                    state.assign.options = [];
+                    state.assign.error = message;
+                    state.assign.lastFetchKey = null;
+                }
+
+                renderAssignControls();
+            })
+            .catch(function () {
+                if (state.assign.requestId !== requestId) {
+                    return;
+                }
+                state.assign.isLoading = false;
+                state.assign.options = [];
+                state.assign.error = 'Unable to load team members.';
+                state.assign.lastFetchKey = null;
+                renderAssignControls();
+            });
+    }
 
     function postMessage(message) {
         if (!window.webkit || !window.webkit.messageHandlers) {
@@ -194,6 +387,14 @@
         var previous = state.webhookURL;
         state.webhookURL = trimmed;
 
+        if (previous !== trimmed) {
+            if (!trimmed) {
+                resetAssignState(true);
+            } else {
+                scheduleAssigneeFetch(true);
+            }
+        }
+
         if (previous === trimmed) {
             return;
         }
@@ -204,12 +405,64 @@
         });
     };
 
+    window.updateAssignee = function () {
+        var select = document.getElementById('assigneeSelect');
+        if (!select) {
+            return;
+        }
+        var value = typeof select.value === 'string' ? select.value.trim() : '';
+        var username = value ? value : null;
+        state.assign.selected = username;
+        renderAssignControls();
+        postMessage({
+            action: 'updateAssignee',
+            username: username
+        });
+    };
+
+    window.setInitialAssignee = function (username) {
+        var value = typeof username === 'string' ? username.trim() : '';
+        state.assign.selected = value ? value : null;
+        renderAssignControls();
+    };
+
+    window.updateIssueNumber = function () {
+        var field = document.getElementById('issueNumberInput');
+        if (!field) {
+            return;
+        }
+        var value = typeof field.value === 'string' ? field.value : '';
+        var sanitized = value.replace(/[^0-9]/g, '');
+        if (sanitized !== value) {
+            field.value = sanitized;
+        }
+        state.issueNumber = sanitized;
+        postMessage({
+            action: 'updateIssueNumber',
+            issueNumber: sanitized.length ? parseInt(sanitized, 10) : null
+        });
+    };
+
+    window.setInitialIssueNumber = function (value) {
+        var numericString = '';
+        if (typeof value === 'number' && isFinite(value)) {
+            numericString = Math.max(0, Math.floor(value)).toString();
+        } else if (typeof value === 'string') {
+            numericString = value.replace(/[^0-9]/g, '');
+        }
+        state.issueNumber = numericString;
+        var field = document.getElementById('issueNumberInput');
+        if (field) {
+            field.value = numericString;
+        }
+    };
+
     window.onGitLabAuthReady = function (payload) {
         payload = payload || {};
         state.gitlab.isAuthenticated = !!payload.isAuthenticated;
         state.gitlab.requiresLogin = !!payload.requiresLogin;
         state.gitlab.isLoading = !!payload.isLoading;
-    state.gitlab.username = typeof payload.username === 'string' && payload.username.length ? payload.username : null;
+        state.gitlab.username = typeof payload.username === 'string' && payload.username.length ? payload.username : null;
         state.gitlab.error = payload.error ? String(payload.error) : '';
         state.gitlab.available = state.gitlab.requiresLogin || state.gitlab.isAuthenticated || !!state.gitlab.error || state.gitlab.isLoading;
         updateGitLabSection();
@@ -527,6 +780,7 @@
     document.addEventListener('DOMContentLoaded', function () {
         updateSystemInfo();
         updateGitLabSection();
+        renderAssignControls();
     });
 
     document.addEventListener('keydown', function (event) {
