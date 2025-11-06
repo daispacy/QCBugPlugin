@@ -330,16 +330,24 @@
 
         #gitlabSection {
             display: none;
+            margin-bottom: 16px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: #f2f4ff;
+            border: 1px solid rgba(27, 77, 216, 0.12);
         }
 
-        .section--compact {
-            max-width: 360px;
-            margin: 0 auto 20px auto;
+        .gitlab-subpanel-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #1d1d1f;
         }
 
-        .section--compact h2 {
-            font-size: 16px;
-            margin-bottom: 12px;
+        .gitlab-subpanel-header span:last-child {
+            margin-left: 0;
         }
 
         .gitlab-row {
@@ -348,6 +356,7 @@
             justify-content: space-between;
             gap: 12px;
             flex-wrap: wrap;
+            margin-top: 10px;
         }
 
         .gitlab-status {
@@ -394,6 +403,7 @@
         .gitlab-hint {
             font-size: 12px;
             margin-top: 6px;
+            color: #4a4a4f;
         }
 
         .info-grid {
@@ -449,18 +459,20 @@
 </head>
 <body>
     <div class="container">
-        <div class="section section--compact" id="gitlabSection">
-            <h2>🔐 GitLab</h2>
-            <div class="gitlab-row">
-                <div class="gitlab-status" id="gitlabStatus">GitLab integration unavailable</div>
-                <button type="button" id="gitlabLoginButton" class="gitlab-button" onclick="triggerGitLabLogin()">Log in with GitLab</button>
-            </div>
-            <div class="gitlab-error" id="gitlabError"></div>
-            <p class="field-hint gitlab-hint">Connect your GitLab account to include project metadata with this report.</p>
-        </div>
-
         <div class="section">
             <h2>📝 Bug Description</h2>
+            <div class="gitlab-subpanel" id="gitlabSection">
+                <div class="gitlab-subpanel-header">
+                    <span>🔐</span>
+                    <span>GitLab</span>
+                </div>
+                <div class="gitlab-row">
+                    <div class="gitlab-status" id="gitlabStatus">GitLab integration unavailable</div>
+                    <button type="button" id="gitlabLoginButton" class="gitlab-button" onclick="triggerGitLabLogin()">Log in with GitLab</button>
+                </div>
+                <div class="gitlab-error" id="gitlabError"></div>
+                <p class="field-hint gitlab-hint">Connect your GitLab account to include project metadata with this report.</p>
+            </div>
             <textarea id="bugDescription" placeholder="Describe the bug you encountered..." oninput="updateDescription()"></textarea>
         </div>
 

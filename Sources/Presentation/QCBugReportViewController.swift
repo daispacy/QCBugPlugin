@@ -12,7 +12,7 @@ import WebKit
 
 enum GitLabDefaults {
     static let jwtKey = "com.qcbugplugin.gitlab.jwt"
-    static let userIdKey = "com.qcbugplugin.gitlab.userid"
+    static let usernameKey = "com.qcbugplugin.gitlab.username"
 }
 
 /// Delegate protocol for bug report view controller
@@ -40,7 +40,7 @@ public final class QCBugReportViewController: UIViewController {
     var didInjectGitLabCredentials = false
     var pendingGitLabCredentialScript: String?
     var gitLabJWT: String?
-    var gitLabUserId: Int?
+    var gitLabUsername: String?
     var isGitLabLoginInProgress = false
     var shouldSubmitAfterGitLabLogin = false
     
@@ -64,9 +64,7 @@ public final class QCBugReportViewController: UIViewController {
         self.webhookURL = configuration?.webhookURL ?? ""
         let defaults = UserDefaults.standard
         self.gitLabJWT = defaults.string(forKey: GitLabDefaults.jwtKey)
-        if let storedUserId = defaults.object(forKey: GitLabDefaults.userIdKey) as? Int {
-            self.gitLabUserId = storedUserId
-        }
+        self.gitLabUsername = defaults.string(forKey: GitLabDefaults.usernameKey)
         if let injectedProvider = gitLabAuthProvider {
             self.gitLabAuthProvider = injectedProvider
         } else if let gitLabConfig = configuration?.gitLabAppConfig {
@@ -208,7 +206,7 @@ public final class QCBugReportViewController: UIViewController {
             emitGitLabState(
                 token: nil,
                 header: nil,
-                userId: nil,
+                username: nil,
                 requiresLogin: false,
                 isLoading: false,
                 error: "GitLab integration is not configured."
@@ -226,7 +224,7 @@ public final class QCBugReportViewController: UIViewController {
         emitGitLabState(
             token: gitLabJWT,
             header: gitLabJWT.map { "Bearer \($0)" },
-            userId: gitLabUserId,
+            username: gitLabUsername,
             requiresLogin: false,
             isLoading: true,
             error: nil
@@ -239,16 +237,16 @@ public final class QCBugReportViewController: UIViewController {
             switch result {
             case .success(let authorization):
                 self.gitLabJWT = authorization.jwt
-                self.gitLabUserId = authorization.userId
+                self.gitLabUsername = authorization.username
                 self.persistGitLabCredentials(
                     token: authorization.jwt,
-                    userId: authorization.userId
+                    username: authorization.username
                 )
                 self.didInjectGitLabCredentials = false
                 self.emitGitLabState(
                     token: authorization.jwt,
                     header: authorization.authorizationHeader.trimmingCharacters(in: .whitespacesAndNewlines),
-                    userId: authorization.userId,
+                    username: authorization.username,
                     requiresLogin: false,
                     isLoading: false,
                     error: nil
@@ -262,7 +260,7 @@ public final class QCBugReportViewController: UIViewController {
 
             case .failure(let error):
                 self.gitLabJWT = nil
-                self.gitLabUserId = nil
+                self.gitLabUsername = nil
                 self.clearStoredGitLabCredentials()
                 if triggeredBySubmit {
                     self.shouldSubmitAfterGitLabLogin = false
@@ -286,7 +284,7 @@ public final class QCBugReportViewController: UIViewController {
                 self.emitGitLabState(
                     token: nil,
                     header: nil,
-                    userId: nil,
+                    username: nil,
                     requiresLogin: requiresLogin,
                     isLoading: false,
                     error: errorMessage
@@ -312,14 +310,14 @@ public final class QCBugReportViewController: UIViewController {
         QCBugPluginManager.shared.invalidateGitLabSession()
 
         gitLabJWT = nil
-        gitLabUserId = nil
+        gitLabUsername = nil
 
         clearStoredGitLabCredentials()
 
         emitGitLabState(
             token: nil,
             header: nil,
-            userId: nil,
+            username: nil,
             requiresLogin: true,
             isLoading: false,
             error: nil
