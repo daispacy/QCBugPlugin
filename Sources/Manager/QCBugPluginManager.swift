@@ -164,6 +164,14 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
 
         print("⏹️ QCBugPlugin: Stopped tracking user interactions")
     }
+
+    func invalidateGitLabSession() {
+        gitLabAuthService?.clearCache()
+
+        if let apiService = bugReportService as? BugReportAPIService {
+            apiService.resetGitLabSession()
+        }
+    }
     
     public func presentBugReport() {
         guard isConfigured else {
@@ -192,7 +200,8 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
                 bugReportVC = QCBugReportViewController(
                     actionHistory: actionHistory,
                     screenRecorder: self.screenRecorder,
-                    configuration: self.configuration
+                    configuration: self.configuration,
+                    gitLabAuthProvider: self.gitLabAuthService
                 )
                 bugReportVC.delegate = self
                 self.sessionBugReportViewController = bugReportVC

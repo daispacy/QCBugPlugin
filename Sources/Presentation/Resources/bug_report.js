@@ -9,6 +9,7 @@
             isLoading: false,
             userId: null,
             username: null,
+            avatarUrl: null,
             error: '',
             available: false
         }
@@ -68,8 +69,14 @@
         var statusLabel = document.getElementById('gitlabStatus');
         var button = document.getElementById('gitlabLoginButton');
         var errorLabel = document.getElementById('gitlabError');
+        var profile = document.getElementById('gitlabProfile');
+        var avatarWrapper = document.getElementById('gitlabAvatarWrapper');
+        var avatarImg = document.getElementById('gitlabAvatar');
+        var avatarFallback = document.getElementById('gitlabAvatarFallback');
+        var logoutButton = document.getElementById('gitlabLogoutButton');
+        var usernameLabel = document.getElementById('gitlabUsername');
 
-        if (!section || !statusLabel || !button || !errorLabel) {
+        if (!section || !statusLabel || !button || !errorLabel || !profile || !avatarWrapper || !avatarImg || !avatarFallback || !logoutButton || !usernameLabel) {
             return;
         }
 
@@ -80,17 +87,44 @@
         }
 
         section.style.display = 'block';
-        var buttonLabel = button.textContent;
+        var buttonLabel = button.textContent || 'Log in with GitLab';
+
+        avatarWrapper.classList.remove('has-image', 'show-fallback');
+        avatarImg.style.display = 'none';
+        avatarFallback.textContent = '';
+        profile.style.display = 'none';
+        logoutButton.style.display = 'none';
+        logoutButton.disabled = false;
+    usernameLabel.textContent = '';
 
         if (gitlab.isLoading) {
-            statusLabel.textContent = 'Connecting to GitLab…';
+            statusLabel.textContent = 'Updating GitLab session…';
             button.disabled = true;
             buttonLabel = 'Opening…';
+            logoutButton.disabled = true;
+            if (gitlab.isAuthenticated && gitlab.username) {
+                usernameLabel.textContent = '@' + gitlab.username;
+                profile.style.display = 'flex';
+            }
         } else if (gitlab.isAuthenticated) {
             var userLabel = gitlab.username ? ('@' + gitlab.username) : (gitlab.userId ? ('#' + gitlab.userId) : 'account');
-            statusLabel.textContent = 'Connected to GitLab ' + userLabel;
+            statusLabel.textContent = 'Connected to GitLab';
+            usernameLabel.textContent = userLabel;
+            profile.style.display = 'flex';
+
+            if (gitlab.avatarUrl) {
+                avatarImg.src = gitlab.avatarUrl;
+                avatarImg.style.display = 'block';
+                avatarWrapper.classList.add('has-image');
+            } else {
+                var fallbackInitial = gitlab.username ? gitlab.username.charAt(0) : (gitlab.userId ? String(gitlab.userId).charAt(0) : '?');
+                avatarFallback.textContent = (fallbackInitial || '?').toUpperCase();
+                avatarWrapper.classList.add('show-fallback');
+            }
+
             button.disabled = false;
             buttonLabel = 'Refresh GitLab Session';
+            logoutButton.style.display = 'inline-flex';
         } else if (gitlab.requiresLogin) {
             statusLabel.textContent = 'Not connected to GitLab';
             button.disabled = false;
@@ -102,6 +136,7 @@
         }
 
         button.textContent = buttonLabel;
+        logoutButton.disabled = logoutButton.disabled || gitlab.isLoading;
         errorLabel.textContent = gitlab.error ? String(gitlab.error) : '';
         errorLabel.style.display = errorLabel.textContent ? 'block' : 'none';
     }
@@ -115,6 +150,19 @@
         state.gitlab.isLoading = true;
         state.gitlab.error = '';
         state.gitlab.requiresLogin = true;
+        updateGitLabSection();
+    };
+
+    window.logoutGitLab = function () {
+        if (!postMessage({ action: 'gitlabLogout' })) {
+            return;
+        }
+
+        state.gitlab.isLoading = true;
+        state.gitlab.error = '';
+        state.gitlab.isAuthenticated = false;
+        state.gitlab.requiresLogin = true;
+        state.gitlab.avatarUrl = null;
         updateGitLabSection();
     };
 
@@ -189,6 +237,7 @@
         state.gitlab.isLoading = !!payload.isLoading;
         state.gitlab.userId = typeof payload.userId === 'number' ? payload.userId : null;
         state.gitlab.username = typeof payload.username === 'string' && payload.username.length ? payload.username : null;
+        state.gitlab.avatarUrl = typeof payload.avatarUrl === 'string' && payload.avatarUrl.length ? payload.avatarUrl : null;
         state.gitlab.error = payload.error ? String(payload.error) : '';
         state.gitlab.available = state.gitlab.requiresLogin || state.gitlab.isAuthenticated || !!state.gitlab.error || state.gitlab.isLoading;
         updateGitLabSection();

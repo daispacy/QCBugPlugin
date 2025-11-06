@@ -166,6 +166,10 @@ public final class BugReportAPIService: BugReportProtocol {
         }
     }
 
+    public func resetGitLabSession() {
+        cachedGitLabCredentialsForSession = nil
+    }
+
     // MARK: - BugReportProtocol Implementation
 
     public func submitBugReport(_ report: BugReport, completion: @escaping (Result<String, BugReportError>) -> Void) {

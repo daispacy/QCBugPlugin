@@ -332,40 +332,139 @@
             display: none;
         }
 
+        .section--compact {
+            max-width: 360px;
+            margin: 0 auto 20px auto;
+        }
+
+        .section--compact h2 {
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+
         .gitlab-row {
             display: flex;
             align-items: center;
+            justify-content: space-between;
             gap: 12px;
             flex-wrap: wrap;
         }
 
-        .gitlab-status {
-            font-size: 14px;
-            color: #1d1d1f;
+        .gitlab-status-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
             flex: 1;
-            min-width: 180px;
+            min-width: 200px;
+        }
+
+        .gitlab-status {
+            font-size: 13px;
+            color: #1d1d1f;
+        }
+
+        .gitlab-profile {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 10px;
+            border-radius: 12px;
+            background: #f1f3ff;
+        }
+
+        .gitlab-avatar {
+            position: relative;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            overflow: hidden;
+            flex-shrink: 0;
+            background: #dfe3ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 600;
+            color: #1b1b1f;
+        }
+
+        .gitlab-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+        }
+
+        .gitlab-avatar-fallback {
+            display: none;
+        }
+
+        .gitlab-avatar.has-image img {
+            display: block;
+        }
+
+        .gitlab-avatar.has-image .gitlab-avatar-fallback {
+            display: none;
+        }
+
+        .gitlab-avatar.show-fallback .gitlab-avatar-fallback {
+            display: block;
+        }
+
+        .gitlab-profile-meta {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .gitlab-username {
+            font-size: 13px;
+            color: #1b1b1f;
+            font-weight: 600;
+        }
+
+        .gitlab-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .gitlab-button {
-            padding: 10px 16px;
+            padding: 8px 14px;
             border-radius: 10px;
             border: none;
             background: #1b4dd8;
             color: #ffffff;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             transition: background 0.2s ease, transform 0.1s ease;
         }
 
+        .gitlab-button--secondary {
+            background: transparent;
+            color: #1b4dd8;
+            border: 1px solid rgba(27, 77, 216, 0.2);
+        }
+
         .gitlab-button:disabled {
             background: #9fa7c1;
+            color: #ffffff;
             cursor: not-allowed;
             transform: none;
         }
 
+        .gitlab-button.gitlab-button--secondary:disabled {
+            border-color: rgba(159, 167, 193, 0.4);
+            color: #9fa7c1;
+            background: transparent;
+        }
+
         .gitlab-button:not(:disabled):hover {
             background: #275eff;
+        }
+
+        .gitlab-button.gitlab-button--secondary:not(:disabled):hover {
+            background: rgba(27, 77, 216, 0.08);
         }
 
         .gitlab-button:not(:disabled):active {
@@ -374,9 +473,14 @@
 
         .gitlab-error {
             margin-top: 8px;
-            font-size: 13px;
+            font-size: 12px;
             color: #d70015;
             display: none;
+        }
+
+        .gitlab-hint {
+            font-size: 12px;
+            margin-top: 6px;
         }
 
         .info-grid {
@@ -432,14 +536,28 @@
 </head>
 <body>
     <div class="container">
-        <div class="section" id="gitlabSection">
+        <div class="section section--compact" id="gitlabSection">
             <h2>🔐 GitLab</h2>
             <div class="gitlab-row">
-                <div class="gitlab-status" id="gitlabStatus">GitLab integration unavailable</div>
-                <button type="button" id="gitlabLoginButton" class="gitlab-button" onclick="triggerGitLabLogin()">Log in with GitLab</button>
+                <div class="gitlab-status-wrapper">
+                    <div class="gitlab-status" id="gitlabStatus">GitLab integration unavailable</div>
+                    <div class="gitlab-profile" id="gitlabProfile">
+                        <div class="gitlab-avatar" id="gitlabAvatarWrapper">
+                            <img id="gitlabAvatar" alt="GitLab avatar" />
+                            <span id="gitlabAvatarFallback" class="gitlab-avatar-fallback">GL</span>
+                        </div>
+                        <div class="gitlab-profile-meta">
+                            <span class="gitlab-username" id="gitlabUsername"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="gitlab-actions">
+                    <button type="button" id="gitlabLoginButton" class="gitlab-button" onclick="triggerGitLabLogin()">Log in with GitLab</button>
+                    <button type="button" id="gitlabLogoutButton" class="gitlab-button gitlab-button--secondary" onclick="logoutGitLab()" style="display: none;">Logout</button>
+                </div>
             </div>
             <div class="gitlab-error" id="gitlabError"></div>
-            <p class="field-hint">Connect your GitLab account to include project metadata with this report.</p>
+            <p class="field-hint gitlab-hint">Connect your GitLab account to include project metadata with this report.</p>
         </div>
 
         <div class="section">
