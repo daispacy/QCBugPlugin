@@ -82,7 +82,8 @@ public final class GitLabAuthService: GitLabAuthProviding {
             let authorization = GitLabAuthorization(
                 authorizationHeader: cachedJWT.header,
                 jwt: cachedJWT.jwt,
-                username: cachedJWT.username
+                username: cachedJWT.username,
+                project: configuration.project
             )
             DispatchQueue.main.async {
                 completion(.success(authorization))
@@ -107,7 +108,8 @@ public final class GitLabAuthService: GitLabAuthProviding {
             let authorization = GitLabAuthorization(
                 authorizationHeader: cachedJWT.header,
                 jwt: cachedJWT.jwt,
-                username: cachedJWT.username
+                username: cachedJWT.username,
+                project: configuration.project
             )
             DispatchQueue.main.async {
                 completion(.success(authorization))
@@ -321,7 +323,8 @@ public final class GitLabAuthService: GitLabAuthProviding {
                     let authorization = GitLabAuthorization(
                         authorizationHeader: cachedJWT.header,
                         jwt: cachedJWT.jwt,
-                        username: cachedJWT.username
+                        username: cachedJWT.username,
+                        project: self.configuration.project
                     )
                     completion(.success(authorization))
                 }

@@ -17,6 +17,7 @@
             requiresLogin: false,
             isLoading: false,
             username: null,
+            project: null,
             error: '',
             available: false
         }
@@ -68,6 +69,10 @@
 
         var options = Array.isArray(state.assign.options) ? state.assign.options.slice() : [];
         var selected = state.assign.selected;
+        var endpoint = deriveMembersEndpoint(state.webhookURL);
+        var hasEndpoint = !!endpoint;
+        var projectValue = typeof state.gitlab.project === 'string' ? state.gitlab.project.trim() : '';
+        var hasProject = projectValue.length > 0;
         if (selected && options.indexOf(selected) === -1) {
             options.unshift(selected);
         }
@@ -102,7 +107,7 @@
 
         var desiredValue = selected && options.indexOf(selected) !== -1 ? selected : '';
         select.value = desiredValue;
-        select.disabled = !!state.assign.isLoading;
+        select.disabled = !!state.assign.isLoading || !hasEndpoint || !hasProject;
 
         status.textContent = '';
         status.className = 'assign-status';
@@ -114,6 +119,10 @@
             status.classList.add('assign-status--error');
         } else if (state.assign.lastFetchKey && options.length === 0) {
             status.textContent = 'No team members found for this webhook.';
+        } else if (!hasEndpoint) {
+            status.textContent = 'Enter a webhook URL to load assignees.';
+        } else if (!hasProject) {
+            status.textContent = 'Set a GitLab project to load assignees.';
         }
     }
 
@@ -124,6 +133,11 @@
 
         var endpoint = deriveMembersEndpoint(state.webhookURL);
         if (!endpoint) {
+            return;
+        }
+
+        var projectValue = typeof state.gitlab.project === 'string' ? state.gitlab.project.trim() : '';
+        if (!projectValue.length) {
             return;
         }
 
@@ -139,7 +153,14 @@
             return;
         }
 
-        if (!force && state.assign.lastFetchKey === endpoint && state.assign.options.length && !state.assign.error) {
+        var projectValue = typeof state.gitlab.project === 'string' ? state.gitlab.project.trim() : '';
+        if (!projectValue.length) {
+            return;
+        }
+
+        var cacheKey = endpoint + '::' + projectValue;
+
+        if (!force && state.assign.lastFetchKey === cacheKey && state.assign.options.length && !state.assign.error) {
             return;
         }
 
@@ -149,12 +170,18 @@
         state.assign.error = '';
         renderAssignControls();
 
+        var payload = {
+            team: 'ios',
+            whtype: 'get_members',
+            project: projectValue
+        };
+
         fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ team: 'ios', whtype: 'get_members' })
+            body: JSON.stringify(payload)
         })
             .then(function (response) {
                 if (state.assign.requestId !== requestId) {
@@ -182,7 +209,7 @@
                     var previousSelection = state.assign.selected;
                     state.assign.options = usernames;
                     state.assign.error = '';
-                    state.assign.lastFetchKey = endpoint;
+                    state.assign.lastFetchKey = cacheKey;
                     if (previousSelection && usernames.indexOf(previousSelection) === -1) {
                         state.assign.selected = null;
                         postMessage({ action: 'updateAssignee', username: null });
@@ -386,6 +413,7 @@
         var trimmed = value.trim();
         var previous = state.webhookURL;
         state.webhookURL = trimmed;
+        renderAssignControls();
 
         if (previous !== trimmed) {
             if (!trimmed) {
@@ -463,9 +491,20 @@
         state.gitlab.requiresLogin = !!payload.requiresLogin;
         state.gitlab.isLoading = !!payload.isLoading;
         state.gitlab.username = typeof payload.username === 'string' && payload.username.length ? payload.username : null;
+        var previousProject = state.gitlab.project;
+        var projectValue = typeof payload.project === 'string' ? payload.project.trim() : '';
+        state.gitlab.project = projectValue.length ? projectValue : null;
         state.gitlab.error = payload.error ? String(payload.error) : '';
         state.gitlab.available = state.gitlab.requiresLogin || state.gitlab.isAuthenticated || !!state.gitlab.error || state.gitlab.isLoading;
         updateGitLabSection();
+
+        if (state.gitlab.project !== previousProject) {
+            if (state.gitlab.project) {
+                scheduleAssigneeFetch(true);
+            } else {
+                resetAssignState(true);
+            }
+        }
     };
 
     window.loadActionHistory = function (actions) {

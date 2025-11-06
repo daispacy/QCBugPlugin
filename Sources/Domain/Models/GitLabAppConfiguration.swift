@@ -18,6 +18,7 @@ public struct GitLabAppConfig {
     public let additionalClaims: [String: Any]
     public let signingKey: String
     public let redirectURI: URL?
+    public let project: String?
 
     public init(
         appId: String,
@@ -28,16 +29,22 @@ public struct GitLabAppConfig {
         scopes: [String] = ["api"],
         audience: String? = nil,
         jwtExpiration: TimeInterval = 300,
-        additionalClaims: [String: Any] = [:]
+        additionalClaims: [String: Any] = [:],
+        project: String? = nil
     ) {
         self.appId = appId
         self.secret = secret
         self.signingKey = signingKey
-    self.redirectURI = redirectURI
+        self.redirectURI = redirectURI
         self.baseURL = baseURL
         self.scopes = scopes
         self.audience = audience
         self.jwtExpiration = jwtExpiration
         self.additionalClaims = additionalClaims
+        if let rawProject = project?.trimmingCharacters(in: .whitespacesAndNewlines), !rawProject.isEmpty {
+            self.project = rawProject
+        } else {
+            self.project = nil
+        }
     }
 }

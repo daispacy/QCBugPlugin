@@ -25,7 +25,7 @@ public final class QCBugReportViewController: UIViewController {
     
     private var actionHistory: [UserAction]
     private let screenRecorder: ScreenRecordingProtocol?
-    private let configuration: QCBugPluginConfiguration?
+    let configuration: QCBugPluginConfiguration?
     
     var webView: WKWebView!
     var mediaAttachments: [MediaAttachment] = []
@@ -46,6 +46,7 @@ public final class QCBugReportViewController: UIViewController {
     private var webhookURL: String
     private var selectedAssigneeUsername: String?
     private var issueNumber: Int?
+    var gitLabProject: String?
     
     // MARK: - Initialization
     
@@ -58,10 +59,11 @@ public final class QCBugReportViewController: UIViewController {
         self.actionHistory = actionHistory
         self.screenRecorder = screenRecorder
         self.configuration = configuration
-        self.webhookURL = configuration?.webhookURL ?? ""
-        let sessionStore = GitLabSessionStore.shared
-        self.gitLabJWT = sessionStore.currentJWT()
-        self.gitLabUsername = sessionStore.currentUsername()
+    self.webhookURL = configuration?.webhookURL ?? ""
+    self.gitLabProject = Self.normalizedGitLabProject(from: configuration?.gitLabAppConfig?.project)
+    let sessionStore = GitLabSessionStore.shared
+    self.gitLabJWT = sessionStore.currentJWT()
+    self.gitLabUsername = sessionStore.currentUsername()
         if let injectedProvider = gitLabAuthProvider {
             self.gitLabAuthProvider = injectedProvider
         } else if let gitLabConfig = configuration?.gitLabAppConfig {
@@ -174,7 +176,7 @@ public final class QCBugReportViewController: UIViewController {
         let customData = configuration?.customData.compactMapValues { "\($0)" } ?? [:]
         let gitLabCredentials: GitLabCredentials? = {
             guard let token = gitLabJWT else { return nil }
-            return GitLabCredentials(pat: token)
+            return GitLabCredentials(pat: token, project: gitLabProject)
         }()
 
         return BugReport(
@@ -189,6 +191,7 @@ public final class QCBugReportViewController: UIViewController {
             networkInfo: NetworkInfo(),
             memoryInfo: MemoryInfo(),
             mediaAttachments: mediaAttachments,
+            gitLabProject: gitLabProject,
             assigneeUsername: selectedAssigneeUsername,
             issueNumber: issueNumber,
             gitLabCredentials: gitLabCredentials
@@ -238,6 +241,11 @@ public final class QCBugReportViewController: UIViewController {
                 self.gitLabJWT = authorization.jwt
                 self.gitLabUsername = authorization.username
                 let trimmedHeader = authorization.authorizationHeader.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let project = Self.normalizedGitLabProject(from: authorization.project) {
+                    self.gitLabProject = project
+                } else if self.gitLabProject == nil {
+                    self.gitLabProject = Self.normalizedGitLabProject(from: self.configuration?.gitLabAppConfig?.project)
+                }
                 self.didInjectGitLabCredentials = false
                 self.emitGitLabState(
                     token: authorization.jwt,
@@ -414,6 +422,13 @@ public final class QCBugReportViewController: UIViewController {
 
     internal func getSessionIssueNumber() -> Int? {
         return issueNumber
+    }
+
+    internal static func normalizedGitLabProject(from value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
     
     private func getCurrentScreenName() -> String? {

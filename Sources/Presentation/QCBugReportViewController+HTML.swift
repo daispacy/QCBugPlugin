@@ -105,6 +105,11 @@ extension QCBugReportViewController {
                 let jwt = authorization.jwt
                 self.gitLabJWT = jwt
                 self.gitLabUsername = authorization.username
+                if let project = QCBugReportViewController.normalizedGitLabProject(from: authorization.project) {
+                    self.gitLabProject = project
+                } else if self.gitLabProject == nil {
+                    self.gitLabProject = QCBugReportViewController.normalizedGitLabProject(from: self.configuration?.gitLabAppConfig?.project)
+                }
                 self.emitGitLabState(
                     token: jwt,
                     header: trimmedHeader,
@@ -201,6 +206,7 @@ extension QCBugReportViewController {
         let requiresLoginValue = requiresLogin ? "true" : "false"
         let isAuthenticatedValue = (!requiresLogin && token != nil) ? "true" : "false"
         let isLoadingValue = isLoading ? "true" : "false"
+        let projectValue = gitLabProject.map { "'\(sanitizeForJavaScript($0))'" } ?? "null"
 
         return """
         (function() {
@@ -209,6 +215,7 @@ extension QCBugReportViewController {
             window.qcBugGitLab.pat = \(tokenValue);
             window.qcBugGitLab.authorizationHeader = \(headerValue);
             window.qcBugGitLab.username = \(usernameValue);
+            window.qcBugGitLab.project = \(projectValue);
             window.qcBugGitLab.error = \(errorValue);
             window.qcBugGitLab.requiresLogin = \(requiresLoginValue);
             window.qcBugGitLab.isAuthenticated = \(isAuthenticatedValue);

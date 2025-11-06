@@ -13,11 +13,13 @@ public struct GitLabAuthorization {
     public let authorizationHeader: String
     public let jwt: String
     public let username: String?
+    public let project: String?
 
-    public init(authorizationHeader: String, jwt: String, username: String?) {
+    public init(authorizationHeader: String, jwt: String, username: String?, project: String? = nil) {
         self.authorizationHeader = authorizationHeader
         self.jwt = jwt
         self.username = username
+        self.project = project
     }
 }
 

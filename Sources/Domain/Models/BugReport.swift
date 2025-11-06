@@ -12,9 +12,11 @@ import UIKit
 /// GitLab credentials associated with a bug report submission
 public struct GitLabCredentials: Codable {
     public let pat: String
+    public let project: String?
 
-    public init(pat: String) {
+    public init(pat: String, project: String? = nil) {
         self.pat = pat
+        self.project = project
     }
 }
 
@@ -71,6 +73,9 @@ public struct BugReport: Codable {
     /// External issue tracker number associated with the bug
     public let issueNumber: Int?
 
+    /// GitLab project path or identifier associated with this submission
+    public let gitLabProject: String?
+
     public let whtype: String
     public let gitLabCredentials: GitLabCredentials?
 
@@ -88,6 +93,7 @@ public struct BugReport: Codable {
         networkInfo: NetworkInfo? = nil,
         memoryInfo: MemoryInfo? = nil,
         mediaAttachments: [MediaAttachment] = [],
+        gitLabProject: String? = nil,
         assigneeUsername: String? = nil,
         issueNumber: Int? = nil,
         whtype: String = "report_issue",
@@ -108,6 +114,7 @@ public struct BugReport: Codable {
         self.networkInfo = networkInfo
         self.memoryInfo = memoryInfo
         self.mediaAttachments = mediaAttachments
+        self.gitLabProject = gitLabProject
         self.assigneeUsername = assigneeUsername
         self.issueNumber = issueNumber
         self.whtype = whtype

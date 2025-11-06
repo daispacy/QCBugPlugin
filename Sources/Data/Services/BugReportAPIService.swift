@@ -52,15 +52,18 @@ public final class BugReportAPIService: BugReportProtocol {
             let currentScreen: String?
             let networkInfo: NetworkInfo?
             let memoryInfo: MemoryInfo?
+            let gitLabProject: String?
             let assigneeUsername: String?
             let issueNumber: Int?
         }
 
         struct GitLabPayload: Encodable {
             let pat: String
+            let project: String?
 
             init(credentials: GitLabCredentials) {
                 self.pat = credentials.pat
+                self.project = credentials.project
             }
         }
 
@@ -95,6 +98,7 @@ public final class BugReportAPIService: BugReportProtocol {
                 currentScreen: report.currentScreen,
                 networkInfo: report.networkInfo,
                 memoryInfo: report.memoryInfo,
+                gitLabProject: report.gitLabProject,
                 assigneeUsername: report.assigneeUsername,
                 issueNumber: report.issueNumber
             )
@@ -253,7 +257,10 @@ public final class BugReportAPIService: BugReportProtocol {
                         }
 
                     case .success(let payload):
-                        let gitLabCredentials = authorization.map { GitLabCredentials(pat: $0.jwt) } ?? self.cachedGitLabCredentialsForSession
+                        let gitLabCredentials = authorization.map {
+                            let project = $0.project ?? self.cachedGitLabCredentialsForSession?.project
+                            return GitLabCredentials(pat: $0.jwt, project: project)
+                        } ?? self.cachedGitLabCredentialsForSession
                         if let credentials = gitLabCredentials {
                             self.cachedGitLabCredentialsForSession = credentials
                         }
@@ -380,7 +387,8 @@ public final class BugReportAPIService: BugReportProtocol {
             return nil
         }
 
-        return GitLabCredentials(pat: authorization.jwt)
+        let project = report.gitLabProject ?? authorization.project
+        return GitLabCredentials(pat: authorization.jwt, project: project)
     }
 
     private func preparePayload(
