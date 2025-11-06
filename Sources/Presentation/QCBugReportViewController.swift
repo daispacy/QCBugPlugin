@@ -13,8 +13,6 @@ import WebKit
 enum GitLabDefaults {
     static let jwtKey = "com.qcbugplugin.gitlab.jwt"
     static let userIdKey = "com.qcbugplugin.gitlab.userid"
-    static let usernameKey = "com.qcbugplugin.gitlab.username"
-    static let avatarURLKey = "com.qcbugplugin.gitlab.avatar"
 }
 
 /// Delegate protocol for bug report view controller
@@ -43,8 +41,6 @@ public final class QCBugReportViewController: UIViewController {
     var pendingGitLabCredentialScript: String?
     var gitLabJWT: String?
     var gitLabUserId: Int?
-    var gitLabUsername: String?
-    var gitLabAvatarURL: String?
     var isGitLabLoginInProgress = false
     var shouldSubmitAfterGitLabLogin = false
     
@@ -71,8 +67,6 @@ public final class QCBugReportViewController: UIViewController {
         if let storedUserId = defaults.object(forKey: GitLabDefaults.userIdKey) as? Int {
             self.gitLabUserId = storedUserId
         }
-        self.gitLabUsername = defaults.string(forKey: GitLabDefaults.usernameKey)
-        self.gitLabAvatarURL = defaults.string(forKey: GitLabDefaults.avatarURLKey)
         if let injectedProvider = gitLabAuthProvider {
             self.gitLabAuthProvider = injectedProvider
         } else if let gitLabConfig = configuration?.gitLabAppConfig {
@@ -215,8 +209,6 @@ public final class QCBugReportViewController: UIViewController {
                 token: nil,
                 header: nil,
                 userId: nil,
-                username: nil,
-                avatarURL: nil,
                 requiresLogin: false,
                 isLoading: false,
                 error: "GitLab integration is not configured."
@@ -235,8 +227,6 @@ public final class QCBugReportViewController: UIViewController {
             token: gitLabJWT,
             header: gitLabJWT.map { "Bearer \($0)" },
             userId: gitLabUserId,
-            username: gitLabUsername,
-            avatarURL: gitLabAvatarURL,
             requiresLogin: false,
             isLoading: true,
             error: nil
@@ -250,21 +240,15 @@ public final class QCBugReportViewController: UIViewController {
             case .success(let authorization):
                 self.gitLabJWT = authorization.jwt
                 self.gitLabUserId = authorization.userId
-                self.gitLabUsername = authorization.username
-                self.gitLabAvatarURL = authorization.avatarURL
                 self.persistGitLabCredentials(
                     token: authorization.jwt,
-                    userId: authorization.userId,
-                    username: authorization.username,
-                    avatarURL: authorization.avatarURL
+                    userId: authorization.userId
                 )
                 self.didInjectGitLabCredentials = false
                 self.emitGitLabState(
                     token: authorization.jwt,
                     header: authorization.authorizationHeader.trimmingCharacters(in: .whitespacesAndNewlines),
                     userId: authorization.userId,
-                    username: authorization.username,
-                    avatarURL: authorization.avatarURL,
                     requiresLogin: false,
                     isLoading: false,
                     error: nil
@@ -279,8 +263,6 @@ public final class QCBugReportViewController: UIViewController {
             case .failure(let error):
                 self.gitLabJWT = nil
                 self.gitLabUserId = nil
-                self.gitLabUsername = nil
-                self.gitLabAvatarURL = nil
                 self.clearStoredGitLabCredentials()
                 if triggeredBySubmit {
                     self.shouldSubmitAfterGitLabLogin = false
@@ -305,8 +287,6 @@ public final class QCBugReportViewController: UIViewController {
                     token: nil,
                     header: nil,
                     userId: nil,
-                    username: nil,
-                    avatarURL: nil,
                     requiresLogin: requiresLogin,
                     isLoading: false,
                     error: errorMessage
@@ -333,8 +313,6 @@ public final class QCBugReportViewController: UIViewController {
 
         gitLabJWT = nil
         gitLabUserId = nil
-        gitLabUsername = nil
-        gitLabAvatarURL = nil
 
         clearStoredGitLabCredentials()
 
@@ -342,8 +320,6 @@ public final class QCBugReportViewController: UIViewController {
             token: nil,
             header: nil,
             userId: nil,
-            username: nil,
-            avatarURL: nil,
             requiresLogin: true,
             isLoading: false,
             error: nil

@@ -17,8 +17,6 @@ public final class GitLabAuthService: GitLabAuthProviding {
         let value: String
         let expiration: Date
         let userId: Int
-        let username: String?
-        let avatarURL: String?
     }
 
     private struct CachedJWT {
@@ -26,8 +24,6 @@ public final class GitLabAuthService: GitLabAuthProviding {
         let jwt: String
         let expiration: Date
         let userId: Int
-        let username: String?
-        let avatarURL: String?
     }
 
     private struct AccessTokenResponse: Decodable {
@@ -46,14 +42,6 @@ public final class GitLabAuthService: GitLabAuthProviding {
 
     private struct GitLabUserResponse: Decodable {
         let id: Int
-        let username: String?
-        let avatarURL: String?
-
-        enum CodingKeys: String, CodingKey {
-            case id
-            case username
-            case avatarURL = "avatar_url"
-        }
     }
 
     private let configuration: GitLabAppConfig
@@ -80,9 +68,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
             let authorization = GitLabAuthorization(
                 authorizationHeader: cachedJWT.header,
                 jwt: cachedJWT.jwt,
-                userId: cachedJWT.userId,
-                username: cachedJWT.username,
-                avatarURL: cachedJWT.avatarURL
+                userId: cachedJWT.userId
             )
             DispatchQueue.main.async {
                 completion(.success(authorization))
@@ -107,9 +93,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
             let authorization = GitLabAuthorization(
                 authorizationHeader: cachedJWT.header,
                 jwt: cachedJWT.jwt,
-                userId: cachedJWT.userId,
-                username: cachedJWT.username,
-                avatarURL: cachedJWT.avatarURL
+                userId: cachedJWT.userId
             )
             DispatchQueue.main.async {
                 completion(.success(authorization))
@@ -322,9 +306,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
                     let authorization = GitLabAuthorization(
                         authorizationHeader: cachedJWT.header,
                         jwt: cachedJWT.jwt,
-                        userId: cachedJWT.userId,
-                        username: cachedJWT.username,
-                        avatarURL: cachedJWT.avatarURL
+                        userId: cachedJWT.userId
                     )
                     completion(.success(authorization))
                 }
@@ -401,9 +383,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
                         let cachedToken = CachedAccessToken(
                             value: response.accessToken,
                             expiration: expiry,
-                            userId: userProfile.id,
-                            username: userProfile.username,
-                            avatarURL: userProfile.avatarURL
+                            userId: userProfile.id
                         )
                         self.storeCachedAccessToken(cachedToken)
                         completion(.success(cachedToken))
@@ -528,9 +508,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
                 header: "Bearer \(jwt)",
                 jwt: jwt,
                 expiration: expiration,
-                userId: token.userId,
-                username: token.username,
-                avatarURL: token.avatarURL
+                userId: token.userId
             )
             print("✅ GitLabAuthService: Generated GitLab session JWT expiring at \(expiration)")
             return .success(cachedJWT)

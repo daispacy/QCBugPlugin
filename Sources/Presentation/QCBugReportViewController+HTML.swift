@@ -63,8 +63,6 @@ extension QCBugReportViewController {
                     token: nil,
                     header: nil,
                     userId: nil,
-                        username: nil,
-                        avatarURL: nil,
                     requiresLogin: false,
                     isLoading: false,
                     error: nil
@@ -76,8 +74,6 @@ extension QCBugReportViewController {
                 token: token,
                 header: headerValue,
                 userId: gitLabUserId,
-                username: gitLabUsername,
-                avatarURL: gitLabAvatarURL,
                 requiresLogin: false,
                 isLoading: false,
                 error: nil
@@ -94,8 +90,6 @@ extension QCBugReportViewController {
             token: gitLabJWT,
             header: gitLabJWT.map { "Bearer \($0)" },
             userId: gitLabUserId,
-            username: gitLabUsername,
-            avatarURL: gitLabAvatarURL,
             requiresLogin: false,
             isLoading: true,
             error: nil
@@ -111,20 +105,14 @@ extension QCBugReportViewController {
                 let jwt = authorization.jwt
                 self.gitLabJWT = jwt
                 self.gitLabUserId = authorization.userId
-                self.gitLabUsername = authorization.username
-                self.gitLabAvatarURL = authorization.avatarURL
                 self.persistGitLabCredentials(
                     token: jwt,
-                    userId: authorization.userId,
-                    username: authorization.username,
-                    avatarURL: authorization.avatarURL
+                    userId: authorization.userId
                 )
                 self.emitGitLabState(
                     token: jwt,
                     header: trimmedHeader,
                     userId: authorization.userId,
-                        username: authorization.username,
-                        avatarURL: authorization.avatarURL,
                     requiresLogin: false,
                     isLoading: false,
                     error: nil
@@ -133,8 +121,6 @@ extension QCBugReportViewController {
             case .failure(let error):
                 self.gitLabJWT = nil
                 self.gitLabUserId = nil
-                self.gitLabUsername = nil
-                self.gitLabAvatarURL = nil
                 self.clearStoredGitLabCredentials()
                 let requiresLogin: Bool
                 switch error {
@@ -148,8 +134,6 @@ extension QCBugReportViewController {
                     token: nil,
                     header: nil,
                     userId: nil,
-                        username: nil,
-                        avatarURL: nil,
                     requiresLogin: requiresLogin,
                     isLoading: false,
                     error: errorMessage
@@ -189,8 +173,6 @@ extension QCBugReportViewController {
         token: String?,
         header: String?,
         userId: Int?,
-        username: String?,
-        avatarURL: String?,
         requiresLogin: Bool,
         isLoading: Bool,
         error: String?
@@ -199,8 +181,6 @@ extension QCBugReportViewController {
             token: token,
             header: header,
             userId: userId,
-            username: username,
-            avatarURL: avatarURL,
             error: error,
             requiresLogin: requiresLogin,
             isLoading: isLoading
@@ -213,8 +193,6 @@ extension QCBugReportViewController {
         token: String?,
         header: String?,
         userId: Int?,
-        username: String?,
-        avatarURL: String?,
         error: String?,
         requiresLogin: Bool,
         isLoading: Bool
@@ -222,8 +200,6 @@ extension QCBugReportViewController {
         let tokenValue = token.map { "'\(sanitizeForJavaScript($0))'" } ?? "null"
         let headerValue = header.map { "'\(sanitizeForJavaScript($0))'" } ?? "null"
         let userIdValue = userId.map { String($0) } ?? "null"
-        let usernameValue = username.map { "'\(sanitizeForJavaScript($0))'" } ?? "null"
-        let avatarValue = avatarURL.map { "'\(sanitizeForJavaScript($0))'" } ?? "null"
         let errorValue = error.map { "'\(sanitizeForJavaScript($0))'" } ?? "null"
         let requiresLoginValue = requiresLogin ? "true" : "false"
         let isAuthenticatedValue = (!requiresLogin && token != nil) ? "true" : "false"
@@ -236,8 +212,6 @@ extension QCBugReportViewController {
             window.qcBugGitLab.pat = \(tokenValue);
             window.qcBugGitLab.authorizationHeader = \(headerValue);
             window.qcBugGitLab.userId = \(userIdValue);
-            window.qcBugGitLab.username = \(usernameValue);
-            window.qcBugGitLab.avatarUrl = \(avatarValue);
             window.qcBugGitLab.error = \(errorValue);
             window.qcBugGitLab.requiresLogin = \(requiresLoginValue);
             window.qcBugGitLab.isAuthenticated = \(isAuthenticatedValue);
@@ -264,7 +238,7 @@ extension QCBugReportViewController {
         return escaped
     }
 
-    func persistGitLabCredentials(token: String, userId: Int?, username: String?, avatarURL: String?) {
+    func persistGitLabCredentials(token: String, userId: Int?) {
         let defaults = UserDefaults.standard
         defaults.set(token, forKey: GitLabDefaults.jwtKey)
         if let userId = userId {
@@ -272,23 +246,11 @@ extension QCBugReportViewController {
         } else {
             defaults.removeObject(forKey: GitLabDefaults.userIdKey)
         }
-        if let username = username, !username.isEmpty {
-            defaults.set(username, forKey: GitLabDefaults.usernameKey)
-        } else {
-            defaults.removeObject(forKey: GitLabDefaults.usernameKey)
-        }
-        if let avatar = avatarURL, !avatar.isEmpty {
-            defaults.set(avatar, forKey: GitLabDefaults.avatarURLKey)
-        } else {
-            defaults.removeObject(forKey: GitLabDefaults.avatarURLKey)
-        }
     }
 
     func clearStoredGitLabCredentials() {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: GitLabDefaults.jwtKey)
         defaults.removeObject(forKey: GitLabDefaults.userIdKey)
-        defaults.removeObject(forKey: GitLabDefaults.usernameKey)
-        defaults.removeObject(forKey: GitLabDefaults.avatarURLKey)
     }
 }
