@@ -32,6 +32,7 @@ final class QCFloatingActionButtons: UIView {
     private var panGesture: UIPanGestureRecognizer!
     private var lastLocation: CGPoint = .zero
     private let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
+    private var keyboardHeight: CGFloat = 0
 
     // MARK: - Initialization
 
@@ -46,11 +47,16 @@ final class QCFloatingActionButtons: UIView {
 
         setupButtons()
         setupGestures()
+        setupNotificationObservers()
         positionView()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     // MARK: - Setup
@@ -213,6 +219,49 @@ final class QCFloatingActionButtons: UIView {
         mainButton.addGestureRecognizer(panGesture)
     }
 
+    private func setupNotificationObservers() {
+        // Orientation changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleOrientationChange),
+            name: UIDevice.orientationDidChangeNotification,
+            object: nil
+        )
+
+        // Keyboard events
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleKeyboardWillShow(_:)),
+            name: UIResponder.keyboardWillShowNotification,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleKeyboardWillHide(_:)),
+            name: UIResponder.keyboardWillHideNotification,
+            object: nil
+        )
+
+        // Screen bounds changes (for split screen, etc.)
+        if #available(iOS 13.0, *) {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleSceneDidActivate),
+                name: UIScene.didActivateNotification,
+                object: nil
+            )
+        }
+
+        // Application state changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleApplicationDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+    }
+
     private func positionView() {
         guard let window = UIApplication.shared.windows.first else { return }
 
@@ -220,10 +269,112 @@ final class QCFloatingActionButtons: UIView {
         let margin: CGFloat = 20
 
         let x = window.bounds.width - 60 - margin - safeArea.right
-        let y = window.bounds.height - 60 - margin - safeArea.bottom - 100
+        let y = window.bounds.height - 60 - margin - safeArea.bottom - 100 - keyboardHeight
 
         frame.origin = CGPoint(x: x, y: y)
         lastLocation = center
+    }
+
+    // MARK: - Notification Handlers
+
+    @objc private func handleOrientationChange() {
+        // Collapse expanded buttons during orientation change
+        if isExpanded {
+            collapse()
+        }
+
+        // Ensure button stays within visible bounds after orientation change
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.ensureVisibleWithinBounds(animated: true)
+        }
+    }
+
+    @objc private func handleKeyboardWillShow(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let keyboardFrame = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+              let duration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval else {
+            return
+        }
+
+        keyboardHeight = keyboardFrame.height
+
+        // Collapse if expanded
+        if isExpanded {
+            collapse()
+        }
+
+        // Move button above keyboard
+        UIView.animate(withDuration: duration) { [weak self] in
+            self?.ensureVisibleWithinBounds(animated: false)
+        }
+    }
+
+    @objc private func handleKeyboardWillHide(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let duration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval else {
+            return
+        }
+
+        keyboardHeight = 0
+
+        // Restore button position
+        UIView.animate(withDuration: duration) { [weak self] in
+            self?.ensureVisibleWithinBounds(animated: false)
+        }
+    }
+
+    @objc private func handleSceneDidActivate() {
+        ensureVisibleWithinBounds(animated: true)
+    }
+
+    @objc private func handleApplicationDidBecomeActive() {
+        ensureVisibleWithinBounds(animated: true)
+    }
+
+    // MARK: - Visibility Management
+
+    /// Ensures the floating button stays within visible screen bounds
+    private func ensureVisibleWithinBounds(animated: Bool) {
+        guard let window = UIApplication.shared.windows.first else { return }
+
+        let bounds = window.bounds
+        let safeArea = window.safeAreaInsets
+        let margin: CGFloat = 20
+        let halfWidth = frame.width / 2
+        let halfHeight = frame.height / 2
+
+        // Calculate allowed bounds considering safe area and keyboard
+        let minX = halfWidth + margin + safeArea.left
+        let maxX = bounds.width - halfWidth - margin - safeArea.right
+        let minY = halfHeight + margin + safeArea.top
+        let maxY = bounds.height - halfHeight - margin - safeArea.bottom - keyboardHeight
+
+        var newCenter = center
+
+        // Clamp to visible bounds
+        if newCenter.x < minX {
+            newCenter.x = minX
+        } else if newCenter.x > maxX {
+            newCenter.x = maxX
+        }
+
+        if newCenter.y < minY {
+            newCenter.y = minY
+        } else if newCenter.y > maxY {
+            newCenter.y = maxY
+        }
+
+        // Update position if needed
+        if newCenter != center {
+            if animated {
+                UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
+                    self.center = newCenter
+                })
+            } else {
+                center = newCenter
+            }
+            lastLocation = newCenter
+        }
     }
 
     // MARK: - Actions
@@ -268,17 +419,44 @@ final class QCFloatingActionButtons: UIView {
 
         hapticFeedback.impactOccurred()
 
-        // Calculate positions
-    let spacing: CGFloat = 70
-    let recordY = mainButton.center.y - spacing
-    let screenshotY = recordY - spacing
-    let formY = screenshotY - spacing
-    let clearSessionY = formY - spacing
+        // Calculate positions with bounds checking
+        guard let window = UIApplication.shared.windows.first else { return }
 
-    recordButton.center = mainButton.center
-    screenshotButton.center = mainButton.center
-    formButton.center = mainButton.center
-    clearSessionButton.center = mainButton.center
+        let safeArea = window.safeAreaInsets
+        let margin: CGFloat = 20
+        let spacing: CGFloat = 70
+        let buttonRadius: CGFloat = 25
+
+        // Calculate minimum Y position (top of safe area)
+        let minY = safeArea.top + margin + buttonRadius
+
+        // Calculate desired positions
+        var recordY = mainButton.center.y - spacing
+        var screenshotY = recordY - spacing
+        var formY = screenshotY - spacing
+        var clearSessionY = formY - spacing
+
+        // Ensure top button doesn't go off screen
+        if clearSessionY < minY {
+            let overflow = minY - clearSessionY
+            clearSessionY = minY
+            formY += overflow
+            screenshotY += overflow
+            recordY += overflow
+
+            // If still overflowing, adjust main button position
+            if recordY > mainButton.center.y - spacing {
+                let newMainY = recordY + spacing
+                UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
+                    self.center.y = newMainY
+                })
+            }
+        }
+
+        recordButton.center = mainButton.center
+        screenshotButton.center = mainButton.center
+        formButton.center = mainButton.center
+        clearSessionButton.center = mainButton.center
 
         UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
             self.mainButton.transform = CGAffineTransform(rotationAngle: .pi / 4)
@@ -290,11 +468,11 @@ final class QCFloatingActionButtons: UIView {
             self.screenshotButton.center.y = screenshotY
             self.screenshotButton.alpha = 1
             self.screenshotButton.transform = .identity
-            
+
             self.formButton.center.y = formY
             self.formButton.alpha = 1
             self.formButton.transform = .identity
-            
+
             self.clearSessionButton.center.y = clearSessionY
             self.clearSessionButton.alpha = 1
             self.clearSessionButton.transform = .identity
@@ -354,12 +532,14 @@ final class QCFloatingActionButtons: UIView {
             )
 
             let bounds = window.bounds
+            let safeArea = window.safeAreaInsets
             let halfWidth = frame.width / 2
+            let margin: CGFloat = 20
 
             center = CGPoint(
-                x: max(halfWidth, min(bounds.width - halfWidth, newCenter.x)),
-                y: max(halfWidth + window.safeAreaInsets.top,
-                      min(bounds.height - halfWidth - window.safeAreaInsets.bottom, newCenter.y))
+                x: max(halfWidth + margin + safeArea.left, min(bounds.width - halfWidth - margin - safeArea.right, newCenter.x)),
+                y: max(halfWidth + margin + safeArea.top,
+                      min(bounds.height - halfWidth - margin - safeArea.bottom - keyboardHeight, newCenter.y))
             )
 
         case .ended, .cancelled:
@@ -368,6 +548,9 @@ final class QCFloatingActionButtons: UIView {
             UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.5) {
                 self.transform = .identity
             }
+
+            // Ensure final position is within bounds
+            ensureVisibleWithinBounds(animated: true)
 
         default:
             break
@@ -381,16 +564,28 @@ final class QCFloatingActionButtons: UIView {
         let safeArea = window.safeAreaInsets
         let margin: CGFloat = 20
         let halfWidth = frame.width / 2
+        let halfHeight = frame.height / 2
 
         let leftDistance = center.x
         let rightDistance = bounds.width - center.x
 
         var newCenter = center
 
+        // Snap to left or right edge
         if leftDistance < rightDistance {
             newCenter.x = halfWidth + margin + safeArea.left
         } else {
             newCenter.x = bounds.width - halfWidth - margin - safeArea.right
+        }
+
+        // Ensure Y position is within bounds (considering keyboard)
+        let minY = halfHeight + margin + safeArea.top
+        let maxY = bounds.height - halfHeight - margin - safeArea.bottom - keyboardHeight
+
+        if newCenter.y < minY {
+            newCenter.y = minY
+        } else if newCenter.y > maxY {
+            newCenter.y = maxY
         }
 
         UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5) {
