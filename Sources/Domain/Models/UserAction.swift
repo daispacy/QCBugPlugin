@@ -10,32 +10,32 @@ import Foundation
 import UIKit
 
 /// Represents a user action that was tracked
-public struct UserAction: Codable {
+struct UserAction: Codable {
     /// Unique identifier for the action
-    public let id: String
+    let id: String
     
     /// Timestamp when the action occurred
-    public let timestamp: Date
+    let timestamp: Date
     
     /// Type of action performed
-    public let actionType: ActionType
+    let actionType: ActionType
     
     /// Name of the screen where action occurred
-    public let screenName: String
+    let screenName: String
     
     /// Class name of the view controller
-    public let viewControllerClass: String
+    let viewControllerClass: String
     
     /// Information about the UI element (if applicable)
-    public let elementInfo: ElementInfo?
+    let elementInfo: ElementInfo?
     
     /// Coordinates where the action occurred (if applicable)
-    public let coordinates: CGPoint?
+    let coordinates: CGPoint?
     
     /// Additional context data
-    public let metadata: [String: String]?
+    let metadata: [String: String]?
     
-    public init(
+    init(
         actionType: ActionType,
         screenName: String,
         viewControllerClass: String,
@@ -55,7 +55,7 @@ public struct UserAction: Codable {
 }
 
 /// Types of user actions that can be tracked
-public enum ActionType: String, Codable, CaseIterable {
+enum ActionType: String, Codable, CaseIterable {
     case screenView = "screen_view"
     case screenDisappear = "screen_disappear"
     case buttonTap = "button_tap"
@@ -74,7 +74,7 @@ public enum ActionType: String, Codable, CaseIterable {
     case modalPresent = "modal_present"
     case modalDismiss = "modal_dismiss"
     
-    public var displayName: String {
+    var displayName: String {
         switch self {
         case .screenView: return "Screen View"
         case .screenDisappear: return "Screen Disappear"
@@ -98,26 +98,26 @@ public enum ActionType: String, Codable, CaseIterable {
 }
 
 /// Information about a UI element
-public struct ElementInfo: Codable {
+struct ElementInfo: Codable {
     /// Accessibility identifier
-    public let accessibilityIdentifier: String?
+    let accessibilityIdentifier: String?
     
     /// Accessibility label
-    public let accessibilityLabel: String?
+    let accessibilityLabel: String?
     
     /// Element class name
-    public let className: String
+    let className: String
     
     /// Element text (for buttons, labels, etc.)
-    public let text: String?
+    let text: String?
     
     /// Element tag
-    public let tag: Int?
+    let tag: Int?
     
     /// Element frame
-    public let frame: CGRect?
+    let frame: CGRect?
     
-    public init(
+    init(
         accessibilityIdentifier: String? = nil,
         accessibilityLabel: String? = nil,
         className: String,
@@ -138,7 +138,7 @@ public struct ElementInfo: Codable {
 
 extension UserAction {
     /// Create a screen view action
-    public static func screenView(
+    static func screenView(
         screenName: String,
         viewControllerClass: String,
         metadata: [String: String]? = nil
@@ -152,7 +152,7 @@ extension UserAction {
     }
     
     /// Create a button tap action
-    public static func buttonTap(
+    static func buttonTap(
         screenName: String,
         viewControllerClass: String,
         elementInfo: ElementInfo,

@@ -9,13 +9,13 @@ import Foundation
 import UIKit
 
 /// GitLab authorization information returned by auth providers.
-public struct GitLabAuthorization {
-    public let authorizationHeader: String
-    public let jwt: String
-    public let username: String?
-    public let project: String?
-
-    public init(authorizationHeader: String, jwt: String, username: String?, project: String? = nil) {
+struct GitLabAuthorization {
+    let authorizationHeader: String
+    let jwt: String
+    let username: String?
+    let project: String?
+    
+    init(authorizationHeader: String, jwt: String, username: String?, project: String? = nil) {
         self.authorizationHeader = authorizationHeader
         self.jwt = jwt
         self.username = username
@@ -24,7 +24,7 @@ public struct GitLabAuthorization {
 }
 
 /// Abstraction for retrieving GitLab authorization credentials.
-public protocol GitLabAuthProviding: AnyObject {
+protocol GitLabAuthProviding: AnyObject {
     /// Resolves GitLab authorization credentials. Implementations should cache values when appropriate.
     func fetchAuthorization(completion: @escaping (Result<GitLabAuthorization, GitLabAuthError>) -> Void)
 
@@ -39,7 +39,7 @@ public protocol GitLabAuthProviding: AnyObject {
 }
 
 /// Errors that can occur when acquiring GitLab credentials.
-public enum GitLabAuthError: Error {
+enum GitLabAuthError: Error {
     case invalidConfiguration
     case networkError(String)
     case invalidResponse
@@ -50,7 +50,7 @@ public enum GitLabAuthError: Error {
 }
 
 extension GitLabAuthError: LocalizedError {
-    public var errorDescription: String? {
+    var errorDescription: String? {
         switch self {
         case .invalidConfiguration:
             return "Invalid GitLab application configuration"

@@ -10,17 +10,17 @@ import Foundation
 import UIKit
 
 /// Service for screen capture functionality
-public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
+final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
 
     // MARK: - Initialization
 
-    public override init() {
+    override init() {
         super.init()
     }
 
     // MARK: - ScreenCaptureProtocol Implementation
 
-    public func captureScreen(completion: @escaping (Result<URL, ScreenCaptureError>) -> Void) {
+    func captureScreen(completion: @escaping (Result<URL, ScreenCaptureError>) -> Void) {
         DispatchQueue.main.async {
             // Get the key window
             let window: UIWindow?
@@ -41,7 +41,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         }
     }
 
-    public func captureView(_ view: UIView, completion: @escaping (Result<URL, ScreenCaptureError>) -> Void) {
+    func captureView(_ view: UIView, completion: @escaping (Result<URL, ScreenCaptureError>) -> Void) {
         DispatchQueue.main.async {
             guard view.bounds.width > 0, view.bounds.height > 0 else {
                 completion(.failure(.invalidView))
@@ -61,7 +61,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         }
     }
 
-    public func cleanupScreenshots() {
+    func cleanupScreenshots() {
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
 
         do {

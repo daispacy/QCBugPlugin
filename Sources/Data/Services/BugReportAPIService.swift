@@ -10,7 +10,7 @@ import Foundation
 import UIKit
 
 /// Service for submitting bug reports via webhook API
-public final class BugReportAPIService: BugReportProtocol {
+final class BugReportAPIService: BugReportProtocol {
 
     // MARK: - Nested Types
 
@@ -157,7 +157,7 @@ public final class BugReportAPIService: BugReportProtocol {
 
     // MARK: - Initialization
 
-    public init(webhookURL: String, apiKey: String? = nil, gitLabAuthProvider: GitLabAuthProviding? = nil) {
+    init(webhookURL: String, apiKey: String? = nil, gitLabAuthProvider: GitLabAuthProviding? = nil) {
         self.webhookURL = webhookURL
         self.apiKey = apiKey
         self.gitLabAuthProvider = gitLabAuthProvider
@@ -184,13 +184,13 @@ public final class BugReportAPIService: BugReportProtocol {
         }
     }
 
-    public func resetGitLabSession() {
+    func resetGitLabSession() {
         cachedGitLabCredentialsForSession = nil
     }
 
     // MARK: - BugReportProtocol Implementation
 
-    public func submitBugReport(_ report: BugReport, completion: @escaping (Result<String, BugReportError>) -> Void) {
+    func submitBugReport(_ report: BugReport, completion: @escaping (Result<String, BugReportError>) -> Void) {
         guard !webhookURL.isEmpty, let endpointURL = URL(string: webhookURL) else {
             DispatchQueue.main.async {
                 completion(.failure(.invalidURL))
@@ -233,7 +233,7 @@ public final class BugReportAPIService: BugReportProtocol {
         }
     }
 
-    public func uploadFile(_ fileURL: URL, for reportId: String, completion: @escaping (Result<String, BugReportError>) -> Void) {
+    func uploadFile(_ fileURL: URL, for reportId: String, completion: @escaping (Result<String, BugReportError>) -> Void) {
         guard !webhookURL.isEmpty, let endpointURL = URL(string: webhookURL + "/upload") else {
             DispatchQueue.main.async {
                 completion(.failure(.invalidURL))
@@ -896,16 +896,16 @@ public final class BugReportAPIService: BugReportProtocol {
 
 // MARK: - Mock Implementation for Testing
 
-public final class MockBugReportAPIService: BugReportProtocol {
+final class MockBugReportAPIService: BugReportProtocol {
 
-    public var shouldSucceed: Bool = true
-    public var mockReportId: String = "mock-report-123"
-    public var mockError: BugReportError = .networkError("Mock network error")
-    public var delay: TimeInterval = 1.0
+    var shouldSucceed: Bool = true
+    var mockReportId: String = "mock-report-123"
+    var mockError: BugReportError = .networkError("Mock network error")
+    var delay: TimeInterval = 1.0
 
-    public init() {}
+    init() {}
 
-    public func submitBugReport(_ report: BugReport, completion: @escaping (Result<String, BugReportError>) -> Void) {
+    func submitBugReport(_ report: BugReport, completion: @escaping (Result<String, BugReportError>) -> Void) {
         DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
             DispatchQueue.main.async {
                 if self.shouldSucceed {
@@ -919,7 +919,7 @@ public final class MockBugReportAPIService: BugReportProtocol {
         }
     }
 
-    public func uploadFile(_ fileURL: URL, for reportId: String, completion: @escaping (Result<String, BugReportError>) -> Void) {
+    func uploadFile(_ fileURL: URL, for reportId: String, completion: @escaping (Result<String, BugReportError>) -> Void) {
         DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
             DispatchQueue.main.async {
                 if self.shouldSucceed {

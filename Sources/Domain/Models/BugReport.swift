@@ -10,76 +10,76 @@ import Foundation
 import UIKit
 
 /// GitLab credentials associated with a bug report submission
-public struct GitLabCredentials: Codable {
-    public let pat: String
-    public let project: String?
+struct GitLabCredentials: Codable {
+    let pat: String
+    let project: String?
 
-    public init(pat: String, project: String? = nil) {
+    init(pat: String, project: String? = nil) {
         self.pat = pat
         self.project = project
     }
 }
 
 /// Represents a complete bug report
-public struct BugReport: Codable {
+struct BugReport: Codable {
     /// Unique identifier for the bug report
-    public let id: String
+    let id: String
     
     /// Timestamp when the report was created
-    public let timestamp: Date
+    let timestamp: Date
     
     /// Bug description provided by the user
-    public let description: String
+    let description: String
     
     /// Priority level of the bug
-    public let priority: BugPriority
+    let priority: BugPriority
     
     /// Category of the bug
-    public let category: BugCategory
+    let category: BugCategory
     
     /// Steps to reproduce (user actions history)
-    public let userActions: [UserAction]
+    let userActions: [UserAction]
     
     /// Device information
-    public let deviceInfo: DeviceInfo
+    let deviceInfo: DeviceInfo
     
     /// App information
-    public let appInfo: AppInfo
+    let appInfo: AppInfo
     
     /// Screenshot URLs (if any) - Deprecated, use mediaAttachments instead
-    public let screenshots: [String]
+    let screenshots: [String]
 
     /// Screen recording URL (if available) - Deprecated, use mediaAttachments instead
-    public let screenRecordingURL: String?
+    let screenRecordingURL: String?
 
     /// Media attachments (screenshots and recordings)
-    public let mediaAttachments: [MediaAttachment]
+    let mediaAttachments: [MediaAttachment]
     
     /// Custom data provided by the app
-    public let customData: [String: String]
+    let customData: [String: String]
     
     /// Current screen where bug was reported
-    public let currentScreen: String?
+    let currentScreen: String?
     
     /// Network information
-    public let networkInfo: NetworkInfo?
+    let networkInfo: NetworkInfo?
     
     /// Memory usage information
-    public let memoryInfo: MemoryInfo?
+    let memoryInfo: MemoryInfo?
 
     /// Username assigned to handle the bug, if provided
-    public let assigneeUsername: String?
+    let assigneeUsername: String?
 
     /// External issue tracker number associated with the bug
-    public let issueNumber: Int?
+    let issueNumber: Int?
 
     /// GitLab project path or identifier associated with this submission
-    public let gitLabProject: String?
+    let gitLabProject: String?
 
-    public let whtype: String
-    public let gitLabCredentials: GitLabCredentials?
+    let whtype: String
+    let gitLabCredentials: GitLabCredentials?
 
-    public init(
+    init(
         description: String,
         priority: BugPriority,
         category: BugCategory,
@@ -123,13 +123,13 @@ public struct BugReport: Codable {
 }
 
 /// Bug priority levels
-public enum BugPriority: String, Codable, CaseIterable {
+enum BugPriority: String, Codable, CaseIterable {
     case low = "low"
     case medium = "medium"
     case high = "high"
     case critical = "critical"
     
-    public var displayName: String {
+    var displayName: String {
         switch self {
         case .low: return "Low"
         case .medium: return "Medium"
@@ -138,7 +138,7 @@ public enum BugPriority: String, Codable, CaseIterable {
         }
     }
     
-    public var colorHex: String {
+    var colorHex: String {
         switch self {
         case .low: return "#28a745"      // Green
         case .medium: return "#ffc107"   // Yellow
@@ -149,7 +149,7 @@ public enum BugPriority: String, Codable, CaseIterable {
 }
 
 /// Bug categories
-public enum BugCategory: String, Codable, CaseIterable {
+enum BugCategory: String, Codable, CaseIterable {
     case ui = "ui"
     case functionality = "functionality"
     case performance = "performance"
@@ -159,7 +159,7 @@ public enum BugCategory: String, Codable, CaseIterable {
     case security = "security"
     case other = "other"
     
-    public var displayName: String {
+    var displayName: String {
         switch self {
         case .ui: return "UI/UX Issue"
         case .functionality: return "Functionality"
@@ -174,20 +174,20 @@ public enum BugCategory: String, Codable, CaseIterable {
 }
 
 /// Device information
-public struct DeviceInfo: Codable {
-    public let deviceModel: String
-    public let systemName: String
-    public let systemVersion: String
-    public let screenSize: CGSize
-    public let screenScale: CGFloat
-    public let deviceOrientation: String
-    public let batteryLevel: Float
-    public let batteryState: String
-    public let diskSpace: DiskSpaceInfo
-    public let locale: String
-    public let timezone: String
+struct DeviceInfo: Codable {
+    let deviceModel: String
+    let systemName: String
+    let systemVersion: String
+    let screenSize: CGSize
+    let screenScale: CGFloat
+    let deviceOrientation: String
+    let batteryLevel: Float
+    let batteryState: String
+    let diskSpace: DiskSpaceInfo
+    let locale: String
+    let timezone: String
     
-    public init() {
+    init() {
         let device = UIDevice.current
         let screen = UIScreen.main
         
@@ -241,13 +241,13 @@ public struct DeviceInfo: Codable {
 }
 
 /// App information
-public struct AppInfo: Codable {
-    public let bundleIdentifier: String
-    public let version: String
-    public let buildNumber: String
-    public let appName: String
+struct AppInfo: Codable {
+    let bundleIdentifier: String
+    let version: String
+    let buildNumber: String
+    let appName: String
     
-    public init() {
+    init() {
         let bundle = Bundle.main
         self.bundleIdentifier = bundle.bundleIdentifier ?? "unknown"
         self.version = bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
@@ -258,11 +258,11 @@ public struct AppInfo: Codable {
 }
 
 /// Disk space information
-public struct DiskSpaceInfo: Codable {
-    public let freeSpace: Int64
-    public let totalSpace: Int64
+struct DiskSpaceInfo: Codable {
+    let freeSpace: Int64
+    let totalSpace: Int64
     
-    public init() {
+    init() {
         let fileManager = FileManager.default
         if let attributes = try? fileManager.attributesOfFileSystem(forPath: NSHomeDirectory()) {
             self.freeSpace = (attributes[.systemFreeSize] as? NSNumber)?.int64Value ?? 0
@@ -275,11 +275,11 @@ public struct DiskSpaceInfo: Codable {
 }
 
 /// Network information
-public struct NetworkInfo: Codable {
-    public let connectionType: String
-    public let carrierName: String?
+struct NetworkInfo: Codable {
+    let connectionType: String
+    let carrierName: String?
     
-    public init() {
+    init() {
         // This would need to be implemented with proper network detection
         self.connectionType = "unknown"
         self.carrierName = nil
@@ -287,11 +287,11 @@ public struct NetworkInfo: Codable {
 }
 
 /// Memory information
-public struct MemoryInfo: Codable {
-    public let usedMemory: Int64
-    public let availableMemory: Int64
+struct MemoryInfo: Codable {
+    let usedMemory: Int64
+    let availableMemory: Int64
     
-    public init() {
+    init() {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
         

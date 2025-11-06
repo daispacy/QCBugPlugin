@@ -11,21 +11,21 @@ import UIKit
 import WebKit
 
 /// Delegate protocol for bug report view controller
-public protocol QCBugReportViewControllerDelegate: AnyObject {
+protocol QCBugReportViewControllerDelegate: AnyObject {
     func bugReportViewController(_ controller: QCBugReportViewController, didSubmitReport report: BugReport)
     func bugReportViewControllerDidCancel(_ controller: QCBugReportViewController)
     func bugReportViewController(_ controller: QCBugReportViewController, requestNativePreviewFor url: URL)
 }
 
 /// View controller for displaying the bug report interface
-public final class QCBugReportViewController: UIViewController {
+final class QCBugReportViewController: UIViewController {
     
     // MARK: - Properties
-    public weak var delegate: QCBugReportViewControllerDelegate?
+    weak var delegate: QCBugReportViewControllerDelegate?
     
     private var actionHistory: [UserAction]
     private let screenRecorder: ScreenRecordingProtocol?
-    let configuration: QCBugPluginConfiguration?
+    let configuration: QCBugPluginConfig?
     
     var webView: WKWebView!
     var mediaAttachments: [MediaAttachment] = []
@@ -50,10 +50,10 @@ public final class QCBugReportViewController: UIViewController {
     
     // MARK: - Initialization
     
-    public init(
+    init(
         actionHistory: [UserAction],
         screenRecorder: ScreenRecordingProtocol?,
-        configuration: QCBugPluginConfiguration?,
+        configuration: QCBugPluginConfig?,
         gitLabAuthProvider: GitLabAuthProviding? = nil
     ) {
         self.actionHistory = actionHistory
@@ -78,7 +78,7 @@ public final class QCBugReportViewController: UIViewController {
     
     // MARK: - Lifecycle
     
-    public override func viewDidLoad() {
+    override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
         setupWebView()
@@ -441,7 +441,7 @@ public final class QCBugReportViewController: UIViewController {
 
 extension QCBugReportViewController: WKScriptMessageHandler {
     
-    public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         
         switch message.name {
         case "bugReportHandler":
@@ -525,7 +525,7 @@ extension QCBugReportViewController: WKScriptMessageHandler {
 
 extension QCBugReportViewController: WKNavigationDelegate {
     
-    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         isWebViewLoaded = true
         // Inject action history data
         injectActionHistory()

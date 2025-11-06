@@ -9,7 +9,7 @@
 import UIKit
 
 /// Floating button for easy access to bug reporting
-public final class QCFloatingButton: UIButton {
+final class QCFloatingButton: UIButton {
     
     // MARK: - Properties
     private var panGesture: UIPanGestureRecognizer!
@@ -18,7 +18,7 @@ public final class QCFloatingButton: UIButton {
     
     // MARK: - Initialization
     
-    public override init(frame: CGRect) {
+    override init(frame: CGRect) {
         super.init(frame: CGRect(x: 0, y: 0, width: 60, height: 60))
         setupButton()
         setupGestures()
@@ -189,9 +189,9 @@ public final class QCFloatingButton: UIButton {
         }
     }
     
-    // MARK: - Public Methods
+    // MARK: - Control Methods
     
-    public func hide(animated: Bool = true) {
+    func hide(animated: Bool = true) {
         if animated {
             UIView.animate(withDuration: 0.3, animations: {
                 self.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
@@ -204,7 +204,7 @@ public final class QCFloatingButton: UIButton {
         }
     }
     
-    public func show(animated: Bool = true) {
+    func show(animated: Bool = true) {
         guard let window = UIApplication.shared.windows.first else { return }
         
         if superview == nil {
@@ -228,7 +228,7 @@ public final class QCFloatingButton: UIButton {
     
     // MARK: - Lifecycle
     
-    public override func removeFromSuperview() {
+    override func removeFromSuperview() {
         super.removeFromSuperview()
         
         // Clean up gesture recognizer
@@ -244,7 +244,7 @@ public final class QCFloatingButton: UIButton {
 extension QCFloatingButton {
     
     /// Show debug information overlay
-    public func showDebugInfo() {
+    func showDebugInfo() {
         let debugLabel = UILabel()
         debugLabel.text = "QC Bug Report"
         debugLabel.font = UIFont.systemFont(ofSize: 10, weight: .medium)

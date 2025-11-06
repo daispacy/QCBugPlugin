@@ -10,7 +10,7 @@ import Foundation
 import UIKit
 
 /// Protocol for screen capture functionality
-public protocol ScreenCaptureProtocol: AnyObject {
+protocol ScreenCaptureProtocol: AnyObject {
     /// Capture current screen as image
     /// - Returns: Result with screenshot URL or error
     func captureScreen(completion: @escaping (Result<URL, ScreenCaptureError>) -> Void)
@@ -26,12 +26,12 @@ public protocol ScreenCaptureProtocol: AnyObject {
 }
 
 /// Screen capture specific errors
-public enum ScreenCaptureError: Error, LocalizedError {
+enum ScreenCaptureError: Error, LocalizedError {
     case captureFailed(String)
     case savingFailed(String)
     case invalidView
 
-    public var errorDescription: String? {
+    var errorDescription: String? {
         switch self {
         case .captureFailed(let message):
             return "Screen capture failed: \(message)"

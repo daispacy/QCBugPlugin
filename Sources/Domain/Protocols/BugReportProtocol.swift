@@ -9,7 +9,7 @@
 import Foundation
 
 /// Protocol for bug report submission
-public protocol BugReportProtocol: AnyObject {
+protocol BugReportProtocol: AnyObject {
     /// Submit a bug report
     /// - Parameter report: The bug report to submit
     /// - Returns: Result with report ID or error
@@ -24,7 +24,7 @@ public protocol BugReportProtocol: AnyObject {
 }
 
 /// Bug report specific errors
-public enum BugReportError: Error, LocalizedError {
+enum BugReportError: Error, LocalizedError {
     case invalidURL
     case invalidData
     case networkError(String)
@@ -32,7 +32,7 @@ public enum BugReportError: Error, LocalizedError {
     case fileUploadFailed(String)
     case authenticationFailed
     
-    public var errorDescription: String? {
+    var errorDescription: String? {
         switch self {
         case .invalidURL:
             return "Invalid webhook URL"

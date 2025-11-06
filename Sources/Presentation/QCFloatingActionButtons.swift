@@ -9,7 +9,7 @@
 import UIKit
 
 /// Delegate protocol for floating action buttons
-public protocol QCFloatingActionButtonsDelegate: AnyObject {
+protocol QCFloatingActionButtonsDelegate: AnyObject {
     func floatingButtonsDidTapRecord()
     func floatingButtonsDidTapScreenshot()
     func floatingButtonsDidTapBugReport()
@@ -17,10 +17,10 @@ public protocol QCFloatingActionButtonsDelegate: AnyObject {
 }
 
 /// Floating action buttons container with record, screenshot, form, and session control buttons
-public final class QCFloatingActionButtons: UIView {
+final class QCFloatingActionButtons: UIView {
 
     // MARK: - Properties
-    public weak var delegate: QCFloatingActionButtonsDelegate?
+    weak var delegate: QCFloatingActionButtonsDelegate?
 
     private let mainButton: UIButton
     private let recordButton: UIButton
@@ -35,7 +35,7 @@ public final class QCFloatingActionButtons: UIView {
 
     // MARK: - Initialization
 
-    public override init(frame: CGRect) {
+    override init(frame: CGRect) {
         mainButton = UIButton(type: .custom)
     recordButton = UIButton(type: .custom)
     screenshotButton = UIButton(type: .custom)
@@ -402,7 +402,7 @@ public final class QCFloatingActionButtons: UIView {
 
     // MARK: - Hit Testing for Touch Events
     
-    override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         // Check if the point is within the main button
         let mainButtonPoint = convert(point, to: mainButton)
         if mainButton.bounds.contains(mainButtonPoint) {
@@ -437,9 +437,9 @@ public final class QCFloatingActionButtons: UIView {
         return nil
     }
 
-    // MARK: - Public Methods
+    // MARK: - Control Methods
 
-    public func updateRecordingState(isRecording: Bool) {
+    func updateRecordingState(isRecording: Bool) {
         DispatchQueue.main.async {
             if isRecording {
                 self.recordButton.setTitle("⏹️", for: .normal)
@@ -449,7 +449,7 @@ public final class QCFloatingActionButtons: UIView {
         }
     }
 
-    public func hide(animated: Bool = true) {
+    func hide(animated: Bool = true) {
         if animated {
             UIView.animate(withDuration: 0.3, animations: {
                 self.alpha = 0
@@ -462,7 +462,7 @@ public final class QCFloatingActionButtons: UIView {
         }
     }
 
-    public func show(animated: Bool = true) {
+    func show(animated: Bool = true) {
         guard let window = UIApplication.shared.windows.first else { return }
 
         if superview == nil {

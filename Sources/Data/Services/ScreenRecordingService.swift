@@ -11,7 +11,7 @@ import ReplayKit
 import AVFoundation
 
 /// Service for screen recording functionality using ReplayKit
-public final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
+final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     
     // MARK: - Properties
     private let recorder = RPScreenRecorder.shared()
@@ -25,32 +25,32 @@ public final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     
     // MARK: - Initialization
     
-    /// Public initializer for ScreenRecordingService
-    public override init() {
+    /// Designated initializer for ScreenRecordingService
+    override init() {
         super.init()
     }
     
     // MARK: - ScreenRecordingProtocol Implementation
     
-    public var isAvailable: Bool {
+    var isAvailable: Bool {
         return recorder.isAvailable
     }
     
-    public var isRecording: Bool {
+    var isRecording: Bool {
         return recorder.isRecording
     }
 
-    public var isRecordingOwnedByService: Bool {
+    var isRecordingOwnedByService: Bool {
         return isRecordingStartedByService && isRecording
     }
     
-    public func requestPermission(completion: @escaping (Bool) -> Void) {
+    func requestPermission(completion: @escaping (Bool) -> Void) {
         // ReplayKit handles permissions automatically
         // We'll just check if recording is available
         completion(isAvailable)
     }
     
-    public func startRecording(completion: @escaping (Result<Void, ScreenRecordingError>) -> Void) {
+    func startRecording(completion: @escaping (Result<Void, ScreenRecordingError>) -> Void) {
         guard isAvailable else {
             completion(.failure(.notAvailable))
             return
@@ -95,7 +95,7 @@ public final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         }
     }
     
-    public func stopRecording(completion: @escaping (Result<URL, ScreenRecordingError>) -> Void) {
+    func stopRecording(completion: @escaping (Result<URL, ScreenRecordingError>) -> Void) {
         guard isRecording else {
             completion(.failure(.notRecording))
             return
@@ -229,7 +229,7 @@ public final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         return false
     }
     
-    public func cleanupRecordingFiles() {
+    func cleanupRecordingFiles() {
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         
         do {
@@ -250,7 +250,7 @@ public final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
 
 extension ScreenRecordingService: RPPreviewViewControllerDelegate {
     
-    public func previewControllerDidFinish(_ previewController: RPPreviewViewController) {
+    func previewControllerDidFinish(_ previewController: RPPreviewViewController) {
         previewController.dismiss(animated: true) { [weak self] in
             // User dismissed without saving - create a placeholder
             let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -266,7 +266,7 @@ extension ScreenRecordingService: RPPreviewViewControllerDelegate {
         }
     }
     
-    public func previewController(_ previewController: RPPreviewViewController, didFinishWithActivityTypes activityTypes: Set<String>) {
+    func previewController(_ previewController: RPPreviewViewController, didFinishWithActivityTypes activityTypes: Set<String>) {
         previewController.dismiss(animated: true) { [weak self] in
             // User completed sharing - create a placeholder URL
             let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

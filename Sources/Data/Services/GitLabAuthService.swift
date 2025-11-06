@@ -11,7 +11,7 @@ import AuthenticationServices
 import UIKit
 
 /// Concrete implementation responsible for acquiring GitLab access tokens and JWTs.
-public final class GitLabAuthService: GitLabAuthProviding {
+final class GitLabAuthService: GitLabAuthProviding {
 
     private struct CachedAccessToken {
         let value: String
@@ -56,7 +56,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
     private var pendingAuthState: String?
     private var presentationContextProvider: AnyObject?
 
-    public convenience init(
+    convenience init(
         configuration: GitLabAppConfig,
         session: URLSession = .shared
     ) {
@@ -77,7 +77,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
 
     // MARK: - GitLabAuthProviding
 
-    public func fetchAuthorization(completion: @escaping (Result<GitLabAuthorization, GitLabAuthError>) -> Void) {
+    func fetchAuthorization(completion: @escaping (Result<GitLabAuthorization, GitLabAuthError>) -> Void) {
         if let cachedJWT = currentCachedJWT(), cachedJWT.expiration > Date() {
             let authorization = GitLabAuthorization(
                 authorizationHeader: cachedJWT.header,
@@ -117,7 +117,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
         }
     }
 
-    public func clearCache() {
+    func clearCache() {
         stateQueue.async(flags: .barrier) {
             self.cachedAccessToken = nil
             self.cachedJWT = nil
@@ -130,7 +130,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
         sessionStore.clearAll()
     }
 
-    public func hasValidAuthorization() -> Bool {
+    func hasValidAuthorization() -> Bool {
         if let jwt = currentCachedJWT(), jwt.expiration > Date() {
             return true
         }
@@ -142,7 +142,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
 
     // MARK: - Internal Workflow
 
-    public func authenticateInteractively(from presenter: UIViewController, completion: @escaping (Result<GitLabAuthorization, GitLabAuthError>) -> Void) {
+    func authenticateInteractively(from presenter: UIViewController, completion: @escaping (Result<GitLabAuthorization, GitLabAuthError>) -> Void) {
         if hasValidAuthorization() {
             fetchAuthorization(completion: completion)
             return

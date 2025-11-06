@@ -11,18 +11,17 @@ import UIKit
 
 /// Main entry point for the QC Bug Plugin framework
 public final class QCBugPlugin {
-    
-    /// Shared instance of the plugin manager
-    public static let shared: QCBugPluginProtocol = QCBugPluginManager.shared
+
+    private static let manager = QCBugPluginManager.shared
     
     /// Current version of the plugin
-    public static let version = "1.0.0"
+    static let version = "1.0.0"
     
     /// Build number
-    public static let buildNumber = "1"
+    static let buildNumber = "1"
     
     /// Framework information
-    public static var frameworkInfo: [String: Any] {
+    static var frameworkInfo: [String: Any] {
         return [
             "name": "QCBugPlugin",
             "version": version,
@@ -45,26 +44,26 @@ public final class QCBugPlugin {
     ///   - window: The root application window to attach plugin UI elements to
     ///   - configuration: Complete configuration describing integration behaviour
     public static func configure(using window: UIWindow, configuration: QCBugPluginConfig) {
-        shared.configure(using: window, configuration: configuration)
+        manager.configure(using: window, configuration: configuration)
     }
     
     // MARK: - Convenience Methods
     
     /// Present the bug report interface
     public static func presentBugReport() {
-        shared.presentBugReport()
+        manager.presentBugReport()
     }
     
     /// Set custom data to include with bug reports
     /// - Parameter data: Custom data dictionary
     public static func setCustomData(_ data: [String: Any]) {
-        shared.setCustomData(data)
+        manager.setCustomData(data)
     }
     
     /// Enable or disable screen recording
     /// - Parameter enabled: Whether screen recording should be available
     public static func setScreenRecordingEnabled(_ enabled: Bool) {
-        shared.setScreenRecordingEnabled(enabled)
+        manager.setScreenRecordingEnabled(enabled)
     }
 
     // MARK: - Screen Recording Control
@@ -72,73 +71,52 @@ public final class QCBugPlugin {
     /// Start screen recording manually
     /// - Parameter completion: Callback with success/failure result
     public static func startScreenRecording(completion: @escaping (Result<Void, Error>) -> Void) {
-        shared.startScreenRecording(completion: completion)
+        manager.startScreenRecording(completion: completion)
     }
 
     /// Stop screen recording manually
     /// - Parameter completion: Callback with video URL or error
     public static func stopScreenRecording(completion: @escaping (Result<URL, Error>) -> Void) {
-        shared.stopScreenRecording(completion: completion)
+        manager.stopScreenRecording(completion: completion)
     }
 
     /// Check if screen recording is currently active
     public static var isScreenRecording: Bool {
-        return shared.isScreenRecording()
+        return manager.isScreenRecording()
     }
 
     /// Check if the current recording is owned by this plugin
     public static var isScreenRecordingOwnedByPlugin: Bool {
-        return shared.isScreenRecordingOwnedByPlugin()
+        return manager.isScreenRecordingOwnedByPlugin()
+    }
+
+    /// Assign a delegate to receive lifecycle callbacks
+    public static func setDelegate(_ delegate: QCBugPluginDelegate?) {
+        manager.setDelegate(delegate)
     }
 
     // MARK: - Debug Helpers
     
     #if DEBUG
     /// Enable debug mode with floating button (Debug builds only)
-    public static func enableDebugMode(using window: UIWindow) {
+    static func enableDebugMode(using window: UIWindow) {
         let config = QCBugPluginConfig(
             webhookURL: "https://webhook.site/debug",
             enableFloatingButton: true
         )
-        configure(using: window, configuration: config)
+    configure(using: window, configuration: config)
         
         print("🐛 QCBugPlugin: Debug mode enabled with floating button")
     }
     
     /// Print framework information
-    public static func printInfo() {
+    static func printInfo() {
         print("📦 QCBugPlugin Framework Info:")
         for (key, value) in frameworkInfo {
             print("   \(key): \(value)")
         }
     }
     #endif
-}
-
-// MARK: - Global Extensions
-
-public extension Notification.Name {
-    /// Posted when a bug report is submitted successfully
-    static let QCBugPluginDidSubmitReport = Notification.Name.qcBugPluginDidSubmitReport
-
-    /// Posted when bug report submission fails
-    static let QCBugPluginDidFailToSubmitReport = Notification.Name.qcBugPluginDidFailToSubmitReport
-
-    // MARK: - Screen Recording Notifications
-
-    /// Posted when screen recording starts successfully
-    static let QCBugPluginDidStartRecording = Notification.Name.qcBugPluginDidStartRecording
-
-    /// Posted when screen recording stops successfully (userInfo contains "url" key)
-    static let QCBugPluginDidStopRecording = Notification.Name.qcBugPluginDidStopRecording
-
-    /// Posted when screen recording fails (userInfo contains "error" key)
-    static let QCBugPluginDidFailRecording = Notification.Name.qcBugPluginDidFailRecording
-    
-    // MARK: - Session Notifications
-    
-    /// Posted when session is cleared (userInfo contains "count" key with number of removed attachments)
-    static let QCBugPluginDidClearSession = Notification.Name.qcBugPluginDidClearSession
 }
 
 // MARK: - Documentation

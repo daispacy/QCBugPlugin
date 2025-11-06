@@ -27,10 +27,10 @@ private final class SingleAttachmentPreviewDataSource: NSObject, QLPreviewContro
 }
 
 /// Main manager class for the QC Bug Plugin
-public final class QCBugPluginManager: QCBugPluginProtocol {
+final class QCBugPluginManager {
     
     // MARK: - Singleton
-    public static let shared = QCBugPluginManager()
+    static let shared = QCBugPluginManager()
     
     // MARK: - Private Properties
     private var configuration: QCBugPluginConfig?
@@ -54,9 +54,12 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     private var pendingScreenshotOriginalURL: URL?
     private var previewDataSource: SingleAttachmentPreviewDataSource?
     
-    // MARK: - Public Properties
-    public weak var delegate: QCBugPluginDelegate?
+    // MARK: - Delegate
+    weak var delegate: QCBugPluginDelegate?
     
+    func setDelegate(_ delegate: QCBugPluginDelegate?) {
+        self.delegate = delegate
+    }
     // MARK: - Helper Methods
     private func resolvedWebhookURL() -> String {
         if let override = sessionWebhookURL?.trimmingCharacters(in: .whitespacesAndNewlines), !override.isEmpty {
@@ -87,9 +90,9 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         NotificationCenter.default.removeObserver(self)
     }
     
-    // MARK: - QCBugPluginProtocol Implementation
-    
-    public func configure(using window: UIWindow, configuration config: QCBugPluginConfig) {
+    // MARK: - Configuration
+
+    func configure(using window: UIWindow, configuration config: QCBugPluginConfig) {
         self.hostWindow = window
         self.configuration = config
         self.sessionWebhookURL = nil
@@ -134,19 +137,18 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         }
     }
     
-    public func presentBugReport() {
+    func presentBugReport() {
         guard isConfigured else {
             print("❌ QCBugPlugin: Plugin not configured. Call configure() first.")
             return
         }
 
         // Check delegate permission
-        if let shouldPresent = delegate?.bugPluginShouldPresentBugReport(self),
+        if let shouldPresent = delegate?.bugPluginShouldPresentBugReport(),
            !shouldPresent {
             return
         }
-
-    let actionHistory: [UserAction] = []
+        let actionHistory: [UserAction] = []
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -197,7 +199,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         }
     }
     
-    public func setCustomData(_ data: [String: Any]) {
+    func setCustomData(_ data: [String: Any]) {
         guard let config = configuration else { return }
 
         // Update configuration with new custom data
@@ -213,7 +215,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         self.configuration = newConfig
     }
     
-    public func setScreenRecordingEnabled(_ enabled: Bool) {
+    func setScreenRecordingEnabled(_ enabled: Bool) {
         guard let config = configuration else { return }
 
         let newConfig = QCBugPluginConfig(
@@ -234,7 +236,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         }
     }
 
-    public func startScreenRecording(completion: @escaping (Result<Void, Error>) -> Void) {
+    func startScreenRecording(completion: @escaping (Result<Void, Error>) -> Void) {
         guard let recorder = screenRecorder else {
             let error = NSError(
                 domain: "com.qcbugplugin",
@@ -250,29 +252,20 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
 
             switch result {
             case .success:
-                // Notify delegate and post notification
-                self.delegate?.bugPluginDidStartRecording(self)
-                NotificationCenter.default.post(
-                    name: .qcBugPluginDidStartRecording,
-                    object: self
-                )
+                // Notify delegate
+                self.delegate?.bugPluginDidStartRecording()
                 print("🎥 QCBugPlugin: Screen recording started")
                 completion(.success(()))
 
             case .failure(let error):
-                // Notify delegate and post notification
-                self.delegate?.bugPlugin(self, didFailRecordingWithError: error)
-                NotificationCenter.default.post(
-                    name: .qcBugPluginDidFailRecording,
-                    object: self,
-                    userInfo: ["error": error]
-                )
+                // Notify delegate
+                self.delegate?.bugPluginDidFailRecording(error)
                 completion(.failure(error))
             }
         }
     }
 
-    public func stopScreenRecording(completion: @escaping (Result<URL, Error>) -> Void) {
+    func stopScreenRecording(completion: @escaping (Result<URL, Error>) -> Void) {
         guard let recorder = screenRecorder else {
             let error = NSError(
                 domain: "com.qcbugplugin",
@@ -298,13 +291,8 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
                 // Update floating button state
                 self.floatingActionButtons?.updateRecordingState(isRecording: false)
 
-                // Notify delegate and post notification
-                self.delegate?.bugPlugin(self, didStopRecordingWithURL: url)
-                NotificationCenter.default.post(
-                    name: .qcBugPluginDidStopRecording,
-                    object: self,
-                    userInfo: ["url": url]
-                )
+                // Notify delegate
+                self.delegate?.bugPlugin(didStopRecordingWith: url)
                 print("🎬 QCBugPlugin: Screen recording stopped - \(url)")
 
                 // Auto-present bug report form if enabled
@@ -318,23 +306,18 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
                 completion(.success(url))
 
             case .failure(let error):
-                // Notify delegate and post notification
-                self.delegate?.bugPlugin(self, didFailRecordingWithError: error)
-                NotificationCenter.default.post(
-                    name: .qcBugPluginDidFailRecording,
-                    object: self,
-                    userInfo: ["error": error]
-                )
+                // Notify delegate
+                self.delegate?.bugPluginDidFailRecording(error)
                 completion(.failure(error))
             }
         }
     }
 
-    public func isScreenRecording() -> Bool {
+    func isScreenRecording() -> Bool {
         return screenRecorder?.isRecording ?? false
     }
 
-    public func isScreenRecordingOwnedByPlugin() -> Bool {
+    func isScreenRecordingOwnedByPlugin() -> Bool {
         return screenRecorder?.isRecordingOwnedByService ?? false
     }
 
@@ -390,7 +373,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
 
     // MARK: - Screenshot Capture
 
-    public func captureScreenshot(completion: @escaping (Result<URL, Error>) -> Void) {
+    func captureScreenshot(completion: @escaping (Result<URL, Error>) -> Void) {
         guard let capture = screenCapture else {
             let error = NSError(
                 domain: "com.qcbugplugin",
@@ -539,17 +522,17 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
     // MARK: - Session Management
     
     /// Get the current session media attachments count
-    public func getSessionMediaCount() -> Int {
+    func getSessionMediaCount() -> Int {
         return sessionMediaAttachments.count
     }
     
     /// Get all media attachments in the current session
-    public func getSessionMediaAttachments() -> [MediaAttachment] {
+    func getSessionMediaAttachments() -> [MediaAttachment] {
         return sessionMediaAttachments
     }
     
     /// Clear all media attachments in the current session
-    public func clearSession() {
+    func clearSession() {
         let count = sessionMediaAttachments.count
         sessionMediaAttachments.forEach { attachment in
             if let url = URL(string: attachment.fileURL), url.isFileURL {
@@ -581,20 +564,13 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
         refreshBugReportService()
         
         // Notify delegate
-        delegate?.bugPluginDidClearSession(self)
-        
-        // Post notification
-        NotificationCenter.default.post(
-            name: .qcBugPluginDidClearSession,
-            object: self,
-            userInfo: ["count": count]
-        )
+        delegate?.bugPluginDidClearSession()
         
         print("🗑️ QCBugPlugin: Session cleared - \(count) media attachments removed")
     }
     
     /// Remove a specific media attachment from session by index
-    public func removeSessionMedia(at index: Int) {
+    func removeSessionMedia(at index: Int) {
         guard index >= 0 && index < sessionMediaAttachments.count else { return }
         let fileURL = sessionMediaAttachments[index].fileURL
         _ = removeSessionMedia(withFileURL: fileURL, updatePresentedView: true)
@@ -602,7 +578,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
 
     /// Remove a specific media attachment from session by file URL
     @discardableResult
-    public func removeSessionMedia(withFileURL fileURL: String, updatePresentedView: Bool = true) -> Bool {
+    func removeSessionMedia(withFileURL fileURL: String, updatePresentedView: Bool = true) -> Bool {
         guard let index = sessionMediaAttachments.firstIndex(where: { $0.fileURL == fileURL }) else {
             return false
         }
@@ -627,7 +603,7 @@ public final class QCBugPluginManager: QCBugPluginProtocol {
 
 extension QCBugPluginManager: QCFloatingActionButtonsDelegate {
 
-    public func floatingButtonsDidTapRecord() {
+    func floatingButtonsDidTapRecord() {
         guard let recorder = screenRecorder else {
             print("❌ QCBugPlugin: Screen recording not enabled")
             return
@@ -657,7 +633,7 @@ extension QCBugPluginManager: QCFloatingActionButtonsDelegate {
         }
     }
 
-    public func floatingButtonsDidTapScreenshot() {
+    func floatingButtonsDidTapScreenshot() {
         captureScreenshot { result in
             switch result {
             case .success(let url):
@@ -668,11 +644,11 @@ extension QCBugPluginManager: QCFloatingActionButtonsDelegate {
         }
     }
 
-    public func floatingButtonsDidTapBugReport() {
+    func floatingButtonsDidTapBugReport() {
         presentBugReport()
     }
     
-    public func floatingButtonsDidTapClearSession() {
+    func floatingButtonsDidTapClearSession() {
         clearSession()
     }
 }
@@ -680,7 +656,7 @@ extension QCBugPluginManager: QCFloatingActionButtonsDelegate {
 // MARK: - QCBugReportViewControllerDelegate
 
 extension QCBugPluginManager: QCBugReportViewControllerDelegate {
-    public func bugReportViewController(_ controller: QCBugReportViewController, didSubmitReport report: BugReport) {
+    func bugReportViewController(_ controller: QCBugReportViewController, didSubmitReport report: BugReport) {
         // Capture session state before submission
         self.sessionBugDescription = report.description
         self.sessionBugPriority = report.priority
@@ -708,24 +684,12 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let reportId):
-                    self.delegate?.bugPlugin(self, didSubmitBugReport: reportId)
-                    
-                    NotificationCenter.default.post(
-                        name: .qcBugPluginDidSubmitReport,
-                        object: self,
-                        userInfo: ["reportId": reportId]
-                    )
+                    self.delegate?.bugPluginDidSubmitReport(reportId)
                     
                     print("✅ QCBugPlugin: Bug report submitted successfully with ID: \(reportId)")
                     
                 case .failure(let error):
-                    self.delegate?.bugPlugin(self, didFailToSubmitBugReport: error)
-                    
-                    NotificationCenter.default.post(
-                        name: .qcBugPluginDidFailToSubmitReport,
-                        object: self,
-                        userInfo: ["error": error]
-                    )
+                    self.delegate?.bugPluginDidFailToSubmitReport(error)
                     
                     print("❌ QCBugPlugin: Failed to submit bug report: \(error.localizedDescription)")
                 }
@@ -735,7 +699,7 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         }
     }
     
-    public func bugReportViewControllerDidCancel(_ controller: QCBugReportViewController) {
+    func bugReportViewControllerDidCancel(_ controller: QCBugReportViewController) {
         // Capture session state even on cancel so it can be restored later
         self.sessionBugDescription = controller.getSessionDescription()
         self.sessionBugPriority = controller.getSessionPriority()
@@ -752,7 +716,7 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         controller.dismiss(animated: true)
     }
 
-    public func bugReportViewController(_ controller: QCBugReportViewController, requestNativePreviewFor url: URL) {
+    func bugReportViewController(_ controller: QCBugReportViewController, requestNativePreviewFor url: URL) {
         presentNativeAttachmentPreview(for: url)
     }
 }

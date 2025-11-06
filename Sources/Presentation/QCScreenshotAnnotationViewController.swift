@@ -327,7 +327,7 @@ private final class AnnotationCanvasView: UIView {
         }
     }
 
-    // MARK: - Public Methods
+    // MARK: - Annotation Helpers
 
     func undo() {
         guard !strokes.isEmpty else { return }

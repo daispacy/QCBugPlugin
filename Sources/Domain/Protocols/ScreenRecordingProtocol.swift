@@ -9,7 +9,7 @@
 import Foundation
 
 /// Protocol for screen recording functionality
-public protocol ScreenRecordingProtocol: AnyObject {
+protocol ScreenRecordingProtocol: AnyObject {
     /// Check if screen recording is available on the device
     var isAvailable: Bool { get }
     
@@ -33,7 +33,7 @@ public protocol ScreenRecordingProtocol: AnyObject {
 }
 
 /// Screen recording specific errors
-public enum ScreenRecordingError: Error, LocalizedError {
+enum ScreenRecordingError: Error, LocalizedError {
     case notAvailable
     case alreadyRecording
     case notRecording
@@ -41,7 +41,7 @@ public enum ScreenRecordingError: Error, LocalizedError {
     case recordingFailed(String)
     case savingFailed(String)
     
-    public var errorDescription: String? {
+    var errorDescription: String? {
         switch self {
         case .notAvailable:
             return "Screen recording is not available on this device"

@@ -9,23 +9,23 @@
 import Foundation
 
 /// Represents a media attachment (screenshot or video recording)
-public struct MediaAttachment: Codable {
+struct MediaAttachment: Codable {
     /// Type of media attachment
-    public let type: MediaType
+    let type: MediaType
 
     /// File URL of the media
-    public let fileURL: String
+    let fileURL: String
 
     /// File name
-    public let fileName: String
+    let fileName: String
 
     /// Timestamp when the media was captured
-    public let timestamp: Date
+    let timestamp: Date
 
     /// File size in bytes
-    public let fileSize: Int64?
+    let fileSize: Int64?
 
-    public init(type: MediaType, fileURL: URL, fileSize: Int64? = nil) {
+    init(type: MediaType, fileURL: URL, fileSize: Int64? = nil) {
         self.type = type
         self.fileURL = fileURL.absoluteString
         self.fileName = fileURL.lastPathComponent
@@ -35,11 +35,11 @@ public struct MediaAttachment: Codable {
 }
 
 /// Types of media attachments
-public enum MediaType: String, Codable {
+enum MediaType: String, Codable {
     case screenshot = "screenshot"
     case screenRecording = "screen_recording"
 
-    public var displayName: String {
+    var displayName: String {
         switch self {
         case .screenshot:
             return "Screenshot"
@@ -48,7 +48,7 @@ public enum MediaType: String, Codable {
         }
     }
 
-    public var mimeType: String {
+    var mimeType: String {
         switch self {
         case .screenshot:
             return "image/png"

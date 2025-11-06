@@ -9,7 +9,7 @@
 import Foundation
 
 /// Configuration for the QC Bug Plugin
-public struct QCBugPluginConfig: QCBugPluginConfiguration {
+public struct QCBugPluginConfig {
     public let webhookURL: String
     public let apiKey: String?
     public let customData: [String: Any]
@@ -32,18 +32,4 @@ public struct QCBugPluginConfig: QCBugPluginConfiguration {
         self.enableFloatingButton = enableFloatingButton
         self.gitLabAppConfig = gitLabAppConfig
     }
-}
-
-/// Notification names for plugin events
-public extension Notification.Name {
-    static let qcBugPluginDidSubmitReport = Notification.Name("qcBugPluginDidSubmitReport")
-    static let qcBugPluginDidFailToSubmitReport = Notification.Name("qcBugPluginDidFailToSubmitReport")
-
-    // Screen Recording Events
-    static let qcBugPluginDidStartRecording = Notification.Name("qcBugPluginDidStartRecording")
-    static let qcBugPluginDidStopRecording = Notification.Name("qcBugPluginDidStopRecording")
-    static let qcBugPluginDidFailRecording = Notification.Name("qcBugPluginDidFailRecording")
-    
-    // Session Events
-    static let qcBugPluginDidClearSession = Notification.Name("qcBugPluginDidClearSession")
 }
