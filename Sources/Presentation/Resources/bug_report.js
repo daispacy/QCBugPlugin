@@ -153,11 +153,6 @@
             return;
         }
 
-        var projectValue = typeof state.gitlab.project === 'string' ? state.gitlab.project.trim() : '';
-        if (!projectValue.length) {
-            return;
-        }
-
         var cacheKey = endpoint + '::' + projectValue;
 
         if (!force && state.assign.lastFetchKey === cacheKey && state.assign.options.length && !state.assign.error) {
@@ -172,8 +167,7 @@
 
         var payload = {
             team: 'ios',
-            whtype: 'get_members',
-            project: projectValue
+            whtype: 'get_members'
         };
 
         fetch(endpoint, {
