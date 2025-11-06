@@ -563,7 +563,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
     }
 
     private func storeCachedAccessToken(_ token: CachedAccessToken) {
-        stateQueue.async(flags: .barrier) {
+        stateQueue.sync(flags: .barrier) {
             self.cachedAccessToken = token
         }
     }
@@ -573,7 +573,7 @@ public final class GitLabAuthService: GitLabAuthProviding {
     }
 
     private func storeCachedJWT(_ jwt: CachedJWT) {
-        stateQueue.async(flags: .barrier) {
+        stateQueue.sync(flags: .barrier) {
             self.cachedJWT = jwt
         }
     }
