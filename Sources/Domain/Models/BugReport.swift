@@ -65,7 +65,7 @@ public struct BugReport: Codable {
     /// Memory usage information
     public let memoryInfo: MemoryInfo?
 
-    public let wktype: String
+    public let whtype: String
     public let gitLabCredentials: GitLabCredentials?
 
     public init(
@@ -82,7 +82,7 @@ public struct BugReport: Codable {
         networkInfo: NetworkInfo? = nil,
         memoryInfo: MemoryInfo? = nil,
         mediaAttachments: [MediaAttachment] = [],
-        wktype: String = "report_issue",
+        whtype: String = "report_issue",
         gitLabCredentials: GitLabCredentials? = nil
     ) {
         self.id = UUID().uuidString
@@ -100,7 +100,7 @@ public struct BugReport: Codable {
         self.networkInfo = networkInfo
         self.memoryInfo = memoryInfo
         self.mediaAttachments = mediaAttachments
-        self.wktype = wktype
+        self.whtype = whtype
         self.gitLabCredentials = gitLabCredentials
     }
 }

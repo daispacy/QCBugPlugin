@@ -27,7 +27,7 @@ public final class BugReportAPIService: BugReportProtocol {
     }
 
     private struct BugReportPayload: Encodable {
-        let wktype: String
+        let whtype: String
 
         struct MediaAttachmentDTO: Encodable {
             let type: MediaType
@@ -67,7 +67,7 @@ public final class BugReportAPIService: BugReportProtocol {
         let gitlab: GitLabPayload?
 
         init(report: BugReport, attachments: [AttachmentPayload], gitLabCredentials: GitLabCredentials?) {
-            self.wktype = report.wktype
+            self.whtype = report.whtype
             let mediaDTO = report.mediaAttachments.map { attachment in
                 MediaAttachmentDTO(
                     type: attachment.type,
@@ -100,13 +100,13 @@ public final class BugReportAPIService: BugReportProtocol {
     }
 
     private struct FileUploadPayload: Encodable {
-        let wktype: String
+        let whtype: String
         let reportId: String
         let attachment: AttachmentPayload
         let gitlab: BugReportPayload.GitLabPayload?
 
-        init(wktype: String, reportId: String, attachment: AttachmentPayload, gitLabCredentials: GitLabCredentials?) {
-            self.wktype = wktype
+        init(whtype: String, reportId: String, attachment: AttachmentPayload, gitLabCredentials: GitLabCredentials?) {
+            self.whtype = whtype
             self.reportId = reportId
             self.attachment = attachment
             self.gitlab = gitLabCredentials.map { BugReportPayload.GitLabPayload(credentials: $0) }
@@ -297,7 +297,7 @@ public final class BugReportAPIService: BugReportProtocol {
         completion: @escaping (Result<String, BugReportError>) -> Void
     ) {
         let uploadPayload = FileUploadPayload(
-            wktype: "report_issue",
+            whtype: "report_issue",
             reportId: reportId,
             attachment: payload,
             gitLabCredentials: gitLabCredentials
