@@ -52,12 +52,10 @@
         if (!trimmed) {
             return null;
         }
-        try {
-            var parsed = new URL(trimmed);
-            return parsed.origin;
-        } catch (error) {
-            return /^https?:\/\//i.test(trimmed) ? trimmed : null;
+        if (!/^https?:\/\//i.test(trimmed)) {
+            return null;
         }
+        return trimmed;
     }
 
     function resetAssignState(shouldNotify) {
