@@ -36,6 +36,9 @@ protocol GitLabAuthProviding: AnyObject {
 
     /// Begins an interactive authentication flow if required. Completion executes on the main queue.
     func authenticateInteractively(from presenter: UIViewController, completion: @escaping (Result<GitLabAuthorization, GitLabAuthError>) -> Void)
+
+    /// Fetches project members for a given GitLab project.
+    func fetchProjectMembers(project: String, completion: @escaping (Result<[GitLabMember], GitLabAuthError>) -> Void)
 }
 
 /// Errors that can occur when acquiring GitLab credentials.
@@ -47,6 +50,7 @@ enum GitLabAuthError: Error {
     case jwtGenerationFailed(String)
     case userAuthenticationRequired
     case authenticationCancelled
+    case notAuthenticated
 }
 
 extension GitLabAuthError: LocalizedError {
@@ -66,6 +70,8 @@ extension GitLabAuthError: LocalizedError {
             return "Sign in with GitLab to continue"
         case .authenticationCancelled:
             return "GitLab authentication was cancelled"
+        case .notAuthenticated:
+            return "Not authenticated with GitLab"
         }
     }
 }

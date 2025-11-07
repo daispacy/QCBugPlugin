@@ -28,7 +28,7 @@ public struct GitLabAppConfig {
         baseURL: URL = URL(string: "https://gitlab.com")!,
         scopes: [String] = ["api"],
         audience: String? = nil,
-        jwtExpiration: TimeInterval = 300,
+        jwtExpiration: TimeInterval = 24 * 60 * 60 * 31, // 31 days (matching TypeScript implementation)
         additionalClaims: [String: Any] = [:],
         project: String? = nil
     ) {

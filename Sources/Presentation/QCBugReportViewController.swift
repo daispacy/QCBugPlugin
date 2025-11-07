@@ -256,6 +256,11 @@ final class QCBugReportViewController: UIViewController {
                     error: nil
                 )
 
+                // Auto-fetch members after successful login
+                if let project = self.gitLabProject {
+                    self.fetchAndInjectGitLabMembers(project: project)
+                }
+
                 if self.shouldSubmitAfterGitLabLogin {
                     self.shouldSubmitAfterGitLabLogin = false
                     let report = self.createBugReport()
@@ -333,6 +338,81 @@ final class QCBugReportViewController: UIViewController {
         let alert = UIAlertController(title: "GitLab Sign In Required", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
+    }
+
+    private func fetchAndInjectGitLabMembers(project: String) {
+        guard let provider = gitLabAuthProvider else { return }
+
+        print("🔍 QCBugPlugin: Fetching GitLab members for project: \(project)")
+
+        provider.fetchProjectMembers(project: project) { [weak self] result in
+            guard let self = self else { return }
+
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let members):
+                    print("✅ QCBugPlugin: Fetched \(members.count) GitLab members")
+                    self.injectGitLabMembers(members)
+                    self.triggerPriorityRefetch()
+
+                case .failure(let error):
+                    print("❌ QCBugPlugin: Failed to fetch GitLab members: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func triggerPriorityRefetch() {
+        let script = """
+        (function() {
+            if (typeof window.refetchPriorities === 'function') {
+                window.refetchPriorities();
+                console.log('✅ Triggered priority refetch');
+            } else {
+                console.warn('⚠️ window.refetchPriorities function not found');
+            }
+        })();
+        """
+
+        webView.evaluateJavaScript(script) { _, error in
+            if let error = error {
+                print("❌ QCBugPlugin: Failed to trigger priority refetch - \(error.localizedDescription)")
+            } else {
+                print("✅ QCBugPlugin: Triggered priority refetch")
+            }
+        }
+    }
+
+    private func injectGitLabMembers(_ members: [GitLabMember]) {
+        let usernames = members.map { $0.username }
+        let jsonData: [[String: String]] = members.map { member in
+            return ["username": member.username, "name": member.name]
+        }
+
+        guard let jsonString = try? JSONSerialization.data(withJSONObject: jsonData, options: []),
+              let escapedJSON = String(data: jsonString, encoding: .utf8) else {
+            print("❌ QCBugPlugin: Failed to serialize GitLab members")
+            return
+        }
+
+        let script = """
+        (function() {
+            if (typeof window.updateGitLabMembers === 'function') {
+                window.updateGitLabMembers(\(escapedJSON));
+                console.log('✅ Injected \(usernames.count) GitLab members');
+            } else {
+                console.warn('⚠️ window.updateGitLabMembers function not found');
+            }
+        })();
+        """
+
+        webView.evaluateJavaScript(script) { _, error in
+            if let error = error {
+                print("❌ QCBugPlugin: Failed to inject GitLab members - \(error.localizedDescription)")
+            } else {
+                print("✅ QCBugPlugin: Injected \(usernames.count) GitLab members into web view")
+            }
+        }
     }
 
     // MARK: - Media Attachments

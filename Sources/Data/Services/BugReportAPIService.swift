@@ -382,6 +382,8 @@ final class BugReportAPIService: BugReportProtocol {
             return .authenticationFailed
         case .authenticationCancelled:
             return .authenticationFailed
+        case .notAuthenticated:
+            return .authenticationFailed
         }
     }
 

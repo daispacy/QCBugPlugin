@@ -1061,6 +1061,42 @@
         }
     }
 
+    window.updateGitLabMembers = function (members) {
+        if (!Array.isArray(members)) {
+            notifyNativeLog('updateGitLabMembers called with invalid data');
+            return;
+        }
+
+        var usernames = [];
+        members.forEach(function (member) {
+            var username = member && typeof member.username === 'string' ? member.username.trim() : '';
+            if (username && usernames.indexOf(username) === -1) {
+                usernames.push(username);
+            }
+        });
+
+        state.assign.options = usernames;
+        state.assign.error = '';
+        state.assign.isLoading = false;
+
+        // Update cache key to prevent re-fetching
+        var endpoint = deriveMembersEndpoint(state.webhookURL);
+        var projectValue = typeof state.gitlab.project === 'string' ? state.gitlab.project.trim() : '';
+        if (endpoint && projectValue) {
+            state.assign.lastFetchKey = endpoint + '::' + projectValue;
+        }
+
+        renderAssignControls();
+        notifyNativeLog('Updated GitLab members from native: count=' + usernames.length);
+    };
+
+    window.refetchPriorities = function () {
+        if (state.gitlab.project) {
+            schedulePriorityFetch(true);
+            notifyNativeLog('Triggering priority refetch');
+        }
+    };
+
     document.addEventListener('DOMContentLoaded', function () {
         updateSystemInfo();
         updateGitLabSection();

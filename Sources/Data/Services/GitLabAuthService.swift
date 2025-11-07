@@ -600,6 +600,75 @@ final class GitLabAuthService: GitLabAuthProviding {
         sessionStore.saveJWT(jwt: jwt.jwt, header: jwt.header, expiration: jwt.expiration, username: jwt.username)
     }
 
+    // MARK: - Members Fetching
+
+    func fetchProjectMembers(project: String, completion: @escaping (Result<[GitLabMember], GitLabAuthError>) -> Void) {
+        guard let authorization = currentCachedAccessToken() else {
+            completion(.failure(.notAuthenticated))
+            return
+        }
+
+        // Normalize project path (remove leading/trailing slashes)
+        let projectPath = project.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !projectPath.isEmpty else {
+            completion(.failure(.invalidConfiguration))
+            return
+        }
+
+        // URL encode the project path
+        guard let encodedProject = projectPath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+            completion(.failure(.invalidConfiguration))
+            return
+        }
+
+        let membersURL = configuration.baseURL
+            .appendingPathComponent("api")
+            .appendingPathComponent("v4")
+            .appendingPathComponent("projects")
+            .appendingPathComponent(encodedProject)
+            .appendingPathComponent("members")
+            .appendingPathComponent("all")
+
+        var request = URLRequest(url: membersURL)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(authorization.value)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        print("🔍 GitLabAuthService: Fetching project members from \(membersURL.absoluteString)")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(.networkError(error.localizedDescription)))
+                return
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                completion(.failure(.invalidResponse))
+                return
+            }
+
+            guard (200...299).contains(httpResponse.statusCode) else {
+                let errorMessage = "HTTP \(httpResponse.statusCode)"
+                completion(.failure(.networkError(errorMessage)))
+                return
+            }
+
+            guard let data = data else {
+                completion(.failure(.invalidResponse))
+                return
+            }
+
+            do {
+                let members = try JSONDecoder().decode([GitLabMember].self, from: data)
+                print("✅ GitLabAuthService: Fetched \(members.count) project members")
+                completion(.success(members))
+            } catch {
+                print("❌ GitLabAuthService: Failed to parse members: \(error.localizedDescription)")
+                completion(.failure(.networkError("Failed to parse members data")))
+            }
+        }.resume()
+    }
+
     private func restorePersistedState() {
         if let storedToken = sessionStore.loadAccessToken() {
             let token = CachedAccessToken(
