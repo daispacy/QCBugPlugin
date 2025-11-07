@@ -106,7 +106,7 @@ final class BugReportAPIService: BugReportProtocol {
                 memoryInfo: report.memoryInfo,
                 gitLabProject: report.gitLabProject,
                 assigneeUsername: report.assigneeUsername,
-                issueNumber: report.issueNumber
+                issueNumber: report.issueNumber ?? -1
             )
             self.attachments = attachments
             self.metadata = gitLabCredentials.map { MetadataPayload(gitlab: GitLabPayload(credentials: $0)) }
