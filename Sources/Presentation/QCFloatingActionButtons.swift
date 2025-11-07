@@ -34,6 +34,7 @@ final class QCFloatingActionButtons: UIView {
     private let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
     private var keyboardHeight: CGFloat = 0
     private var zOrderMonitorTimer: Timer?
+    private var originalCenterBeforeExpand: CGPoint?
 
     // MARK: - Initialization
 
@@ -540,6 +541,9 @@ final class QCFloatingActionButtons: UIView {
         guard !isExpanded else { return }
         isExpanded = true
 
+        // Store original position before any potential adjustments
+        originalCenterBeforeExpand = self.center
+
         hapticFeedback.impactOccurred()
 
         // Calculate positions with bounds checking
@@ -566,6 +570,9 @@ final class QCFloatingActionButtons: UIView {
         var formY = screenshotY - spacing
         var clearSessionY = formY - spacing
 
+        var shouldAdjustMainButton = false
+        var newMainY: CGFloat = 0
+
         // Ensure top button doesn't go off screen
         if clearSessionY < minY {
             let overflow = minY - clearSessionY
@@ -576,10 +583,8 @@ final class QCFloatingActionButtons: UIView {
 
             // If still overflowing, adjust main button position
             if recordY > mainButton.center.y - spacing {
-                let newMainY = recordY + spacing
-                UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
-                    self.center.y = newMainY
-                })
+                newMainY = recordY + spacing
+                shouldAdjustMainButton = true
             }
         }
 
@@ -590,6 +595,11 @@ final class QCFloatingActionButtons: UIView {
 
         UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
             self.mainButton.transform = CGAffineTransform(rotationAngle: .pi / 4)
+
+            // Adjust container position if needed
+            if shouldAdjustMainButton {
+                self.center.y = newMainY
+            }
 
             self.recordButton.center.y = recordY
             self.recordButton.alpha = 1
@@ -616,6 +626,11 @@ final class QCFloatingActionButtons: UIView {
         UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
             self.mainButton.transform = .identity
 
+            // Restore original position if it was moved during expansion
+            if let originalCenter = self.originalCenterBeforeExpand {
+                self.center = originalCenter
+            }
+
             self.recordButton.center = self.mainButton.center
             self.recordButton.alpha = 0
             self.recordButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
@@ -623,15 +638,18 @@ final class QCFloatingActionButtons: UIView {
             self.screenshotButton.center = self.mainButton.center
             self.screenshotButton.alpha = 0
             self.screenshotButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
-            
+
             self.formButton.center = self.mainButton.center
             self.formButton.alpha = 0
             self.formButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
-            
+
             self.clearSessionButton.center = self.mainButton.center
             self.clearSessionButton.alpha = 0
             self.clearSessionButton.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
-        })
+        }) { _ in
+            // Clear the stored original position after collapse completes
+            self.originalCenterBeforeExpand = nil
+        }
     }
 
     // MARK: - Gesture Handling
@@ -688,6 +706,9 @@ final class QCFloatingActionButtons: UIView {
 
             // Ensure final position is within bounds
             ensureVisibleWithinBounds(animated: true)
+
+            // Clear stored original position since button has been manually moved
+            originalCenterBeforeExpand = nil
 
         default:
             break
