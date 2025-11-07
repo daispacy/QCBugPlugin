@@ -28,7 +28,6 @@ final class GitLabAuthService: GitLabAuthProviding {
 
     private var cachedJWT: CachedJWT?
     private var authSession: ASWebAuthenticationSession?
-    private var pendingAuthState: String?
     private var presentationContextProvider: AnyObject?
 
     convenience init(
@@ -74,7 +73,6 @@ final class GitLabAuthService: GitLabAuthProviding {
     func clearCache() {
         stateQueue.async(flags: .barrier) {
             self.cachedJWT = nil
-            self.pendingAuthState = nil
             self.authSession = nil
             if #available(iOS 13.0, *) {
                 self.presentationContextProvider = nil
@@ -98,13 +96,6 @@ final class GitLabAuthService: GitLabAuthProviding {
             return
         }
 
-        if pendingAuthState != nil {
-            DispatchQueue.main.async {
-                completion(.failure(.networkError("GitLab authentication is already in progress")))
-            }
-            return
-        }
-
         guard let redirectURI = configuration.redirectURI,
               let callbackScheme = redirectURI.scheme else {
             DispatchQueue.main.async {
@@ -120,20 +111,17 @@ final class GitLabAuthService: GitLabAuthProviding {
             return
         }
 
-        let state = configuration.scheme
-        guard let authorizationURL = authorizationURL(state: state, redirectURI: redirectURI) else {
+        guard let authorizationURL = authorizationURL(redirectURI: redirectURI) else {
             DispatchQueue.main.async {
                 completion(.failure(.invalidConfiguration))
             }
             return
         }
-        pendingAuthState = state
 
         DispatchQueue.main.async {
             let session = ASWebAuthenticationSession(url: authorizationURL, callbackURLScheme: callbackScheme) { [weak self] callbackURL, error in
                 guard let self = self else { return }
                 self.authSession = nil
-                self.pendingAuthState = nil
                 if #available(iOS 13.0, *) {
                     self.presentationContextProvider = nil
                 }
@@ -159,7 +147,7 @@ final class GitLabAuthService: GitLabAuthProviding {
                     return
                 }
 
-                self.processAuthenticationCallback(callbackURL, expectedState: state, redirectURI: redirectURI) { result in
+                self.processAuthenticationCallback(callbackURL, redirectURI: redirectURI) { result in
                     DispatchQueue.main.async {
                         completion(result)
                     }
@@ -176,7 +164,6 @@ final class GitLabAuthService: GitLabAuthProviding {
 
             if !session.start() {
                 self.authSession = nil
-                self.pendingAuthState = nil
                 if #available(iOS 13.0, *) {
                     self.presentationContextProvider = nil
                 }
@@ -190,7 +177,7 @@ final class GitLabAuthService: GitLabAuthProviding {
         }
     }
 
-    private func authorizationURL(state: String, redirectURI: URL) -> URL? {
+    private func authorizationURL(redirectURI: URL) -> URL? {
         guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: false) else {
             return nil
         }
@@ -205,8 +192,7 @@ final class GitLabAuthService: GitLabAuthProviding {
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "client_id", value: configuration.appId),
             URLQueryItem(name: "redirect_uri", value: redirectURI.absoluteString),
-            URLQueryItem(name: "scope", value: configuration.scopes.joined(separator: " ")),
-            URLQueryItem(name: "state", value: state)
+            URLQueryItem(name: "scope", value: configuration.scopes.joined(separator: " "))
         ]
 
         if let audience = configuration.audience {
@@ -240,7 +226,6 @@ final class GitLabAuthService: GitLabAuthProviding {
 
     private func processAuthenticationCallback(
         _ callbackURL: URL,
-        expectedState: String,
         redirectURI: URL,
         completion: @escaping (Result<GitLabAuthorization, GitLabAuthError>) -> Void
     ) {
@@ -252,15 +237,6 @@ final class GitLabAuthService: GitLabAuthProviding {
 
         let jwt = queryItems.first { $0.name == "jwt" }?.value
         let username = queryItems.first { $0.name == "username" }?.value
-        let state = queryItems.first { $0.name == "state" }?.value
-
-        guard state == expectedState else {
-            print("❌ GitLabAuthService: Invalid callback - state mismatch")
-            print("   Expected state: \(expectedState)")
-            print("   Received state: \(state ?? "nil")")
-            completion(.failure(.invalidResponse))
-            return
-        }
 
         guard let jwtToken = jwt, !jwtToken.isEmpty else {
             print("❌ GitLabAuthService: Invalid callback - missing JWT token")
@@ -277,7 +253,6 @@ final class GitLabAuthService: GitLabAuthProviding {
         print("✅ GitLabAuthService: Authorization callback received")
         print("   Username: \(user)")
         print("   JWT: \(jwtToken.prefix(50))...")
-        print("   State: ✓ matches")
 
         // Calculate expiration from JWT or use default (31 days)
         let expiration = Date().addingTimeInterval(configuration.jwtExpiration)
