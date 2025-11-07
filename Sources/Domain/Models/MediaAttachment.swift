@@ -38,6 +38,7 @@ struct MediaAttachment: Codable {
 enum MediaType: String, Codable {
     case screenshot = "screenshot"
     case screenRecording = "screen_recording"
+    case other = "other"
 
     var displayName: String {
         switch self {
@@ -45,6 +46,8 @@ enum MediaType: String, Codable {
             return "Screenshot"
         case .screenRecording:
             return "Screen Recording"
+        case .other:
+            return "Attachment"
         }
     }
 
@@ -54,6 +57,8 @@ enum MediaType: String, Codable {
             return "image/png"
         case .screenRecording:
             return "video/mp4"
+        case .other:
+            return "application/octet-stream"
         }
     }
 }

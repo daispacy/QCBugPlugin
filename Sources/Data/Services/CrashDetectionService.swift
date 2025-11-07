@@ -264,8 +264,8 @@ final class CrashDetectionService: CrashDetectionProtocol {
     }
 
     private func installSignalHandlers() {
-        for signal in signalsToHandle {
-            signal(signal) { signalNumber in
+        for sig in signalsToHandle {
+            Darwin.signal(sig) { signalNumber in
                 CrashDetectionService.handleSignal(signalNumber)
             }
         }

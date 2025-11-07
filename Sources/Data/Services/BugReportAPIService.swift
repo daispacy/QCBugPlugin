@@ -469,6 +469,8 @@ final class BugReportAPIService: BugReportProtocol {
             processImageAttachment(url: url, attachment: attachment, completion: completion)
         case .screenRecording:
             processVideoAttachment(url: url, attachment: attachment, completion: completion)
+        case .other:
+            processRawFileAttachment(url: url, attachment: attachment, completion: completion)
         }
     }
 
@@ -620,6 +622,34 @@ final class BugReportAPIService: BugReportProtocol {
 
             default:
                 break
+            }
+        }
+    }
+
+    private func processRawFileAttachment(
+        url: URL,
+        attachment: MediaAttachment,
+        completion: @escaping (Result<AttachmentPayload, BugReportError>) -> Void
+    ) {
+        processingQueue.async {
+            do {
+                let fileData = try Data(contentsOf: url)
+
+                let payload = AttachmentPayload(
+                    type: attachment.type.rawValue,
+                    fileName: attachment.fileName,
+                    mimeType: attachment.type.mimeType,
+                    timestamp: self.isoFormatter.string(from: attachment.timestamp),
+                    size: fileData.count,
+                    width: nil,
+                    height: nil,
+                    duration: nil,
+                    data: fileData.base64EncodedString()
+                )
+
+                completion(.success(payload))
+            } catch {
+                completion(.failure(.fileUploadFailed("Unable to load file at \(url.path): \(error.localizedDescription)")))
             }
         }
     }

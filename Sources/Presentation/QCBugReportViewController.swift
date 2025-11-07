@@ -607,6 +607,8 @@ extension QCBugReportViewController: WKNavigationDelegate {
             mediaType = "screenRecording"
         case .screenshot:
             mediaType = "screenshot"
+        case .other:
+            mediaType = "other"
         }
         let fileName = attachment.fileName
             .replacingOccurrences(of: "\\", with: "\\\\")
