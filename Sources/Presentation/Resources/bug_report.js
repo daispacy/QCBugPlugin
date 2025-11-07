@@ -26,6 +26,7 @@
             isLoading: false,
             username: null,
             project: null,
+            pat: null,
             error: '',
             available: false
         }
@@ -394,6 +395,15 @@
             project: projectValue
         };
 
+        // Add metadata with GitLab JWT if available
+        if (state.gitlab.pat) {
+            payload.metadata = {
+                gitlab: {
+                    pat: state.gitlab.pat
+                }
+            };
+        }
+
         notifyNativeLog('Fetching GitLab priorities (endpoint=' + endpoint + ', project=' + projectValue + ')');
 
         fetch(endpoint, {
@@ -731,6 +741,7 @@
         state.gitlab.requiresLogin = !!payload.requiresLogin;
         state.gitlab.isLoading = !!payload.isLoading;
         state.gitlab.username = typeof payload.username === 'string' && payload.username.length ? payload.username : null;
+        state.gitlab.pat = typeof payload.pat === 'string' && payload.pat.length ? payload.pat : null;
         var previousProject = state.gitlab.project;
         var projectValue = typeof payload.project === 'string' ? payload.project.trim() : '';
         state.gitlab.project = projectValue.length ? projectValue : null;
