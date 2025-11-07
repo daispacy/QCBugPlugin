@@ -165,6 +165,51 @@ When adding features:
 5. Session persisted via `GitLabSessionStore`
 6. JWT + PAT injected in bug report submission headers
 
+### GitLab JWT Signing Key Configuration
+
+**CRITICAL:** The JWT signing key MUST match between iOS and your backend server.
+
+**iOS Configuration:**
+```swift
+let gitLabConfig = GitLabAppConfig(
+    appId: "your_gitlab_app_id",
+    secret: "your_gitlab_app_secret",
+    signingKey: "your_shared_secret_key", // MUST match backend
+    redirectURI: URL(string: "yourapp://gitlab/callback")!,
+    baseURL: URL(string: "https://gitlab.com")!,
+    project: "namespace/project-name"
+)
+```
+
+**Backend Configuration (TypeScript example):**
+```typescript
+// cfg.session.signingKey must equal the iOS signingKey
+jwt.verify(token, cfg.session.signingKey, { algorithms: ['HS256'] });
+```
+
+**Verification Logs:**
+
+When the app starts, you'll see:
+```
+✅ GitLabAuthService: Initialized with signing key from configuration
+   Key length: 64 characters
+   Key preview: abc1...xyz9
+```
+
+When JWT is generated:
+```
+🔐 GitLabAuthService: Using signing key from configuration
+   Key length: 64 characters
+   Key preview: abc1...xyz9
+```
+
+**Important Notes:**
+- The signing key is sourced from `GitLabAppConfig.signingKey`
+- It's used in `GitLabAuthService.generateJWT()` via `configuration.signingKey`
+- Keys are logged with preview (first/last 4 chars) for verification without exposing full secret
+- Empty signing key will cause immediate failure with clear error message
+- The same key must be used for JWT generation (iOS) and verification (backend)
+
 ## Key Files Reference
 
 | File Path | Purpose |

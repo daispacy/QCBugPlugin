@@ -200,6 +200,9 @@ final class QCBugPluginManager {
                 issueNumber: self.sessionIssueNumber
             )
 
+            // Hide floating buttons while bug report is presented
+            self.floatingActionButtons?.isHidden = true
+
             // Present modally
             if let topViewController = UIApplication.shared.topViewController() {
                 let navController = UINavigationController(rootViewController: bugReportVC)
@@ -869,7 +872,10 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
 
         guard let bugReportService = bugReportService else {
             print("❌ QCBugPlugin: No webhook URL configured. Cannot submit bug report.")
-            controller.dismiss(animated: true)
+            controller.dismiss(animated: true) { [weak self] in
+                // Show floating buttons after dismissal
+                self?.floatingActionButtons?.isHidden = false
+            }
             return
         }
 
@@ -885,11 +891,14 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
                     
                 case .failure(let error):
                     self.delegate?.bugPluginDidFailToSubmitReport(error)
-                    
+
                     print("❌ QCBugPlugin: Failed to submit bug report: \(error.localizedDescription)")
                 }
-                
-                controller.dismiss(animated: true)
+
+                controller.dismiss(animated: true) { [weak self] in
+                    // Show floating buttons after dismissal
+                    self?.floatingActionButtons?.isHidden = false
+                }
             }
         }
     }
@@ -907,8 +916,11 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         } else {
             self.sessionWebhookURL = userWebhookInput
         }
-        
-        controller.dismiss(animated: true)
+
+        controller.dismiss(animated: true) { [weak self] in
+            // Show floating buttons after dismissal
+            self?.floatingActionButtons?.isHidden = false
+        }
     }
 
     func bugReportViewController(_ controller: QCBugReportViewController, requestNativePreviewFor url: URL) {
