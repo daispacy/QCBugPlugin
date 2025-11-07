@@ -111,7 +111,8 @@ final class GitLabAuthService: GitLabAuthProviding {
             return
         }
 
-        guard let authorizationURL = authorizationURL(redirectURI: redirectURI) else {
+        let state = configuration.scheme
+        guard let authorizationURL = authorizationURL(state: state, redirectURI: redirectURI) else {
             DispatchQueue.main.async {
                 completion(.failure(.invalidConfiguration))
             }
@@ -177,7 +178,7 @@ final class GitLabAuthService: GitLabAuthProviding {
         }
     }
 
-    private func authorizationURL(redirectURI: URL) -> URL? {
+    private func authorizationURL(state: String, redirectURI: URL) -> URL? {
         guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: false) else {
             return nil
         }
@@ -192,7 +193,8 @@ final class GitLabAuthService: GitLabAuthProviding {
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "client_id", value: configuration.appId),
             URLQueryItem(name: "redirect_uri", value: redirectURI.absoluteString),
-            URLQueryItem(name: "scope", value: configuration.scopes.joined(separator: " "))
+            URLQueryItem(name: "scope", value: configuration.scopes.joined(separator: " ")),
+            URLQueryItem(name: "state", value: state)
         ]
 
         if let audience = configuration.audience {
