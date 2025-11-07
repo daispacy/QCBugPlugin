@@ -120,7 +120,7 @@ final class GitLabAuthService: GitLabAuthProviding {
             return
         }
 
-        let state = UUID().uuidString
+        let state = configuration.scheme
         guard let authorizationURL = authorizationURL(state: state, redirectURI: redirectURI) else {
             DispatchQueue.main.async {
                 completion(.failure(.invalidConfiguration))

@@ -19,11 +19,13 @@ public struct GitLabAppConfig {
     public let signingKey: String
     public let redirectURI: URL?
     public let project: String?
+    public let scheme: String
 
     public init(
         appId: String,
         secret: String,
         signingKey: String,
+        scheme: String,
         redirectURI: URL? = nil,
         baseURL: URL = URL(string: "https://gitlab.com")!,
         scopes: [String] = ["api"],
@@ -35,6 +37,7 @@ public struct GitLabAppConfig {
         self.appId = appId
         self.secret = secret
         self.signingKey = signingKey
+        self.scheme = scheme
         self.redirectURI = redirectURI
         self.baseURL = baseURL
         self.scopes = scopes
