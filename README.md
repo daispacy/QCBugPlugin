@@ -119,7 +119,7 @@ QCBugPlugin supports direct submission to GitLab issues:
 let gitLabConfig = GitLabAppConfig(
     appId: "your-gitlab-app-id",
     secret: "your-gitlab-secret",
-    signingKey: "your-signing-key",
+    scheme: "myapp",
     redirectURI: URL(string: "myapp://oauth/callback"),
     baseURL: URL(string: "https://gitlab.com")!,
     scopes: ["api"],

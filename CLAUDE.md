@@ -159,56 +159,47 @@ When adding features:
 
 ### GitLab Integration Workflow
 1. User taps "GitLab Login" → `requestGitLabAuthentication()`
-2. `ASWebAuthenticationSession` OAuth2 code flow
-3. Token exchange via `GitLabAuthService.authenticate()`
-4. JWT generation with HMAC-SHA256
-5. Session persisted via `GitLabSessionStore`
-6. JWT + PAT injected in bug report submission headers
+2. `ASWebAuthenticationSession` OAuth2 code flow with state parameter
+3. Server handles token exchange and JWT generation
+4. Server redirects back with JWT and username in callback URL
+5. iOS app receives and caches JWT via `GitLabSessionStore`
+6. JWT injected in bug report submission headers
 
-### GitLab JWT Signing Key Configuration
+### GitLab OAuth Configuration
 
-**CRITICAL:** The JWT signing key MUST match between iOS and your backend server.
+**IMPORTANT:** The server handles OAuth token exchange and JWT generation. The iOS app only receives and caches the JWT.
 
 **iOS Configuration:**
 ```swift
 let gitLabConfig = GitLabAppConfig(
     appId: "your_gitlab_app_id",
     secret: "your_gitlab_app_secret",
-    signingKey: "your_shared_secret_key", // MUST match backend
+    scheme: "yourapp", // Used as OAuth state for CSRF protection
     redirectURI: URL(string: "yourapp://gitlab/callback")!,
     baseURL: URL(string: "https://gitlab.com")!,
     project: "namespace/project-name"
 )
 ```
 
-**Backend Configuration (TypeScript example):**
-```typescript
-// cfg.session.signingKey must equal the iOS signingKey
-jwt.verify(token, cfg.session.signingKey, { algorithms: ['HS256'] });
-```
+**Backend Server Requirements:**
 
-**Verification Logs:**
+The backend server must:
+1. Handle the OAuth authorization callback from GitLab
+2. Exchange the authorization code for an access token
+3. Generate a JWT with the user's information
+4. Redirect back to the iOS app with: `<redirectURI>?jwt=<token>&username=<username>`
 
-When the app starts, you'll see:
+**Example callback format:**
 ```
-✅ GitLabAuthService: Initialized with signing key from configuration
-   Key length: 64 characters
-   Key preview: abc1...xyz9
-```
-
-When JWT is generated:
-```
-🔐 GitLabAuthService: Using signing key from configuration
-   Key length: 64 characters
-   Key preview: abc1...xyz9
+yourapp://gitlab/callback?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...&username=john.doe
 ```
 
 **Important Notes:**
-- The signing key is sourced from `GitLabAppConfig.signingKey`
-- It's used in `GitLabAuthService.generateJWT()` via `configuration.signingKey`
-- Keys are logged with preview (first/last 4 chars) for verification without exposing full secret
-- Empty signing key will cause immediate failure with clear error message
-- The same key must be used for JWT generation (iOS) and verification (backend)
+- iOS app no longer generates JWTs - this is handled server-side
+- The server must handle the OAuth token exchange with GitLab
+- The server generates the JWT and returns it via the callback URL
+- iOS app simply caches the JWT and uses it for authenticated requests
+- JWT expiration defaults to 31 days (configurable via `jwtExpiration` parameter)
 
 ## Key Files Reference
 

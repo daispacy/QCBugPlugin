@@ -189,6 +189,9 @@ extension QCBugReportViewController {
         )
         didInjectGitLabCredentials = true
         executeGitLabInjectionScript(script)
+
+        // Always refetch priorities when GitLab state changes
+        triggerPriorityRefetch()
     }
 
     private func makeGitLabCredentialScript(

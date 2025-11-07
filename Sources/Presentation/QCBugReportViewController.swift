@@ -374,7 +374,7 @@ final class QCBugReportViewController: UIViewController {
                 case .success(let members):
                     print("✅ QCBugPlugin: Fetched \(members.count) GitLab members")
                     self.injectGitLabMembers(members)
-                    self.triggerPriorityRefetch()
+                    // Priority refetch is now handled automatically by emitGitLabState()
 
                 case .failure(let error):
                     print("❌ QCBugPlugin: Failed to fetch GitLab members: \(error.localizedDescription)")
@@ -383,7 +383,7 @@ final class QCBugReportViewController: UIViewController {
         }
     }
 
-    private func triggerPriorityRefetch() {
+    internal func triggerPriorityRefetch() {
         let script = """
         (function() {
             if (typeof window.refetchPriorities === 'function') {
