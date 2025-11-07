@@ -85,7 +85,26 @@ final class QCBugReportViewController: UIViewController {
         loadBugReportInterface()
         isWebViewLoaded = false
     }
-    
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+
+        // Reset GitLab login state as safety measure
+        // This handles edge cases where AWS session closes without calling completion
+        if isGitLabLoginInProgress {
+            print("⚠️ QCBugPlugin: Resetting stuck GitLab login state on view appear")
+            isGitLabLoginInProgress = false
+            emitGitLabState(
+                token: gitLabJWT,
+                header: gitLabJWT.map { "Bearer \($0)" },
+                username: gitLabUsername,
+                requiresLogin: gitLabJWT == nil,
+                isLoading: false,
+                error: nil
+            )
+        }
+    }
+
     // MARK: - Setup Methods
     
     private func setupUI() {
@@ -156,8 +175,6 @@ final class QCBugReportViewController: UIViewController {
     }
     
     @objc private func submitTapped() {
-        guard !isGitLabLoginInProgress else { return }
-
         if gitLabAuthProvider != nil && gitLabJWT == nil {
             shouldSubmitAfterGitLabLogin = true
             requestGitLabAuthentication(triggeredBySubmit: true)
@@ -216,7 +233,11 @@ final class QCBugReportViewController: UIViewController {
             return
         }
 
-        guard !isGitLabLoginInProgress else { return }
+        // Allow retry if login was stuck or session closed unexpectedly
+        // Reset state if already in progress to allow fresh login attempt
+        if isGitLabLoginInProgress {
+            print("⚠️ QCBugPlugin: Previous GitLab login still in progress, resetting state to allow retry")
+        }
         isGitLabLoginInProgress = true
 
         if triggeredBySubmit {
