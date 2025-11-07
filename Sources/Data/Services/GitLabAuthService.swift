@@ -519,8 +519,14 @@ final class GitLabAuthService: GitLabAuthProviding {
         }
 
         do {
-            let headerData = try JSONSerialization.data(withJSONObject: header, options: [])
-            let payloadData = try JSONSerialization.data(withJSONObject: claims, options: [])
+            // Use sortedKeys for consistent JSON serialization (required for JWT compatibility)
+            var serializationOptions: JSONSerialization.WritingOptions = []
+            if #available(iOS 11.0, *) {
+                serializationOptions = [.sortedKeys]
+            }
+
+            let headerData = try JSONSerialization.data(withJSONObject: header, options: serializationOptions)
+            let payloadData = try JSONSerialization.data(withJSONObject: claims, options: serializationOptions)
 
             let headerPart = base64URLEncode(headerData)
             let payloadPart = base64URLEncode(payloadData)
@@ -532,6 +538,17 @@ final class GitLabAuthService: GitLabAuthProviding {
 
             let signaturePart = base64URLEncode(signatureData)
             let jwt = "\(signingInput).\(signaturePart)"
+
+            // Debug logging for JWT verification
+            if let headerJSON = String(data: headerData, encoding: .utf8),
+               let payloadJSON = String(data: payloadData, encoding: .utf8) {
+                print("🔐 GitLabAuthService: JWT Header JSON: \(headerJSON)")
+                print("🔐 GitLabAuthService: JWT Payload JSON: \(payloadJSON)")
+                print("🔐 GitLabAuthService: JWT Parts - Header: \(headerPart)")
+                print("🔐 GitLabAuthService: JWT Parts - Payload: \(payloadPart)")
+                print("🔐 GitLabAuthService: JWT Parts - Signature: \(signaturePart)")
+            }
+
             let cachedJWT = CachedJWT(
                 header: "Bearer \(jwt)",
                 jwt: jwt,
@@ -539,6 +556,7 @@ final class GitLabAuthService: GitLabAuthProviding {
                 username: username
             )
             print("✅ GitLabAuthService: Generated GitLab session JWT expiring at \(expiration)")
+            print("🔑 GitLabAuthService: JWT Token: \(jwt)")
             return .success(cachedJWT)
         } catch {
             return .failure(.jwtGenerationFailed(error.localizedDescription))
