@@ -5,19 +5,13 @@
 //  Created by GitHub Copilot on 11/5/25.
 //
 
-import CommonCrypto
 import Foundation
 import AuthenticationServices
 import UIKit
 
-/// Concrete implementation responsible for acquiring GitLab access tokens and JWTs.
+/// Concrete implementation responsible for acquiring GitLab JWTs via OAuth callback.
+/// The server handles OAuth token exchange and returns JWT + username in the callback URL.
 final class GitLabAuthService: GitLabAuthProviding {
-
-    private struct CachedAccessToken {
-        let value: String
-        let expiration: Date
-        let username: String
-    }
 
     private struct CachedJWT {
         let header: String
@@ -26,31 +20,12 @@ final class GitLabAuthService: GitLabAuthProviding {
         let username: String?
     }
 
-    private struct AccessTokenResponse: Decodable {
-        let accessToken: String
-        let tokenType: String
-        let expiresIn: Int
-        let createdAt: Int?
-
-        enum CodingKeys: String, CodingKey {
-            case accessToken = "access_token"
-            case tokenType = "token_type"
-            case expiresIn = "expires_in"
-            case createdAt = "created_at"
-        }
-    }
-
-    private struct GitLabUserResponse: Decodable {
-        let username: String
-    }
-
     private let configuration: GitLabAppConfig
     private let session: URLSession
     private let jsonDecoder: JSONDecoder
     private let sessionStore: GitLabSessionStore
     private let stateQueue = DispatchQueue(label: "com.qcbugplugin.gitlab-auth", attributes: .concurrent)
 
-    private var cachedAccessToken: CachedAccessToken?
     private var cachedJWT: CachedJWT?
     private var authSession: ASWebAuthenticationSession?
     private var pendingAuthState: String?
@@ -91,35 +66,13 @@ final class GitLabAuthService: GitLabAuthProviding {
             return
         }
 
-        guard let accessToken = currentCachedAccessToken(), accessToken.expiration > Date() else {
-            DispatchQueue.main.async {
-                completion(.failure(.userAuthenticationRequired))
-            }
-            return
-        }
-
-        switch generateJWT(using: accessToken) {
-        case .failure(let error):
-            DispatchQueue.main.async {
-                completion(.failure(error))
-            }
-        case .success(let cachedJWT):
-            storeCachedJWT(cachedJWT)
-            let authorization = GitLabAuthorization(
-                authorizationHeader: cachedJWT.header,
-                jwt: cachedJWT.jwt,
-                username: cachedJWT.username,
-                project: configuration.project
-            )
-            DispatchQueue.main.async {
-                completion(.success(authorization))
-            }
+        DispatchQueue.main.async {
+            completion(.failure(.userAuthenticationRequired))
         }
     }
 
     func clearCache() {
         stateQueue.async(flags: .barrier) {
-            self.cachedAccessToken = nil
             self.cachedJWT = nil
             self.pendingAuthState = nil
             self.authSession = nil
@@ -132,9 +85,6 @@ final class GitLabAuthService: GitLabAuthProviding {
 
     func hasValidAuthorization() -> Bool {
         if let jwt = currentCachedJWT(), jwt.expiration > Date() {
-            return true
-        }
-        if let token = currentCachedAccessToken(), token.expiration > Date() {
             return true
         }
         return false
@@ -300,123 +250,57 @@ final class GitLabAuthService: GitLabAuthProviding {
             return
         }
 
-        let code = queryItems.first { $0.name == "code" }?.value
+        let jwt = queryItems.first { $0.name == "jwt" }?.value
+        let username = queryItems.first { $0.name == "username" }?.value
         let state = queryItems.first { $0.name == "state" }?.value
 
-        guard let authorizationCode = code, state == expectedState else {
+        guard state == expectedState else {
+            print("❌ GitLabAuthService: Invalid callback - state mismatch")
+            print("   Expected state: \(expectedState)")
+            print("   Received state: \(state ?? "nil")")
             completion(.failure(.invalidResponse))
             return
         }
 
-        requestAccessToken(authorizationCode: authorizationCode, redirectURI: redirectURI.absoluteString) { [weak self] result in
-            guard let self = self else { return }
-
-            switch result {
-            case .failure(let error):
-                completion(.failure(error))
-            case .success(let token):
-                switch self.generateJWT(using: token) {
-                case .failure(let error):
-                    completion(.failure(error))
-                case .success(let cachedJWT):
-                    self.storeCachedJWT(cachedJWT)
-                    let authorization = GitLabAuthorization(
-                        authorizationHeader: cachedJWT.header,
-                        jwt: cachedJWT.jwt,
-                        username: cachedJWT.username,
-                        project: self.configuration.project
-                    )
-                    completion(.success(authorization))
-                }
-            }
-        }
-    }
-
-    private func requestAccessToken(
-        authorizationCode: String,
-        redirectURI: String,
-        completion: @escaping (Result<CachedAccessToken, GitLabAuthError>) -> Void
-    ) {
-        guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: false) else {
-            completion(.failure(.invalidConfiguration))
+        guard let jwtToken = jwt, !jwtToken.isEmpty else {
+            print("❌ GitLabAuthService: Invalid callback - missing JWT token")
+            completion(.failure(.invalidResponse))
             return
         }
 
-        var path = components.path
-        if path.hasSuffix("/") {
-            path.removeLast()
-        }
-        components.path = path.isEmpty ? "/oauth/token" : path + "/oauth/token"
-
-        guard let url = components.url else {
-            completion(.failure(.invalidConfiguration))
+        guard let user = username, !user.isEmpty else {
+            print("❌ GitLabAuthService: Invalid callback - missing username")
+            completion(.failure(.invalidResponse))
             return
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        print("✅ GitLabAuthService: Authorization callback received")
+        print("   Username: \(user)")
+        print("   JWT: \(jwtToken.prefix(50))...")
+        print("   State: ✓ matches")
 
-        var bodyComponents = URLComponents()
-        bodyComponents.queryItems = [
-            URLQueryItem(name: "grant_type", value: "authorization_code"),
-            URLQueryItem(name: "code", value: authorizationCode),
-            URLQueryItem(name: "redirect_uri", value: redirectURI),
-            URLQueryItem(name: "client_id", value: configuration.appId),
-            URLQueryItem(name: "client_secret", value: configuration.secret)
-        ]
-        request.httpBody = bodyComponents.percentEncodedQuery?.data(using: .utf8)
+        // Calculate expiration from JWT or use default (31 days)
+        let expiration = Date().addingTimeInterval(configuration.jwtExpiration)
 
-        session.dataTask(with: request) { [weak self] data, response, error in
-            guard let self = self else { return }
+        let cachedJWT = CachedJWT(
+            header: "Bearer \(jwtToken)",
+            jwt: jwtToken,
+            expiration: expiration,
+            username: user
+        )
 
-            if let error = error {
-                completion(.failure(.networkError(error.localizedDescription)))
-                return
-            }
+        storeCachedJWT(cachedJWT)
 
-            if let httpResponse = response as? HTTPURLResponse,
-               !(200...299).contains(httpResponse.statusCode) {
-                let message = self.decodeErrorMessage(from: data) ?? "HTTP \(httpResponse.statusCode)"
-                completion(.failure(.networkError(message)))
-                return
-            }
+        let authorization = GitLabAuthorization(
+            authorizationHeader: cachedJWT.header,
+            jwt: cachedJWT.jwt,
+            username: cachedJWT.username,
+            project: configuration.project
+        )
 
-            guard let data = data else {
-                completion(.failure(.invalidResponse))
-                return
-            }
-
-            do {
-                let response = try self.jsonDecoder.decode(AccessTokenResponse.self, from: data)
-                let lifetime = TimeInterval(response.expiresIn)
-                let expiry = Date().addingTimeInterval(max(lifetime - 30, 30))
-
-                self.fetchUserProfile(accessToken: response.accessToken) { userResult in
-                    switch userResult {
-                    case .failure(let error):
-                        completion(.failure(error))
-                    case .success(let userProfile):
-                        let username = userProfile.username.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !username.isEmpty else {
-                            completion(.failure(.invalidResponse))
-                            return
-                        }
-                        let cachedToken = CachedAccessToken(
-                            value: response.accessToken,
-                            expiration: expiry,
-                            username: username
-                        )
-                        self.storeCachedAccessToken(cachedToken)
-                        completion(.success(cachedToken))
-                    }
-                }
-            } catch {
-                completion(.failure(.tokenGenerationFailed))
-            }
-        }.resume()
+        completion(.success(authorization))
     }
+
 
     private func decodeErrorMessage(from data: Data?) -> String? {
         guard let data = data,
@@ -429,183 +313,9 @@ final class GitLabAuthService: GitLabAuthProviding {
             json["message"] as? String
     }
 
-    private func fetchUserProfile(accessToken: String, completion: @escaping (Result<GitLabUserResponse, GitLabAuthError>) -> Void) {
-        guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: false) else {
-            completion(.failure(.invalidConfiguration))
-            return
-        }
 
-        var path = components.path
-        if path.hasSuffix("/") {
-            path.removeLast()
-        }
-        components.path = path.isEmpty ? "/api/v4/user" : path + "/api/v4/user"
-
-        guard let url = components.url else {
-            completion(.failure(.invalidConfiguration))
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-
-        session.dataTask(with: request) { [weak self] data, response, error in
-            guard let self = self else { return }
-
-            if let error = error {
-                completion(.failure(.networkError(error.localizedDescription)))
-                return
-            }
-
-            if let httpResponse = response as? HTTPURLResponse,
-               !(200...299).contains(httpResponse.statusCode) {
-                let message = self.decodeErrorMessage(from: data) ?? "HTTP \(httpResponse.statusCode)"
-                completion(.failure(.networkError(message)))
-                return
-            }
-
-            guard let data = data else {
-                completion(.failure(.invalidResponse))
-                return
-            }
-
-            do {
-                let user = try self.jsonDecoder.decode(GitLabUserResponse.self, from: data)
-                completion(.success(user))
-            } catch {
-                print("❌ GitLabAuthService: Failed to decode GitLab user response - \(error.localizedDescription)")
-                completion(.failure(.invalidResponse))
-            }
-        }.resume()
-    }
-
-    private func generateJWT(using token: CachedAccessToken) -> Result<CachedJWT, GitLabAuthError> {
-        guard !configuration.signingKey.isEmpty else {
-            return .failure(.invalidConfiguration)
-        }
-
-        let issuedAt = Date()
-        let expiration = issuedAt.addingTimeInterval(max(configuration.jwtExpiration, 60))
-
-        let header: [String: Any] = [
-            "alg": "HS256",
-            "typ": "JWT"
-        ]
-
-        let username = token.username.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !username.isEmpty else {
-            return .failure(.jwtGenerationFailed("Missing GitLab username"))
-        }
-
-        var claims: [String: Any] = [
-            "sub": username,
-            "typ": "mcp-session",
-            "iat": Int(issuedAt.timeIntervalSince1970),
-            "exp": Int(expiration.timeIntervalSince1970)
-        ]
-
-        if let audience = configuration.audience {
-            claims["aud"] = audience
-        }
-
-        for (key, value) in configuration.additionalClaims {
-            claims[key] = value
-        }
-
-        guard JSONSerialization.isValidJSONObject(header), JSONSerialization.isValidJSONObject(claims) else {
-            return .failure(.jwtGenerationFailed("Claims contain non-JSON compatible values"))
-        }
-
-        do {
-            // Use sortedKeys for consistent JSON serialization (required for JWT compatibility)
-            var serializationOptions: JSONSerialization.WritingOptions = []
-            if #available(iOS 11.0, *) {
-                serializationOptions = [.sortedKeys]
-            }
-
-            let headerData = try JSONSerialization.data(withJSONObject: header, options: serializationOptions)
-            let payloadData = try JSONSerialization.data(withJSONObject: claims, options: serializationOptions)
-
-            let headerPart = base64URLEncode(headerData)
-            let payloadPart = base64URLEncode(payloadData)
-            let signingInput = "\(headerPart).\(payloadPart)"
-
-            guard let signatureData = hmacSHA256(signingInput: signingInput, key: configuration.signingKey) else {
-                return .failure(.jwtGenerationFailed("Unable to sign JWT"))
-            }
-
-            let signaturePart = base64URLEncode(signatureData)
-            let jwt = "\(signingInput).\(signaturePart)"
-
-            // Debug logging for JWT verification
-            if let headerJSON = String(data: headerData, encoding: .utf8),
-               let payloadJSON = String(data: payloadData, encoding: .utf8) {
-                print("🔐 GitLabAuthService: JWT Header JSON: \(headerJSON)")
-                print("🔐 GitLabAuthService: JWT Payload JSON: \(payloadJSON)")
-                print("🔐 GitLabAuthService: JWT Parts - Header: \(headerPart)")
-                print("🔐 GitLabAuthService: JWT Parts - Payload: \(payloadPart)")
-                print("🔐 GitLabAuthService: JWT Parts - Signature: \(signaturePart)")
-            }
-
-            let cachedJWT = CachedJWT(
-                header: "Bearer \(jwt)",
-                jwt: jwt,
-                expiration: expiration,
-                username: username
-            )
-            print("✅ GitLabAuthService: Generated GitLab session JWT expiring at \(expiration)")
-            print("🔑 GitLabAuthService: JWT Token: \(jwt)")
-            return .success(cachedJWT)
-        } catch {
-            return .failure(.jwtGenerationFailed(error.localizedDescription))
-        }
-    }
 
     // MARK: - Helpers
-
-    private func hmacSHA256(signingInput: String, key: String) -> Data? {
-        guard let messageData = signingInput.data(using: .utf8),
-              let keyData = key.data(using: .utf8) else {
-            return nil
-        }
-
-        var hmac = Data(count: Int(CC_SHA256_DIGEST_LENGTH))
-        hmac.withUnsafeMutableBytes { hmacBytes in
-            messageData.withUnsafeBytes { messageBytes in
-                keyData.withUnsafeBytes { keyBytes in
-                    CCHmac(
-                        CCHmacAlgorithm(kCCHmacAlgSHA256),
-                        keyBytes.baseAddress,
-                        keyData.count,
-                        messageBytes.baseAddress,
-                        messageData.count,
-                        hmacBytes.baseAddress
-                    )
-                }
-            }
-        }
-        return hmac
-    }
-
-    private func base64URLEncode(_ data: Data) -> String {
-        return data.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
-
-    private func currentCachedAccessToken() -> CachedAccessToken? {
-        stateQueue.sync { cachedAccessToken }
-    }
-
-    private func storeCachedAccessToken(_ token: CachedAccessToken) {
-        stateQueue.sync(flags: .barrier) {
-            self.cachedAccessToken = token
-        }
-        sessionStore.saveAccessToken(value: token.value, expiration: token.expiration, username: token.username)
-    }
 
     private func currentCachedJWT() -> CachedJWT? {
         stateQueue.sync { cachedJWT }
@@ -620,85 +330,19 @@ final class GitLabAuthService: GitLabAuthProviding {
 
     // MARK: - Members Fetching
 
+    /// TODO: This method needs to be updated to work with the new architecture.
+    /// Since iOS no longer has a GitLab access token (only the JWT from the server),
+    /// this should either:
+    /// 1. Call a backend endpoint that proxies to GitLab API, OR
+    /// 2. Have the server return the access_token in the callback URL
     func fetchProjectMembers(project: String, completion: @escaping (Result<[GitLabMember], GitLabAuthError>) -> Void) {
-        guard let authorization = currentCachedAccessToken() else {
-            completion(.failure(.notAuthenticated))
-            return
-        }
-
-        // Normalize project path (remove leading/trailing slashes)
-        let projectPath = project.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard !projectPath.isEmpty else {
-            completion(.failure(.invalidConfiguration))
-            return
-        }
-
-        // URL encode the project path
-        guard let encodedProject = projectPath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
-            completion(.failure(.invalidConfiguration))
-            return
-        }
-
-        let membersURL = configuration.baseURL
-            .appendingPathComponent("api")
-            .appendingPathComponent("v4")
-            .appendingPathComponent("projects")
-            .appendingPathComponent(encodedProject)
-            .appendingPathComponent("members")
-            .appendingPathComponent("all")
-
-        var request = URLRequest(url: membersURL)
-        request.httpMethod = "GET"
-        request.setValue("Bearer \(authorization.value)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-
-        print("🔍 GitLabAuthService: Fetching project members from \(membersURL.absoluteString)")
-
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(.networkError(error.localizedDescription)))
-                return
-            }
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                completion(.failure(.invalidResponse))
-                return
-            }
-
-            guard (200...299).contains(httpResponse.statusCode) else {
-                let errorMessage = "HTTP \(httpResponse.statusCode)"
-                completion(.failure(.networkError(errorMessage)))
-                return
-            }
-
-            guard let data = data else {
-                completion(.failure(.invalidResponse))
-                return
-            }
-
-            do {
-                let members = try JSONDecoder().decode([GitLabMember].self, from: data)
-                print("✅ GitLabAuthService: Fetched \(members.count) project members")
-                completion(.success(members))
-            } catch {
-                print("❌ GitLabAuthService: Failed to parse members: \(error.localizedDescription)")
-                completion(.failure(.networkError("Failed to parse members data")))
-            }
-        }.resume()
+        print("⚠️ GitLabAuthService: fetchProjectMembers is not implemented with new OAuth flow")
+        print("   This method requires a GitLab access token, which is no longer available on iOS")
+        print("   Consider implementing a backend endpoint to fetch members")
+        completion(.failure(.notAuthenticated))
     }
 
     private func restorePersistedState() {
-        if let storedToken = sessionStore.loadAccessToken() {
-            let token = CachedAccessToken(
-                value: storedToken.value,
-                expiration: storedToken.expiration,
-                username: storedToken.username
-            )
-            stateQueue.sync(flags: .barrier) {
-                self.cachedAccessToken = token
-            }
-        }
-
         if let storedJWT = sessionStore.loadJWT() {
             let expiration = storedJWT.expiration ?? Date.distantFuture
             let jwt = CachedJWT(
