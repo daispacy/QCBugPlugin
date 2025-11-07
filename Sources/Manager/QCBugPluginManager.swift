@@ -348,6 +348,30 @@ final class QCBugPluginManager {
             name: UIApplication.didEnterBackgroundNotification,
             object: nil
         )
+
+        // Listen for window becoming key (handles rootViewController changes)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowDidBecomeKey),
+            name: UIWindow.didBecomeKeyNotification,
+            object: nil
+        )
+
+        // Listen for window becoming visible
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowDidBecomeVisible),
+            name: UIWindow.didBecomeVisibleNotification,
+            object: nil
+        )
+
+        // Listen for view controller presentations (modals)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(viewControllerDidPresent),
+            name: NSNotification.Name("UIViewControllerShowDetailTargetDidChangeNotification"),
+            object: nil
+        )
     }
 
     // MARK: - Crash Detection
@@ -492,6 +516,36 @@ final class QCBugPluginManager {
         // Stop screen recording when app goes to background (only if owned by this service)
         if screenRecorder?.isRecordingOwnedByService == true {
             screenRecorder?.stopRecording { _ in }
+        }
+    }
+
+    @objc private func windowDidBecomeKey(_ notification: Notification) {
+        // Ensure floating buttons stay on top when window becomes key
+        bringFloatingButtonsToFront()
+    }
+
+    @objc private func windowDidBecomeVisible(_ notification: Notification) {
+        // Ensure floating buttons stay on top when window becomes visible
+        bringFloatingButtonsToFront()
+    }
+
+    @objc private func viewControllerDidPresent(_ notification: Notification) {
+        // Ensure floating buttons stay on top when view controllers are presented
+        bringFloatingButtonsToFront()
+    }
+
+    private func bringFloatingButtonsToFront() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self,
+                  let controls = self.floatingActionButtons,
+                  let superview = controls.superview else {
+                return
+            }
+
+            // Bring to front if not already the topmost subview
+            if superview.subviews.last !== controls {
+                superview.bringSubviewToFront(controls)
+            }
         }
     }
 

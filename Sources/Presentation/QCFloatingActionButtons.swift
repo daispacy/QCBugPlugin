@@ -33,6 +33,7 @@ final class QCFloatingActionButtons: UIView {
     private var lastLocation: CGPoint = .zero
     private let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
     private var keyboardHeight: CGFloat = 0
+    private var zOrderMonitorTimer: Timer?
 
     // MARK: - Initialization
 
@@ -57,6 +58,23 @@ final class QCFloatingActionButtons: UIView {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        stopZOrderMonitoring()
+    }
+
+    // MARK: - Lifecycle Overrides
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+
+        if window != nil {
+            // Bring to front when moved to a window
+            bringToFront()
+            // Start monitoring z-order
+            startZOrderMonitoring()
+        } else {
+            // Stop monitoring when removed from window
+            stopZOrderMonitoring()
+        }
     }
 
     // MARK: - Setup
@@ -396,6 +414,39 @@ final class QCFloatingActionButtons: UIView {
             guard let self = self else { return }
             self.superview?.bringSubviewToFront(self)
         }
+    }
+
+    /// Starts monitoring z-order to ensure button stays on top
+    private func startZOrderMonitoring() {
+        // Stop any existing timer
+        stopZOrderMonitoring()
+
+        // Create a timer that fires every 0.5 seconds
+        zOrderMonitorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.ensureOnTop()
+        }
+
+        // Also add to RunLoop for common modes to ensure it fires during UI interactions
+        if let timer = zOrderMonitorTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+
+    /// Stops z-order monitoring
+    private func stopZOrderMonitoring() {
+        zOrderMonitorTimer?.invalidate()
+        zOrderMonitorTimer = nil
+    }
+
+    /// Ensures the button is the topmost subview
+    private func ensureOnTop() {
+        guard let superview = superview,
+              superview.subviews.last !== self else {
+            return
+        }
+
+        // Bring to front if not already the topmost subview
+        superview.bringSubviewToFront(self)
     }
 
     /// Ensures the floating button stays within visible screen bounds
