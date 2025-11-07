@@ -30,6 +30,12 @@ public protocol QCBugPluginDelegate: AnyObject {
 
     /// Called when session data is cleared
     func bugPluginDidClearSession()
+
+    /// Called when pending crash reports are detected on app launch
+    func bugPluginDidDetectCrashes(_ crashReports: [CrashReport])
+
+    /// Called when user dismisses a crash report without reporting
+    func bugPluginDidDismissCrash(_ crashReport: CrashReport)
 }
 
 // MARK: - Default Implementations for Optional Methods
@@ -42,4 +48,6 @@ public extension QCBugPluginDelegate {
     func bugPlugin(didStopRecordingWith url: URL) { }
     func bugPluginDidFailRecording(_ error: Error) { }
     func bugPluginDidClearSession() { }
+    func bugPluginDidDetectCrashes(_ crashReports: [CrashReport]) { }
+    func bugPluginDidDismissCrash(_ crashReport: CrashReport) { }
 }

@@ -243,6 +243,21 @@ final class QCFloatingActionButtons: UIView {
             object: nil
         )
 
+        // Window hierarchy changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWindowDidBecomeVisible),
+            name: UIWindow.didBecomeVisibleNotification,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWindowDidBecomeKey),
+            name: UIWindow.didBecomeKeyNotification,
+            object: nil
+        )
+
         // Screen bounds changes (for split screen, etc.)
         if #available(iOS 13.0, *) {
             NotificationCenter.default.addObserver(
@@ -263,7 +278,14 @@ final class QCFloatingActionButtons: UIView {
     }
 
     private func positionView() {
-        guard let window = UIApplication.shared.windows.first else { return }
+        let window: UIWindow?
+        if #available(iOS 13.0, *) {
+            window = UIApplication.shared.windows.first { $0.isKeyWindow } ?? UIApplication.shared.windows.first
+        } else {
+            window = UIApplication.shared.keyWindow ?? UIApplication.shared.windows.first
+        }
+
+        guard let window = window else { return }
 
         let safeArea = window.safeAreaInsets
         let margin: CGFloat = 20
@@ -329,13 +351,63 @@ final class QCFloatingActionButtons: UIView {
 
     @objc private func handleApplicationDidBecomeActive() {
         ensureVisibleWithinBounds(animated: true)
+        bringToFront()
+    }
+
+    @objc private func handleWindowDidBecomeVisible() {
+        ensureProperWindowAttachment()
+    }
+
+    @objc private func handleWindowDidBecomeKey() {
+        ensureProperWindowAttachment()
     }
 
     // MARK: - Visibility Management
 
+    /// Ensures the button is attached to the correct window and brought to front
+    private func ensureProperWindowAttachment() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            let keyWindow: UIWindow?
+            if #available(iOS 13.0, *) {
+                keyWindow = UIApplication.shared.windows.first { $0.isKeyWindow }
+            } else {
+                keyWindow = UIApplication.shared.keyWindow
+            }
+
+            guard let window = keyWindow else { return }
+
+            // Re-attach to key window if needed
+            if self.superview !== window {
+                self.removeFromSuperview()
+                window.addSubview(self)
+                self.positionView()
+            }
+
+            // Always bring to front
+            self.bringToFront()
+        }
+    }
+
+    /// Brings the button to the front of its superview
+    private func bringToFront() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.superview?.bringSubviewToFront(self)
+        }
+    }
+
     /// Ensures the floating button stays within visible screen bounds
     private func ensureVisibleWithinBounds(animated: Bool) {
-        guard let window = UIApplication.shared.windows.first else { return }
+        let window: UIWindow?
+        if #available(iOS 13.0, *) {
+            window = UIApplication.shared.windows.first { $0.isKeyWindow } ?? UIApplication.shared.windows.first
+        } else {
+            window = UIApplication.shared.keyWindow ?? UIApplication.shared.windows.first
+        }
+
+        guard let window = window else { return }
 
         let bounds = window.bounds
         let safeArea = window.safeAreaInsets
@@ -420,7 +492,14 @@ final class QCFloatingActionButtons: UIView {
         hapticFeedback.impactOccurred()
 
         // Calculate positions with bounds checking
-        guard let window = UIApplication.shared.windows.first else { return }
+        let window: UIWindow?
+        if #available(iOS 13.0, *) {
+            window = UIApplication.shared.windows.first { $0.isKeyWindow } ?? UIApplication.shared.windows.first
+        } else {
+            window = UIApplication.shared.keyWindow ?? UIApplication.shared.windows.first
+        }
+
+        guard let window = window else { return }
 
         let safeArea = window.safeAreaInsets
         let margin: CGFloat = 20
@@ -507,7 +586,14 @@ final class QCFloatingActionButtons: UIView {
     // MARK: - Gesture Handling
 
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
-        guard let window = UIApplication.shared.windows.first else { return }
+        let window: UIWindow?
+        if #available(iOS 13.0, *) {
+            window = UIApplication.shared.windows.first { $0.isKeyWindow } ?? UIApplication.shared.windows.first
+        } else {
+            window = UIApplication.shared.keyWindow ?? UIApplication.shared.windows.first
+        }
+
+        guard let window = window else { return }
 
         let translation = gesture.translation(in: window)
 
@@ -558,7 +644,14 @@ final class QCFloatingActionButtons: UIView {
     }
 
     private func snapToNearestEdge() {
-        guard let window = UIApplication.shared.windows.first else { return }
+        let window: UIWindow?
+        if #available(iOS 13.0, *) {
+            window = UIApplication.shared.windows.first { $0.isKeyWindow } ?? UIApplication.shared.windows.first
+        } else {
+            window = UIApplication.shared.keyWindow ?? UIApplication.shared.windows.first
+        }
+
+        guard let window = window else { return }
 
         let bounds = window.bounds
         let safeArea = window.safeAreaInsets
@@ -658,12 +751,22 @@ final class QCFloatingActionButtons: UIView {
     }
 
     func show(animated: Bool = true) {
-        guard let window = UIApplication.shared.windows.first else { return }
+        let window: UIWindow?
+        if #available(iOS 13.0, *) {
+            window = UIApplication.shared.windows.first { $0.isKeyWindow } ?? UIApplication.shared.windows.first
+        } else {
+            window = UIApplication.shared.keyWindow ?? UIApplication.shared.windows.first
+        }
+
+        guard let window = window else { return }
 
         if superview == nil {
             window.addSubview(self)
             positionView()
         }
+
+        // Ensure button is on top
+        bringToFront()
 
         if animated {
             alpha = 0

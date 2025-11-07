@@ -9,6 +9,11 @@
 import Foundation
 import UIKit
 
+// MARK: - Public Exports
+
+/// Re-export CrashReport for public access
+public typealias QCCrashReport = CrashReport
+
 /// Main entry point for the QC Bug Plugin framework
 public final class QCBugPlugin {
 

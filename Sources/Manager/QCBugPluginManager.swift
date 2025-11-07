@@ -39,6 +39,8 @@ final class QCBugPluginManager {
     private var screenCapture: ScreenCaptureProtocol?
     private var bugReportService: BugReportProtocol?
     private var gitLabAuthService: GitLabAuthProviding?
+    private var crashDetectionService: CrashDetectionProtocol?
+    private var crashAlertController: QCCrashReportAlertController?
     private var isConfigured: Bool = false
     private var floatingActionButtons: QCFloatingActionButtons?
     private var sessionMediaAttachments: [MediaAttachment] = []
@@ -46,7 +48,7 @@ final class QCBugPluginManager {
     private var sessionBugReportViewController: QCBugReportViewController?
     private var sessionBugDescription: String = ""
     private var sessionBugPriority: BugPriority = .medium
-    private var sessionBugCategory: BugCategory = .other
+    private var sessionBugCategory: BugCategory = .crash
     private var sessionWebhookURL: String?
     private var sessionAssigneeUsername: String?
     private var sessionIssueNumber: Int?
@@ -113,6 +115,19 @@ final class QCBugPluginManager {
             self.gitLabAuthService = GitLabAuthService(configuration: gitLabConfig)
         } else {
             self.gitLabAuthService = nil
+        }
+
+        // Initialize crash detection service
+        if config.enableCrashReporting {
+            let crashService = CrashDetectionService()
+            self.crashDetectionService = crashService
+            crashService.startMonitoring()
+
+            // Check for pending crash reports
+            checkForPendingCrashReports()
+        } else {
+            self.crashDetectionService?.stopMonitoring()
+            self.crashDetectionService = nil
         }
 
         refreshBugReportService()
@@ -209,12 +224,13 @@ final class QCBugPluginManager {
             customData: data,
             isScreenRecordingEnabled: config.isScreenRecordingEnabled,
             enableFloatingButton: config.enableFloatingButton,
-            gitLabAppConfig: config.gitLabAppConfig
+            gitLabAppConfig: config.gitLabAppConfig,
+            enableCrashReporting: config.enableCrashReporting
         )
-        
+
         self.configuration = newConfig
     }
-    
+
     func setScreenRecordingEnabled(_ enabled: Bool) {
         guard let config = configuration else { return }
 
@@ -224,7 +240,8 @@ final class QCBugPluginManager {
             customData: config.customData,
             isScreenRecordingEnabled: enabled,
             enableFloatingButton: config.enableFloatingButton,
-            gitLabAppConfig: config.gitLabAppConfig
+            gitLabAppConfig: config.gitLabAppConfig,
+            enableCrashReporting: config.enableCrashReporting
         )
 
         self.configuration = newConfig
@@ -331,14 +348,119 @@ final class QCBugPluginManager {
             name: UIApplication.didEnterBackgroundNotification,
             object: nil
         )
-        
+    }
+
+    // MARK: - Crash Detection
+
+    private func checkForPendingCrashReports() {
+        guard let crashService = crashDetectionService else { return }
+
+        // Check after a short delay to allow UI to settle
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self = self else { return }
+
+            let crashReports = crashService.getPendingCrashReports()
+
+            if crashReports.isEmpty {
+                return
+            }
+
+            print("💥 QCBugPlugin: Found \(crashReports.count) pending crash report(s)")
+
+            // Notify delegate
+            self.delegate?.bugPluginDidDetectCrashes(crashReports)
+
+            // Present crash report alert
+            self.presentCrashReportAlert(crashReports: crashReports)
+        }
+    }
+
+    private func presentCrashReportAlert(crashReports: [CrashReport]) {
+        guard let topViewController = UIApplication.shared.topViewController() else {
+            print("⚠️ QCBugPlugin: Cannot present crash alert - no top view controller")
+            return
+        }
+
+        let alertController = QCCrashReportAlertController()
+        alertController.delegate = self
+        self.crashAlertController = alertController
+
+        if crashReports.count == 1 {
+            alertController.presentCrashReportAlert(for: crashReports[0], from: topViewController)
+        } else {
+            alertController.presentMultipleCrashReportsAlert(crashReports: crashReports, from: topViewController)
+        }
+    }
+
+    private func reportCrash(_ crashReport: CrashReport) {
+        // Create crash log attachment
+        let logURL = URL(fileURLWithPath: crashReport.logFilePath)
+        guard FileManager.default.fileExists(atPath: logURL.path) else {
+            print("⚠️ QCBugPlugin: Crash log file not found at \(logURL.path)")
+            crashDetectionService?.deleteCrashReport(crashReport)
+            return
+        }
+
+        // Add crash log as attachment
+        let attachment = MediaAttachment(type: .other, fileURL: logURL)
+        sessionMediaAttachments.append(attachment)
+
+        // Set crash-specific session data
+        sessionBugCategory = .crash
+        sessionBugPriority = .high
+
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        let timeString = formatter.string(from: crashReport.timestamp)
+
+        var description = "**Crash Report**\n\n"
+        description += "**Time:** \(timeString)\n"
+        description += "**Type:** \(crashReport.crashType.rawValue)\n"
+
+        if let exceptionName = crashReport.exceptionName {
+            description += "**Exception:** \(exceptionName)\n"
+        }
+
+        if let reason = crashReport.exceptionReason {
+            description += "**Reason:** \(reason)\n"
+        }
+
+        description += "\n**Device Info:**\n"
+        description += "- Model: \(crashReport.deviceInfo.model)\n"
+        description += "- System: \(crashReport.deviceInfo.systemName) \(crashReport.deviceInfo.systemVersion)\n"
+
+        description += "\n**App Info:**\n"
+        description += "- Bundle ID: \(crashReport.appInfo.bundleIdentifier)\n"
+        description += "- Version: \(crashReport.appInfo.version) (\(crashReport.appInfo.buildNumber))\n"
+
+        description += "\nPlease see attached crash log for full details."
+
+        sessionBugDescription = description
+
+        // Mark crash as handled
+        crashDetectionService?.markCrashReportAsHandled(crashReport)
+
+        // Present bug report form
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.presentBugReport()
+        }
     }
     
     private func setupFloatingActionButtons() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            guard let window = self.hostWindow else {
-                print("⚠️ QCBugPlugin: Cannot attach floating controls without a host window.")
+
+            // Get the key window
+            let window: UIWindow?
+            if #available(iOS 13.0, *) {
+                window = UIApplication.shared.windows.first { $0.isKeyWindow } ?? self.hostWindow
+            } else {
+                window = UIApplication.shared.keyWindow ?? self.hostWindow
+            }
+
+            guard let window = window else {
+                print("⚠️ QCBugPlugin: Cannot attach floating controls without a window.")
                 return
             }
 
@@ -346,6 +468,7 @@ final class QCBugPluginManager {
                 if controls.superview !== window {
                     controls.removeFromSuperview()
                     window.addSubview(controls)
+                    window.bringSubviewToFront(controls)
                 }
                 return
             }
@@ -353,6 +476,7 @@ final class QCBugPluginManager {
             let controls = QCFloatingActionButtons()
             controls.delegate = self
             window.addSubview(controls)
+            window.bringSubviewToFront(controls)
             self.floatingActionButtons = controls
         }
     }
@@ -596,6 +720,23 @@ final class QCBugPluginManager {
 
         print("🗑️ QCBugPlugin: Removed media attachment - \(removed.fileName)")
         return true
+    }
+}
+
+// MARK: - QCCrashReportAlertDelegate
+
+extension QCBugPluginManager: QCCrashReportAlertDelegate {
+    func crashReportAlertDidSelectReport(_ crashReport: CrashReport) {
+        print("📝 QCBugPlugin: User selected to report crash")
+        reportCrash(crashReport)
+    }
+
+    func crashReportAlertDidSelectDismiss(_ crashReport: CrashReport) {
+        print("🚫 QCBugPlugin: User dismissed crash report")
+        crashDetectionService?.deleteCrashReport(crashReport)
+
+        // Notify delegate
+        delegate?.bugPluginDidDismissCrash(crashReport)
     }
 }
 
