@@ -40,8 +40,7 @@ final class BugReportAPIService: BugReportProtocol {
             let id: String
             let timestamp: Date
             let description: String
-            let priority: BugPriority
-            let category: BugCategory
+            let priority: String
             let userActions: [UserAction]
             let deviceInfo: DeviceInfo
             let appInfo: AppInfo
@@ -77,7 +76,6 @@ final class BugReportAPIService: BugReportProtocol {
 
         let report: ReportDTO
         let attachments: [AttachmentPayload]
-        let gitlab: GitLabPayload?
         let metadata: MetadataPayload?
 
         init(report: BugReport, attachments: [AttachmentPayload], gitLabCredentials: GitLabCredentials?) {
@@ -96,7 +94,6 @@ final class BugReportAPIService: BugReportProtocol {
                 timestamp: report.timestamp,
                 description: report.description,
                 priority: report.priority,
-                category: report.category,
                 userActions: report.userActions,
                 deviceInfo: report.deviceInfo,
                 appInfo: report.appInfo,
@@ -112,7 +109,6 @@ final class BugReportAPIService: BugReportProtocol {
                 issueNumber: report.issueNumber
             )
             self.attachments = attachments
-            self.gitlab = gitLabCredentials.map { GitLabPayload(credentials: $0) }
             self.metadata = gitLabCredentials.map { MetadataPayload(gitlab: GitLabPayload(credentials: $0)) }
         }
     }

@@ -47,8 +47,7 @@ final class QCBugPluginManager {
     private var shouldAutoPresentForm: Bool = false
     private var sessionBugReportViewController: QCBugReportViewController?
     private var sessionBugDescription: String = ""
-    private var sessionBugPriority: BugPriority = .medium
-    private var sessionBugCategory: BugCategory = .crash
+    private var sessionBugPriority: String = ""
     private var sessionWebhookURL: String?
     private var sessionAssigneeUsername: String?
     private var sessionIssueNumber: Int?
@@ -194,7 +193,6 @@ final class QCBugPluginManager {
             bugReportVC.restoreSessionState(
                 description: self.sessionBugDescription,
                 priority: self.sessionBugPriority,
-                category: self.sessionBugCategory,
                 webhookURL: self.resolvedWebhookURL(),
                 assigneeUsername: self.sessionAssigneeUsername,
                 issueNumber: self.sessionIssueNumber
@@ -433,8 +431,7 @@ final class QCBugPluginManager {
         sessionMediaAttachments.append(attachment)
 
         // Set crash-specific session data
-        sessionBugCategory = .crash
-        sessionBugPriority = .high
+        sessionBugPriority = "priority::critical"
 
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -724,8 +721,7 @@ final class QCBugPluginManager {
         
         // Clear session UI state
         sessionBugDescription = ""
-        sessionBugPriority = .medium
-        sessionBugCategory = .other
+        sessionBugPriority = ""
         sessionWebhookURL = nil
         sessionAssigneeUsername = nil
         sessionIssueNumber = nil
@@ -734,8 +730,7 @@ final class QCBugPluginManager {
             self.sessionBugReportViewController?.clearMediaAttachments()
             self.sessionBugReportViewController?.restoreSessionState(
                 description: "",
-                priority: .medium,
-                category: .other,
+                priority: "",
                 webhookURL: self.resolvedWebhookURL(),
                 assigneeUsername: nil,
                 issueNumber: nil
@@ -858,7 +853,6 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         // Capture session state before submission
         self.sessionBugDescription = report.description
         self.sessionBugPriority = report.priority
-        self.sessionBugCategory = report.category
         self.sessionAssigneeUsername = report.assigneeUsername
         self.sessionIssueNumber = report.issueNumber
         let userWebhookInput = controller.getSessionWebhookURL().trimmingCharacters(in: .whitespacesAndNewlines)
@@ -907,7 +901,6 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         // Capture session state even on cancel so it can be restored later
         self.sessionBugDescription = controller.getSessionDescription()
         self.sessionBugPriority = controller.getSessionPriority()
-        self.sessionBugCategory = controller.getSessionCategory()
         self.sessionAssigneeUsername = controller.getSessionAssigneeUsername()
         self.sessionIssueNumber = controller.getSessionIssueNumber()
         let userWebhookInput = controller.getSessionWebhookURL().trimmingCharacters(in: .whitespacesAndNewlines)

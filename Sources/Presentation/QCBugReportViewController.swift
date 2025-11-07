@@ -41,8 +41,7 @@ final class QCBugReportViewController: UIViewController {
     
     // Bug report data
     private var bugDescription = ""
-    private var selectedPriority: BugPriority = .medium
-    private var selectedCategory: BugCategory = .other
+    private var selectedPriority: String = ""
     private var webhookURL: String
     private var selectedAssigneeUsername: String?
     private var issueNumber: Int?
@@ -199,7 +198,6 @@ final class QCBugReportViewController: UIViewController {
         return BugReport(
             description: bugDescription,
             priority: selectedPriority,
-            category: selectedCategory,
             userActions: actionHistory,
             deviceInfo: deviceInfo,
             appInfo: appInfo,
@@ -480,15 +478,13 @@ final class QCBugReportViewController: UIViewController {
     
     internal func restoreSessionState(
         description: String,
-        priority: BugPriority,
-        category: BugCategory,
+        priority: String,
         webhookURL: String? = nil,
         assigneeUsername: String? = nil,
         issueNumber: Int? = nil
     ) {
         bugDescription = description
         selectedPriority = priority
-        selectedCategory = category
         if let webhookURL = webhookURL {
             self.webhookURL = webhookURL
         }
@@ -505,14 +501,10 @@ final class QCBugReportViewController: UIViewController {
         return bugDescription
     }
     
-    internal func getSessionPriority() -> BugPriority {
+    internal func getSessionPriority() -> String {
         return selectedPriority
     }
     
-    internal func getSessionCategory() -> BugCategory {
-        return selectedCategory
-    }
-
     internal func getSessionWebhookURL() -> String {
         return webhookURL
     }
@@ -563,9 +555,8 @@ extension QCBugReportViewController: WKScriptMessageHandler {
             updateSubmitButtonState()
             
         case "updatePriority":
-            if let priorityString = data["priority"] as? String,
-               let priority = BugPriority(rawValue: priorityString) {
-                selectedPriority = priority
+            if let priorityString = data["priority"] as? String {
+                selectedPriority = priorityString
             }
             
         case "updateWebhookURL":
@@ -692,7 +683,7 @@ extension QCBugReportViewController: WKNavigationDelegate {
                 webhookField.value = '\(escapedWebhookURL)';
             }
             if (typeof setInitialAssignee === 'function') { setInitialAssignee('\(escapedAssignee)'); }
-            if (typeof setInitialPriority === 'function') { setInitialPriority('\(selectedPriority.rawValue)'); }
+            if (typeof setInitialPriority === 'function') { setInitialPriority('\(selectedPriority)'); }
             if (typeof setInitialIssueNumber === 'function') { setInitialIssueNumber('\(issueNumberString)'); }
             if (typeof updateDescription === 'function') { updateDescription(); }
             if (typeof updateWebhookURL === 'function') { updateWebhookURL(); }

@@ -32,11 +32,8 @@ struct BugReport: Codable {
     let description: String
     
     /// Priority level of the bug
-    let priority: BugPriority
-    
-    /// Category of the bug
-    let category: BugCategory
-    
+    let priority: String
+
     /// Steps to reproduce (user actions history)
     let userActions: [UserAction]
     
@@ -81,8 +78,7 @@ struct BugReport: Codable {
 
     init(
         description: String,
-        priority: BugPriority,
-        category: BugCategory,
+        priority: String,
         userActions: [UserAction],
         deviceInfo: DeviceInfo,
         appInfo: AppInfo,
@@ -103,7 +99,6 @@ struct BugReport: Codable {
         self.timestamp = Date()
         self.description = description
         self.priority = priority
-        self.category = category
         self.userActions = userActions
         self.deviceInfo = deviceInfo
         self.appInfo = appInfo
@@ -119,57 +114,6 @@ struct BugReport: Codable {
         self.issueNumber = issueNumber
         self.whtype = whtype
         self.gitLabCredentials = gitLabCredentials
-    }
-}
-
-/// Bug priority levels
-enum BugPriority: String, Codable, CaseIterable {
-    case low = "low"
-    case medium = "medium"
-    case high = "high"
-    case critical = "critical"
-    
-    var displayName: String {
-        switch self {
-        case .low: return "Low"
-        case .medium: return "Medium"
-        case .high: return "High"
-        case .critical: return "Critical"
-        }
-    }
-    
-    var colorHex: String {
-        switch self {
-        case .low: return "#28a745"      // Green
-        case .medium: return "#ffc107"   // Yellow
-        case .high: return "#fd7e14"     // Orange
-        case .critical: return "#dc3545" // Red
-        }
-    }
-}
-
-/// Bug categories
-enum BugCategory: String, Codable, CaseIterable {
-    case ui = "ui"
-    case functionality = "functionality"
-    case performance = "performance"
-    case crash = "crash"
-    case data = "data"
-    case network = "network"
-    case security = "security"
-    case other = "other"
-    
-    var displayName: String {
-        switch self {
-        case .ui: return "UI/UX Issue"
-        case .functionality: return "Functionality"
-        case .performance: return "Performance"
-        case .crash: return "Crash"
-        case .data: return "Data Issue"
-        case .network: return "Network"
-        case .security: return "Security"
-        case .other: return "Other"
-        }
     }
 }
 
