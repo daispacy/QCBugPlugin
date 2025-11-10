@@ -658,12 +658,21 @@
     };
 
     window.updateStage = function () {
-        var field = document.getElementById('stageSelect');
-        if (!field) {
-            return;
+        var radioButtons = document.getElementsByName('stage');
+        var selectedValue = 'product';
+
+        for (var i = 0; i < radioButtons.length; i++) {
+            if (radioButtons[i].checked) {
+                selectedValue = radioButtons[i].value;
+                break;
+            }
         }
-        var value = typeof field.value === 'string' ? field.value.trim().toLowerCase() : '';
-        var stage = value.length ? value : 'product';
+
+        var stage = typeof selectedValue === 'string' ? selectedValue.trim().toLowerCase() : 'product';
+        if (stage !== 'test' && stage !== 'product') {
+            stage = 'product';
+        }
+
         state.stage = stage;
         postMessage({
             action: 'updateStage',
@@ -680,9 +689,14 @@
             }
         }
         state.stage = stage;
-        var field = document.getElementById('stageSelect');
-        if (field) {
-            field.value = stage;
+
+        var radioButtons = document.getElementsByName('stage');
+        for (var i = 0; i < radioButtons.length; i++) {
+            if (radioButtons[i].value === stage) {
+                radioButtons[i].checked = true;
+            } else {
+                radioButtons[i].checked = false;
+            }
         }
     };
 
