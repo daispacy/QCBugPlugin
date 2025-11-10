@@ -41,6 +41,7 @@ final class BugReportAPIService: BugReportProtocol {
             let timestamp: Date
             let description: String
             let priority: String
+            let stage: String
             let userActions: [UserAction]
             let deviceInfo: DeviceInfo
             let appInfo: AppInfo
@@ -94,6 +95,7 @@ final class BugReportAPIService: BugReportProtocol {
                 timestamp: report.timestamp,
                 description: report.description,
                 priority: report.priority,
+                stage: report.stage,
                 userActions: report.userActions,
                 deviceInfo: report.deviceInfo,
                 appInfo: report.appInfo,

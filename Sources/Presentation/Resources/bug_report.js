@@ -19,6 +19,7 @@
             lastFetchKey: null,
             requestId: 0
         },
+        stage: 'product',
         issueNumber: '',
         gitlab: {
             isAuthenticated: false,
@@ -654,6 +655,35 @@
         }
         state.priority.selected = priority;
         renderPriorityControls();
+    };
+
+    window.updateStage = function () {
+        var field = document.getElementById('stageSelect');
+        if (!field) {
+            return;
+        }
+        var value = typeof field.value === 'string' ? field.value.trim().toLowerCase() : '';
+        var stage = value.length ? value : 'product';
+        state.stage = stage;
+        postMessage({
+            action: 'updateStage',
+            stage: stage
+        });
+    };
+
+    window.setInitialStage = function (value) {
+        var stage = 'product';
+        if (typeof value === 'string') {
+            var trimmed = value.trim().toLowerCase();
+            if (trimmed === 'test' || trimmed === 'product') {
+                stage = trimmed;
+            }
+        }
+        state.stage = stage;
+        var field = document.getElementById('stageSelect');
+        if (field) {
+            field.value = stage;
+        }
     };
 
     window.updateWebhookURL = function () {

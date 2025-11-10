@@ -42,6 +42,7 @@ final class QCBugReportViewController: UIViewController {
     // Bug report data
     private var bugDescription = ""
     private var selectedPriority: String = ""
+    private var selectedStage: String = BugStage.product.rawValue
     private var webhookURL: String
     private var selectedAssigneeUsername: String?
     private var issueNumber: Int?
@@ -198,6 +199,7 @@ final class QCBugReportViewController: UIViewController {
         return BugReport(
             description: bugDescription,
             priority: selectedPriority,
+            stage: selectedStage,
             userActions: actionHistory,
             deviceInfo: deviceInfo,
             appInfo: appInfo,
@@ -479,12 +481,14 @@ final class QCBugReportViewController: UIViewController {
     internal func restoreSessionState(
         description: String,
         priority: String,
+        stage: String? = nil,
         webhookURL: String? = nil,
         assigneeUsername: String? = nil,
         issueNumber: Int? = nil
     ) {
         bugDescription = description
         selectedPriority = priority
+        selectedStage = stage ?? BugStage.product.rawValue
         if let webhookURL = webhookURL {
             self.webhookURL = webhookURL
         }
@@ -504,7 +508,11 @@ final class QCBugReportViewController: UIViewController {
     internal func getSessionPriority() -> String {
         return selectedPriority
     }
-    
+
+    internal func getSessionStage() -> String {
+        return selectedStage
+    }
+
     internal func getSessionWebhookURL() -> String {
         return webhookURL
     }
@@ -558,7 +566,12 @@ extension QCBugReportViewController: WKScriptMessageHandler {
             if let priorityString = data["priority"] as? String {
                 selectedPriority = priorityString
             }
-            
+
+        case "updateStage":
+            if let stageString = data["stage"] as? String {
+                selectedStage = stageString
+            }
+
         case "updateWebhookURL":
             let value = (data["webhookURL"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             webhookURL = value
@@ -684,6 +697,7 @@ extension QCBugReportViewController: WKNavigationDelegate {
             }
             if (typeof setInitialAssignee === 'function') { setInitialAssignee('\(escapedAssignee)'); }
             if (typeof setInitialPriority === 'function') { setInitialPriority('\(selectedPriority)'); }
+            if (typeof setInitialStage === 'function') { setInitialStage('\(selectedStage)'); }
             if (typeof setInitialIssueNumber === 'function') { setInitialIssueNumber('\(issueNumberString)'); }
             if (typeof updateDescription === 'function') { updateDescription(); }
             if (typeof updateWebhookURL === 'function') { updateWebhookURL(); }

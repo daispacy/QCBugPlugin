@@ -9,6 +9,21 @@
 import Foundation
 import UIKit
 
+/// Types of deployment stages
+public enum BugStage: String, Codable {
+    case test = "test"
+    case product = "product"
+
+    public var displayName: String {
+        switch self {
+        case .test:
+            return "Test"
+        case .product:
+            return "Product"
+        }
+    }
+}
+
 /// GitLab credentials associated with a bug report submission
 struct GitLabCredentials: Codable {
     let pat: String
@@ -33,6 +48,9 @@ struct BugReport: Codable {
     
     /// Priority level of the bug
     let priority: String
+
+    /// Stage of deployment (test or product)
+    let stage: String
 
     /// Steps to reproduce (user actions history)
     let userActions: [UserAction]
@@ -79,6 +97,7 @@ struct BugReport: Codable {
     init(
         description: String,
         priority: String,
+        stage: String = BugStage.product.rawValue,
         userActions: [UserAction],
         deviceInfo: DeviceInfo,
         appInfo: AppInfo,
@@ -99,6 +118,7 @@ struct BugReport: Codable {
         self.timestamp = Date()
         self.description = description
         self.priority = priority
+        self.stage = stage
         self.userActions = userActions
         self.deviceInfo = deviceInfo
         self.appInfo = appInfo
