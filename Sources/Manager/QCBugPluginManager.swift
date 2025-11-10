@@ -595,6 +595,27 @@ final class QCBugPluginManager {
         }
     }
 
+    // MARK: - Error Alert
+
+    private func showErrorAlert(message: String) {
+        DispatchQueue.main.async {
+            guard let topViewController = UIApplication.shared.topViewController() else {
+                print("⚠️ QCBugPlugin: Cannot show error alert - no top view controller")
+                return
+            }
+
+            let alert = UIAlertController(
+                title: "Submission Error",
+                message: message,
+                preferredStyle: .alert
+            )
+
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+
+            topViewController.present(alert, animated: true)
+        }
+    }
+
     @objc private func appDidEnterBackground() {
         // Stop screen recording when app goes to background (only if owned by this service)
         if screenRecorder?.isRecordingOwnedByService == true {
@@ -955,29 +976,35 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
             controller.dismiss(animated: true) { [weak self] in
                 // Show floating buttons after dismissal
                 self?.floatingActionButtons?.isHidden = false
+
+                // Show error alert
+                self?.showErrorAlert(message: "No webhook URL configured. Please configure the plugin with a valid webhook URL.")
             }
             return
         }
 
+        // Dismiss form immediately
+        controller.dismiss(animated: true) { [weak self] in
+            // Show floating buttons after dismissal
+            self?.floatingActionButtons?.isHidden = false
+        }
+
+        // Submit in background
         bugReportService.submitBugReport(report) { [weak self] result in
             guard let self = self else { return }
-            
+
             DispatchQueue.main.async {
                 switch result {
                 case .success(let reportId):
                     self.delegate?.bugPluginDidSubmitReport(reportId)
-                    
                     print("✅ QCBugPlugin: Bug report submitted successfully with ID: \(reportId)")
-                    
+
                 case .failure(let error):
                     self.delegate?.bugPluginDidFailToSubmitReport(error)
-
                     print("❌ QCBugPlugin: Failed to submit bug report: \(error.localizedDescription)")
-                }
 
-                controller.dismiss(animated: true) { [weak self] in
-                    // Show floating buttons after dismissal
-                    self?.floatingActionButtons?.isHidden = false
+                    // Show error alert to user
+                    self.showErrorAlert(message: "Failed to submit bug report: \(error.localizedDescription)")
                 }
             }
         }
