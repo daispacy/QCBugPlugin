@@ -14,6 +14,35 @@ import UIKit
 /// Re-export CrashReport for public access
 public typealias QCCrashReport = CrashReport
 
+/// Custom UIWindow that detects shake gestures to show hidden floating button
+/// Use this as your app's main window to enable the shake backdoor feature
+///
+/// Example usage:
+/// ```swift
+/// func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+///     window = QCShakeDetectingWindow(frame: UIScreen.main.bounds)
+///     window?.rootViewController = RootViewController()
+///     window?.makeKeyAndVisible()
+///
+///     if let window {
+///         let config = QCBugPluginConfig(webhookURL: "https://your-webhook.com/bugs", enableFloatingButton: true)
+///         QCBugPlugin.configure(using: window, configuration: config)
+///     }
+///     return true
+/// }
+/// ```
+public class QCShakeDetectingWindow: UIWindow {
+    internal weak var shakeDelegate: ShakeDetectionDelegate?
+
+    public override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        super.motionEnded(motion, with: event)
+
+        if motion == .motionShake {
+            shakeDelegate?.windowDidDetectShake()
+        }
+    }
+}
+
 /// Main entry point for the QC Bug Plugin framework
 public final class QCBugPlugin {
 
@@ -128,33 +157,34 @@ public final class QCBugPlugin {
 
 /**
  # QCBugPlugin Framework
- 
+
  A comprehensive bug reporting framework for iOS applications that provides:
- 
+
  ## Features
  -  **Screen Recording**: Native screen recording using ReplayKit framework
     - 📱 **Rich Bug Reports**: Detailed reports including device info, app info, and captured context
  - 🌐 **Webhook Integration**: Submit reports to any webhook endpoint
  - 🎨 **Customizable UI**: Beautiful HTML/JS interface with native bridge communication
  - 🔧 **Easy Integration**: Simple API that works with any iOS app
- 
+ - 🔓 **Shake Backdoor**: Secret shake gesture to reveal hidden floating button
+
  ## Quick Start
- 
+
  ```swift
  import QCBugPlugin
- 
+
  // Configure the plugin once you have access to the app window
  let config = QCBugPluginConfig(
      webhookURL: "https://your-webhook-url.com/bugs"
  )
  QCBugPlugin.configure(using: window, configuration: config)
- 
+
  // Present bug report interface (can be triggered by shake gesture, button, etc.)
  QCBugPlugin.presentBugReport()
  ```
- 
+
  ## Advanced Configuration
- 
+
  ```swift
  let config = QCBugPluginConfig(
      webhookURL: "https://your-webhook-url.com/bugs",
@@ -163,15 +193,16 @@ public final class QCBugPlugin {
      isScreenRecordingEnabled: true,
      enableFloatingButton: true // Debug builds only
  )
- 
+
  QCBugPlugin.configure(using: window, configuration: config)
  ```
- 
- ## Integration with App Delegate
- 
+
+ ## Integration with App Delegate (with Shake Backdoor)
+
  ```swift
  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-     window = UIWindow(frame: UIScreen.main.bounds)
+     // Use QCShakeDetectingWindow to enable shake backdoor feature
+     window = QCShakeDetectingWindow(frame: UIScreen.main.bounds)
      window?.rootViewController = RootViewController()
      window?.makeKeyAndVisible()
 
@@ -179,15 +210,31 @@ public final class QCBugPlugin {
      if let window {
          let config = QCBugPluginConfig(webhookURL: "https://your-webhook-url.com/bugs", enableFloatingButton: true)
          QCBugPlugin.configure(using: window, configuration: config)
+         // Now you can shake the device to show the floating button if it's hidden!
      }
      #endif
 
      return true
  }
  ```
- 
- ## Shake Gesture Integration
- 
+
+ ## Shake Backdoor Feature
+
+ The shake backdoor allows you to show the floating button by shaking the device, even if it's hidden.
+ This is useful during development/testing when the floating button gets dismissed or hidden.
+
+ **To enable shake backdoor:**
+ 1. Use `QCShakeDetectingWindow` instead of `UIWindow` as your app's main window
+ 2. Configure QCBugPlugin with `enableFloatingButton: true`
+ 3. Shake your device when the floating button is hidden - it will reappear!
+
+ **Note:** The shake backdoor only works when:
+ - The floating button is enabled in configuration
+ - The floating button is currently hidden (`isHidden = true` or `alpha < 0.1`)
+ - The window is an instance of `QCShakeDetectingWindow`
+
+ ## Manual Shake Gesture Integration
+
  ```swift
  override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
      if motion == .motionShake {
