@@ -14,35 +14,6 @@ import UIKit
 /// Re-export CrashReport for public access
 public typealias QCCrashReport = CrashReport
 
-/// Custom UIWindow that detects shake gestures to show hidden floating button
-/// Use this as your app's main window to enable the shake backdoor feature
-///
-/// Example usage:
-/// ```swift
-/// func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-///     window = QCShakeDetectingWindow(frame: UIScreen.main.bounds)
-///     window?.rootViewController = RootViewController()
-///     window?.makeKeyAndVisible()
-///
-///     if let window {
-///         let config = QCBugPluginConfig(webhookURL: "https://your-webhook.com/bugs", enableFloatingButton: true)
-///         QCBugPlugin.configure(using: window, configuration: config)
-///     }
-///     return true
-/// }
-/// ```
-public class QCShakeDetectingWindow: UIWindow {
-    internal weak var shakeDelegate: ShakeDetectionDelegate?
-
-    public override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
-        super.motionEnded(motion, with: event)
-
-        if motion == .motionShake {
-            shakeDelegate?.windowDidDetectShake()
-        }
-    }
-}
-
 /// Main entry point for the QC Bug Plugin framework
 public final class QCBugPlugin {
 
@@ -93,7 +64,13 @@ public final class QCBugPlugin {
     public static func setCustomData(_ data: [String: Any]) {
         manager.setCustomData(data)
     }
-    
+
+    /// Show the floating action button programmatically
+    /// This is useful when the button is hidden and you want to reveal it without requiring a shake gesture
+    public static func showFloatingButton() {
+        manager.showFloatingButton()
+    }
+
     /// Enable or disable screen recording
     /// - Parameter enabled: Whether screen recording should be available
     public static func setScreenRecordingEnabled(_ enabled: Bool) {
@@ -197,12 +174,11 @@ public final class QCBugPlugin {
  QCBugPlugin.configure(using: window, configuration: config)
  ```
 
- ## Integration with App Delegate (with Shake Backdoor)
+ ## Integration with App Delegate
 
  ```swift
  func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-     // Use QCShakeDetectingWindow to enable shake backdoor feature
-     window = QCShakeDetectingWindow(frame: UIScreen.main.bounds)
+     window = UIWindow(frame: UIScreen.main.bounds)
      window?.rootViewController = RootViewController()
      window?.makeKeyAndVisible()
 
@@ -210,7 +186,6 @@ public final class QCBugPlugin {
      if let window {
          let config = QCBugPluginConfig(webhookURL: "https://your-webhook-url.com/bugs", enableFloatingButton: true)
          QCBugPlugin.configure(using: window, configuration: config)
-         // Now you can shake the device to show the floating button if it's hidden!
      }
      #endif
 
@@ -220,18 +195,23 @@ public final class QCBugPlugin {
 
  ## Shake Backdoor Feature
 
- The shake backdoor allows you to show the floating button by shaking the device, even if it's hidden.
+ The shake backdoor automatically detects device shakes to show the floating button when it's hidden.
  This is useful during development/testing when the floating button gets dismissed or hidden.
 
- **To enable shake backdoor:**
- 1. Use `QCShakeDetectingWindow` instead of `UIWindow` as your app's main window
- 2. Configure QCBugPlugin with `enableFloatingButton: true`
- 3. Shake your device when the floating button is hidden - it will reappear!
+ **Automatic Shake Detection:**
+ - When you configure the plugin with `enableFloatingButton: true`, shake detection is automatically enabled
+ - Shake your device when the floating button is hidden - it will reappear with haptic feedback!
+ - No need to use a custom window class - it works with any UIWindow
+
+ **Programmatic Control:**
+ ```swift
+ // Show the floating button programmatically
+ QCBugPlugin.showFloatingButton()
+ ```
 
  **Note:** The shake backdoor only works when:
  - The floating button is enabled in configuration
  - The floating button is currently hidden (`isHidden = true` or `alpha < 0.1`)
- - The window is an instance of `QCShakeDetectingWindow`
 
  ## Manual Shake Gesture Integration
 

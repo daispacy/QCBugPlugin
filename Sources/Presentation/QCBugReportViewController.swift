@@ -38,7 +38,10 @@ final class QCBugReportViewController: UIViewController {
     var gitLabUsername: String?
     var isGitLabLoginInProgress = false
     var shouldSubmitAfterGitLabLogin = false
-    
+
+    // Track if view controller was explicitly dismissed (via cancel/submit)
+    private var wasExplicitlyDismissed = false
+
     // Bug report data
     private var bugDescription = ""
     private var selectedPriority: String = ""
@@ -102,6 +105,19 @@ final class QCBugReportViewController: UIViewController {
                 isLoading: false,
                 error: nil
             )
+        }
+
+        // Reset dismissal flag when view appears
+        wasExplicitlyDismissed = false
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+
+        // If view was dismissed without explicit cancel/submit (e.g., by tapping outside),
+        // notify delegate to restore floating button and save session state
+        if !wasExplicitlyDismissed {
+            delegate?.bugReportViewControllerDidCancel(self)
         }
     }
 
@@ -171,6 +187,7 @@ final class QCBugReportViewController: UIViewController {
     // MARK: - Actions
     
     @objc private func cancelTapped() {
+        wasExplicitlyDismissed = true
         delegate?.bugReportViewControllerDidCancel(self)
     }
     
@@ -182,9 +199,10 @@ final class QCBugReportViewController: UIViewController {
         }
 
         let report = createBugReport()
+        wasExplicitlyDismissed = true
         delegate?.bugReportViewController(self, didSubmitReport: report)
     }
-    
+
     // MARK: - Bug Report Creation
     
     private func createBugReport() -> BugReport {
@@ -220,6 +238,7 @@ final class QCBugReportViewController: UIViewController {
             if triggeredBySubmit {
                 shouldSubmitAfterGitLabLogin = false
                 let report = createBugReport()
+                wasExplicitlyDismissed = true
                 delegate?.bugReportViewController(self, didSubmitReport: report)
             }
             emitGitLabState(
@@ -285,6 +304,7 @@ final class QCBugReportViewController: UIViewController {
                 if self.shouldSubmitAfterGitLabLogin {
                     self.shouldSubmitAfterGitLabLogin = false
                     let report = self.createBugReport()
+                    self.wasExplicitlyDismissed = true
                     self.delegate?.bugReportViewController(self, didSubmitReport: report)
                 }
 

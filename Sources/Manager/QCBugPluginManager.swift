@@ -10,9 +10,17 @@ import Foundation
 import UIKit
 import QuickLook
 
-/// Protocol for shake detection callback
-internal protocol ShakeDetectionDelegate: AnyObject {
-    func windowDidDetectShake()
+/// Internal custom window that detects shake gestures
+private class QCInternalShakeDetectingWindow: UIWindow {
+    var shakeHandler: (() -> Void)?
+
+    override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        super.motionEnded(motion, with: event)
+
+        if motion == .motionShake {
+            shakeHandler?()
+        }
+    }
 }
 
 private final class SingleAttachmentPreviewDataSource: NSObject, QLPreviewControllerDataSource {
@@ -32,7 +40,7 @@ private final class SingleAttachmentPreviewDataSource: NSObject, QLPreviewContro
 }
 
 /// Main manager class for the QC Bug Plugin
-final class QCBugPluginManager: ShakeDetectionDelegate {
+final class QCBugPluginManager {
 
     // MARK: - Singleton
     static let shared = QCBugPluginManager()
@@ -40,7 +48,7 @@ final class QCBugPluginManager: ShakeDetectionDelegate {
     // MARK: - Private Properties
     private var configuration: QCBugPluginConfig?
     private weak var hostWindow: UIWindow?
-    private var shakeDetectionEnabled: Bool = false
+    private var internalShakeWindow: QCInternalShakeDetectingWindow?
     private var screenRecorder: ScreenRecordingProtocol?
     private var screenCapture: ScreenCaptureProtocol?
     private var bugReportService: BugReportProtocol?
@@ -138,13 +146,13 @@ final class QCBugPluginManager: ShakeDetectionDelegate {
 
         refreshBugReportService()
 
-        // Setup floating action buttons if enabled
+        // Setup floating action buttons and shake detection if enabled
         if config.enableFloatingButton {
             setupFloatingActionButtons()
-            enableShakeDetection()
+            setupInternalShakeDetection()
         } else {
             teardownFloatingActionButtons()
-            disableShakeDetection()
+            teardownShakeDetection()
         }
 
         self.isConfigured = true
@@ -524,39 +532,37 @@ final class QCBugPluginManager: ShakeDetectionDelegate {
 
     // MARK: - Shake Detection
 
-    private func enableShakeDetection() {
+    private func setupInternalShakeDetection() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
-            // Get the host window
-            guard let window = self.hostWindow else { return }
-
-            // Set up shake detection delegate if window is QCShakeDetectingWindow
-            if let shakeWindow = window as? QCShakeDetectingWindow {
-                shakeWindow.shakeDelegate = self
-                self.shakeDetectionEnabled = true
+            // Create internal shake-detecting window if needed
+            if self.internalShakeWindow == nil {
+                let shakeWindow = QCInternalShakeDetectingWindow(frame: UIScreen.main.bounds)
+                shakeWindow.windowLevel = .normal - 1 // Behind everything
+                shakeWindow.isHidden = false
+                shakeWindow.rootViewController = UIViewController() // Needed for shake to work
+                shakeWindow.shakeHandler = { [weak self] in
+                    self?.handleShakeGesture()
+                }
+                self.internalShakeWindow = shakeWindow
                 print("✅ QCBugPlugin: Shake detection enabled for floating button backdoor")
             }
         }
     }
 
-    private func disableShakeDetection() {
+    private func teardownShakeDetection() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-
-            if let window = self.hostWindow as? QCShakeDetectingWindow {
-                window.shakeDelegate = nil
-            }
-            self.shakeDetectionEnabled = false
+            self.internalShakeWindow?.shakeHandler = nil
+            self.internalShakeWindow?.isHidden = true
+            self.internalShakeWindow = nil
         }
     }
 
-    // MARK: - ShakeDetectionDelegate
-
-    func windowDidDetectShake() {
+    private func handleShakeGesture() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self,
-                  self.shakeDetectionEnabled,
                   let floatingButton = self.floatingActionButtons else {
                 return
             }
@@ -570,9 +576,22 @@ final class QCBugPluginManager: ShakeDetectionDelegate {
                 feedback.notificationOccurred(.success)
 
                 // Show the floating button
-                floatingButton.show(animated: true)
-                floatingButton.isHidden = false
+                self.showFloatingButton()
             }
+        }
+    }
+
+    // MARK: - Public Floating Button Control
+
+    func showFloatingButton() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self,
+                  let floatingButton = self.floatingActionButtons else {
+                return
+            }
+
+            floatingButton.show(animated: true)
+            floatingButton.isHidden = false
         }
     }
 
