@@ -441,14 +441,14 @@
                         if (normalized.indexOf(prefix) !== 0) {
                             return;
                         }
-                        var rawValue = title.substring(prefix.length).trim().toLowerCase();
-                        if (!rawValue.length) {
+                        var displayValue = title.substring(prefix.length).trim();
+                        if (!displayValue.length) {
                             return;
                         }
-                        if (labels.some(function (label) { return label.value === rawValue; })) {
+                        if (labels.some(function (label) { return label.value === title; })) {
                             return;
                         }
-                        labels.push({ title: title, value: rawValue });
+                        labels.push({ title: displayValue, value: title });
                     });
 
                     var previousSelection = state.priority.selected;
@@ -635,7 +635,7 @@
         if (!field) {
             return;
         }
-        var value = typeof field.value === 'string' ? field.value.trim().toLowerCase() : '';
+        var value = typeof field.value === 'string' ? field.value.trim() : '';
         var priority = value.length ? value : null;
         state.priority.selected = priority;
         renderPriorityControls();
@@ -648,7 +648,7 @@
     window.setInitialPriority = function (value) {
         var priority = null;
         if (typeof value === 'string') {
-            var trimmed = value.trim().toLowerCase();
+            var trimmed = value.trim();
             if (trimmed.length) {
                 priority = trimmed;
             }
