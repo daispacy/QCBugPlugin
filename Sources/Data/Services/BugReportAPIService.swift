@@ -28,6 +28,7 @@ final class BugReportAPIService: BugReportProtocol {
 
     private struct BugReportPayload: Encodable {
         let whtype: String
+        let stage: String
 
         struct MediaAttachmentDTO: Encodable {
             let type: MediaType
@@ -41,7 +42,6 @@ final class BugReportAPIService: BugReportProtocol {
             let timestamp: Date
             let description: String
             let priority: String
-            let stage: String
             let userActions: [UserAction]
             let deviceInfo: DeviceInfo
             let appInfo: AppInfo
@@ -81,6 +81,7 @@ final class BugReportAPIService: BugReportProtocol {
 
         init(report: BugReport, attachments: [AttachmentPayload], gitLabCredentials: GitLabCredentials?) {
             self.whtype = report.whtype
+            self.stage = report.stage
             let mediaDTO = report.mediaAttachments.map { attachment in
                 MediaAttachmentDTO(
                     type: attachment.type,
@@ -95,7 +96,6 @@ final class BugReportAPIService: BugReportProtocol {
                 timestamp: report.timestamp,
                 description: report.description,
                 priority: report.priority,
-                stage: report.stage,
                 userActions: report.userActions,
                 deviceInfo: report.deviceInfo,
                 appInfo: report.appInfo,
