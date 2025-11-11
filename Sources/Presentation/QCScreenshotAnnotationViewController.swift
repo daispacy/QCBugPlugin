@@ -213,8 +213,10 @@ final class QCScreenshotAnnotationViewController: UIViewController {
         }
 
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let qcDirectory = documentsPath.appendingPathComponent("QCBugPlugin", isDirectory: true)
         let fileName = "qc_screenshot_annotated_\(Date().timeIntervalSince1970).png"
-        let fileURL = documentsPath.appendingPathComponent(fileName)
+        try FileManager.default.createDirectory(at: qcDirectory, withIntermediateDirectories: true, attributes: nil)
+        let fileURL = qcDirectory.appendingPathComponent(fileName)
         try pngData.write(to: fileURL, options: .atomic)
         return fileURL
     }

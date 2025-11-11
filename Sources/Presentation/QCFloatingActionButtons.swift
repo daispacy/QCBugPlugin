@@ -36,6 +36,7 @@ final class QCFloatingActionButtons: UIView {
     private let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
     private var keyboardHeight: CGFloat = 0
     private var zOrderMonitorTimer: Timer?
+    private var isSuspended = false
 
     // MARK: - Initialization
 
@@ -69,12 +70,11 @@ final class QCFloatingActionButtons: UIView {
         super.didMoveToWindow()
 
         if window != nil {
-            // Bring to front when moved to a window
             bringToFront()
-            // Start monitoring z-order
-            startZOrderMonitoring()
+            if !isSuspended {
+                startZOrderMonitoring()
+            }
         } else {
-            // Stop monitoring when removed from window
             stopZOrderMonitoring()
         }
     }
@@ -388,6 +388,8 @@ final class QCFloatingActionButtons: UIView {
     private func ensureProperWindowAttachment() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+            guard !self.isSuspended else { return }
+            guard !self.isHidden else { return }
 
             let keyWindow: UIWindow?
             if #available(iOS 13.0, *) {
@@ -420,6 +422,7 @@ final class QCFloatingActionButtons: UIView {
 
     /// Starts monitoring z-order to ensure button stays on top
     private func startZOrderMonitoring() {
+        guard !isSuspended else { return }
         // Stop any existing timer
         stopZOrderMonitoring()
 
@@ -442,13 +445,29 @@ final class QCFloatingActionButtons: UIView {
 
     /// Ensures the button is the topmost subview
     private func ensureOnTop() {
-        guard let superview = superview,
+        guard !isSuspended,
+              !isHidden,
+              let superview = superview,
               superview.subviews.last !== self else {
             return
         }
 
         // Bring to front if not already the topmost subview
         superview.bringSubviewToFront(self)
+    }
+
+    func setSuspended(_ suspended: Bool) {
+        guard isSuspended != suspended else { return }
+        isSuspended = suspended
+
+        if suspended {
+            stopZOrderMonitoring()
+        } else {
+            if window != nil {
+                startZOrderMonitoring()
+                ensureProperWindowAttachment()
+            }
+        }
     }
 
     /// Ensures the floating button stays within visible screen bounds

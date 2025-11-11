@@ -81,6 +81,8 @@ final class QCBugPluginManager: NSObject {
     private var pendingRecordingURL: URL?
     private var pendingRecordingCompletion: ((Result<URL, Error>) -> Void)?
     private var previewDataSource: SingleAttachmentPreviewDataSource?
+    private var activePreviewController: QLPreviewController?
+    private var isFloatingUISuspended = false
 
     // MARK: - Delegate
     weak var delegate: QCBugPluginDelegate?
@@ -380,22 +382,20 @@ final class QCBugPluginManager: NSObject {
     private func showRecordingPreview(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
         print("🎬 QCBugPlugin: Showing recording preview for \(recordingURL.lastPathComponent)")
 
-        // Hide floating button during preview
-        self.floatingActionButtons?.isHidden = true
-        self.internalShakeWindow?.isHidden = true
-        print("🎬 QCBugPlugin: Hidden floating buttons and shake window")
+        suspendFloatingUI(for: "recordingPreview")
 
         let previewController = QLPreviewController()
         self.previewDataSource = SingleAttachmentPreviewDataSource(url: recordingURL)
         previewController.dataSource = self.previewDataSource
         previewController.delegate = self
         previewController.currentPreviewItemIndex = 0
+        self.activePreviewController = previewController
         print("🎬 QCBugPlugin: Preview controller configured")
 
         guard let presenter = UIApplication.shared.topViewController() else {
             print("⚠️ QCBugPlugin: No top view controller for preview")
-            self.floatingActionButtons?.isHidden = false
-            self.internalShakeWindow?.isHidden = false
+            self.previewDataSource = nil
+            self.activePreviewController = nil
             // Skip preview and go directly to confirmation
             self.showRecordingConfirmation(recordingURL: recordingURL, completion: completion)
             return
@@ -435,8 +435,7 @@ final class QCBugPluginManager: NSObject {
             // Clean up the recording file
             try? FileManager.default.removeItem(at: recordingURL)
 
-            // Show floating button after discard
-            self?.floatingActionButtons?.isHidden = false
+            self?.resumeFloatingUIIfNeeded(reason: "recordingDiscarded")
 
             let error = NSError(
                 domain: "com.qcbugplugin",
@@ -457,6 +456,8 @@ final class QCBugPluginManager: NSObject {
     }
 
     private func addRecordingToSession(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
+        resumeFloatingUIIfNeeded(reason: "recordingAdded")
+
         // Create media attachment
         let attachment = MediaAttachment(type: .screenRecording, fileURL: recordingURL)
         self.sessionMediaAttachments.append(attachment)
@@ -786,6 +787,10 @@ final class QCBugPluginManager: NSObject {
     }
 
     private func shouldIgnoreFloatingButtonManagement() -> Bool {
+        if isFloatingUISuspended {
+            return true
+        }
+
         // Ignore if preview is active
         if previewDataSource != nil {
             return true
@@ -842,6 +847,11 @@ final class QCBugPluginManager: NSObject {
                 return
             }
 
+            if self.isFloatingUISuspended {
+                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - skipped (UI suspended)")
+                return
+            }
+
             // Bring to front if not already the topmost subview
             if superview.subviews.last !== controls {
                 print("🔧 QCBugPlugin: bringFloatingButtonsToFront - bringing to front")
@@ -851,6 +861,30 @@ final class QCBugPluginManager: NSObject {
             }
         }
     }
+
+    private func suspendFloatingUI(for reason: String) {
+        guard !isFloatingUISuspended else { return }
+        isFloatingUISuspended = true
+        floatingActionButtons?.setSuspended(true)
+        floatingActionButtons?.isHidden = true
+        internalShakeWindow?.isHidden = true
+        print("🛑 QCBugPlugin: Suspended floating UI (\(reason))")
+    }
+
+    private func resumeFloatingUIIfNeeded(reason: String? = nil) {
+        guard isFloatingUISuspended else { return }
+        isFloatingUISuspended = false
+        floatingActionButtons?.setSuspended(false)
+        let shouldRemainHidden = shouldIgnoreFloatingButtonManagement()
+        floatingActionButtons?.isHidden = shouldRemainHidden
+        internalShakeWindow?.isHidden = shouldRemainHidden
+        if let reason {
+            print("▶️ QCBugPlugin: Resumed floating UI (\(reason))")
+        } else {
+            print("▶️ QCBugPlugin: Resumed floating UI")
+        }
+    }
+
 
     // MARK: - Screenshot Capture
 
@@ -997,24 +1031,20 @@ final class QCBugPluginManager: NSObject {
         }
 
         DispatchQueue.main.async {
-            // Hide floating button before showing preview
-            self.floatingActionButtons?.isHidden = true
-
-            // Temporarily hide shake window to prevent interference
-            self.internalShakeWindow?.isHidden = true
+            self.suspendFloatingUI(for: "attachmentPreview")
 
             let previewController = QLPreviewController()
             self.previewDataSource = SingleAttachmentPreviewDataSource(url: url)
             previewController.dataSource = self.previewDataSource
             previewController.delegate = self
             previewController.currentPreviewItemIndex = 0
+            self.activePreviewController = previewController
 
             guard let presenter = UIApplication.shared.topViewController() else {
                 print("❌ QCBugPlugin: Unable to present attachment preview controller")
-                // Show floating button if presentation fails
-                self.floatingActionButtons?.isHidden = false
-                // Re-show shake window
-                self.internalShakeWindow?.isHidden = false
+                self.previewDataSource = nil
+                self.activePreviewController = nil
+                self.resumeFloatingUIIfNeeded(reason: "attachmentPreviewNoPresenter")
                 return
             }
 
@@ -1279,12 +1309,10 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
 extension QCBugPluginManager: QLPreviewControllerDelegate {
     func previewControllerWillDismiss(_ controller: QLPreviewController) {
         print("📱 QCBugPlugin: Preview controller will dismiss")
+        activePreviewController = nil
 
         // DON'T clear previewDataSource yet - keep it to prevent window notifications from interfering
         // We'll clear it after showing the confirmation dialog
-
-        // Re-show shake window
-        internalShakeWindow?.isHidden = false
 
         // Check if this was a recording preview and handle it here
         // (willDismiss is more reliable than didDismiss when swiping to dismiss)
@@ -1312,23 +1340,17 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
                 guard let self = self else { return }
 
                 self.previewDataSource = nil
-
-                let isBugReportVisible = self.sessionBugReportViewController?.viewIfLoaded?.window != nil
-                if !isBugReportVisible {
-                    self.floatingActionButtons?.isHidden = false
-                }
+                self.resumeFloatingUIIfNeeded(reason: "attachmentPreviewDismissed")
             }
         }
     }
 
     func previewControllerDidDismiss(_ controller: QLPreviewController) {
         print("📱 QCBugPlugin: Preview controller did dismiss")
+        activePreviewController = nil
 
         // Note: DON'T clear previewDataSource here - it's handled in willDismiss with proper delay
         // This prevents race conditions with window notifications
-
-        // Ensure shake window is visible
-        internalShakeWindow?.isHidden = false
 
         // Note: Recording confirmation is already handled in willDismiss
         // This method is just for additional cleanup and logging

@@ -7,14 +7,20 @@
 //
 
 import Foundation
+import UIKit
 import ReplayKit
 import AVFoundation
+import CoreMedia
+
+extension CMSampleBuffer: @retroactive @unchecked Sendable {}
 
 /// Service for screen recording functionality using ReplayKit
 final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
 
     // MARK: - Properties
     private let recorder = RPScreenRecorder.shared()
+    private let writerQueue = DispatchQueue(label: "com.qcbugplugin.screenrecording.writer")
+
     private var videoWriter: AVAssetWriter?
     private var videoWriterInput: AVAssetWriterInput?
     private var audioWriterInput: AVAssetWriterInput?
@@ -22,6 +28,8 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     private var isWritingStarted = false
     private var videoBufferCount = 0
     private var audioBufferCount = 0
+    private var firstVideoTimestamp: CMTime?
+    private var isStoppingCapture = false
 
     /// Tracks whether this service instance started the current recording
     private var isRecordingStartedByService = false
@@ -77,10 +85,14 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
             }
         }
 
-        // Reset counters for new recording
-        videoBufferCount = 0
-        audioBufferCount = 0
-        print("🎬 ScreenRecordingService: Starting new recording, counters reset")
+        // Reset counters and writer state on the serial queue to avoid races
+        writerQueue.sync {
+            self.cleanupWriterLocked()
+            self.videoBufferCount = 0
+            self.audioBufferCount = 0
+            self.firstVideoTimestamp = nil
+            self.isStoppingCapture = false
+        }
 
         // Create output URL with validation
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -108,16 +120,23 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         }
 
         let videoFileName = "qc_screen_recording_\(Date().timeIntervalSince1970).mp4"
-        outputURL = qcDirectory.appendingPathComponent(videoFileName)
-        print("🎬 ScreenRecordingService: Output URL will be: \(outputURL!.path)")
+        let destinationURL = qcDirectory.appendingPathComponent(videoFileName)
+        print("🎬 ScreenRecordingService: Output URL will be: \(destinationURL.path)")
 
-        guard let outputURL = outputURL else {
-            completion(.failure(.savingFailed("Failed to create output URL")))
-            return
+        var writerConfigured = false
+        let screenBounds = UIScreen.main.bounds
+        let videoSize = CGSize(width: screenBounds.width * UIScreen.main.scale,
+                               height: screenBounds.height * UIScreen.main.scale)
+
+        writerQueue.sync {
+            self.outputURL = destinationURL
+            writerConfigured = self.configureVideoWriterLocked(outputURL: destinationURL, videoSize: videoSize)
+            if !writerConfigured {
+                self.cleanupWriterLocked()
+            }
         }
 
-        // Setup video writer
-        guard createVideoWriter(outputURL: outputURL) else {
+        guard writerConfigured else {
             completion(.failure(.savingFailed("Failed to create video writer")))
             return
         }
@@ -131,7 +150,13 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
                 return
             }
 
-            self.processSampleBuffer(sampleBuffer, of: bufferType)
+            self.writerQueue.async { [weak self] in
+                guard let self = self else { return }
+
+                autoreleasepool {
+                    self.processSampleBufferLocked(sampleBuffer, of: bufferType)
+                }
+            }
 
         }) { [weak self] error in
             DispatchQueue.main.async {
@@ -139,7 +164,9 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
 
                 if let error = error {
                     self.isRecordingStartedByService = false
-                    self.cleanupWriter()
+                    self.writerQueue.async {
+                        self.cleanupWriterLocked()
+                    }
                     completion(.failure(.recordingFailed(error.localizedDescription)))
                 } else {
                     self.isRecordingStartedByService = true
@@ -170,68 +197,71 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         print("🎬 ScreenRecordingService: Stopping capture, writing started: \(isWritingStarted)")
         print("🎬 ScreenRecordingService: Buffers written - Video: \(videoBufferCount), Audio: \(audioBufferCount)")
 
-        // Stop capture
         recorder.stopCapture { [weak self] error in
-            DispatchQueue.main.async {
-                guard let self = self else {
-                    print("❌ ScreenRecordingService: Service deallocated during stop")
+            guard let self = self else {
+                DispatchQueue.main.async {
                     completion(.failure(.savingFailed("Service deallocated")))
-                    return
                 }
+                return
+            }
 
-                self.isRecordingStartedByService = false
-
-                if let error = error {
-                    print("❌ ScreenRecordingService: Failed to stop capture: \(error.localizedDescription)")
-                    self.cleanupWriter()
+            if let error = error {
+                print("❌ ScreenRecordingService: Failed to stop capture: \(error.localizedDescription)")
+                self.writerQueue.async {
+                    self.cleanupWriterLocked()
+                }
+                DispatchQueue.main.async {
+                    self.isRecordingStartedByService = false
                     completion(.failure(.recordingFailed(error.localizedDescription)))
-                    return
                 }
+                return
+            }
 
-                print("✅ ScreenRecordingService: Capture stopped successfully, finalizing video...")
-
-                // Finalize the video file
-                self.finalizeRecording(completion: completion)
+            self.writerQueue.async {
+                self.isStoppingCapture = true
+                self.finalizeRecordingLocked { result in
+                    DispatchQueue.main.async {
+                        self.isRecordingStartedByService = false
+                        completion(result)
+                    }
+                }
             }
         }
     }
     
     // MARK: - Private Methods
 
-    private func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, of type: RPSampleBufferType) {
+    private func processSampleBufferLocked(_ sampleBuffer: CMSampleBuffer, of type: RPSampleBufferType) {
+        guard !isStoppingCapture else { return }
+        guard CMSampleBufferDataIsReady(sampleBuffer) else {
+            print("⚠️ ScreenRecordingService: Sample buffer not ready")
+            return
+        }
         guard let videoWriter = videoWriter else {
             print("⚠️ ScreenRecordingService: No video writer available")
             return
         }
 
-        // Start writing session if not started
-        if !isWritingStarted {
-            if videoWriter.status == .unknown {
-                print("🎬 ScreenRecordingService: Starting writing session...")
-                videoWriter.startWriting()
-                let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-                videoWriter.startSession(atSourceTime: timestamp)
-                isWritingStarted = true
-                print("🎬 ScreenRecordingService: Writing session started successfully")
-            }
-        }
-
-        guard videoWriter.status == .writing else {
-            if videoWriter.status == .failed {
-                if let error = videoWriter.error {
-                    print("⚠️ ScreenRecordingService: Writer failed: \(error.localizedDescription)")
-                }
-            } else {
-                print("⚠️ ScreenRecordingService: Writer status: \(videoWriter.status.rawValue)")
-            }
-            return
-        }
-
         switch type {
         case .video:
-            if let input = videoWriterInput, input.isReadyForMoreMediaData {
-                let success = input.append(sampleBuffer)
-                if success {
+            startSessionIfNeededLocked(with: sampleBuffer, writer: videoWriter)
+
+            guard videoWriter.status == .writing else {
+                if videoWriter.status == .failed, let error = videoWriter.error {
+                    print("⚠️ ScreenRecordingService: Writer failed: \(error.localizedDescription)")
+                } else {
+                    print("⚠️ ScreenRecordingService: Writer status: \(videoWriter.status.rawValue)")
+                }
+                return
+            }
+
+            guard let input = videoWriterInput else {
+                print("⚠️ ScreenRecordingService: Missing video input")
+                return
+            }
+
+            if input.isReadyForMoreMediaData {
+                if input.append(sampleBuffer) {
                     videoBufferCount += 1
                     if videoBufferCount == 1 {
                         print("🎬 ScreenRecordingService: First video buffer written")
@@ -244,9 +274,14 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
             }
 
         case .audioApp, .audioMic:
-            if let input = audioWriterInput, input.isReadyForMoreMediaData {
-                let success = input.append(sampleBuffer)
-                if success {
+            guard isWritingStarted else {
+                // Drop audio frames until we have video to anchor the session
+                return
+            }
+
+            guard let input = audioWriterInput else { return }
+            if input.isReadyForMoreMediaData {
+                if input.append(sampleBuffer) {
                     audioBufferCount += 1
                     if audioBufferCount == 1 {
                         print("🎬 ScreenRecordingService: First audio buffer written")
@@ -254,6 +289,8 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
                 } else {
                     print("⚠️ ScreenRecordingService: Failed to append audio buffer")
                 }
+            } else {
+                print("⚠️ ScreenRecordingService: Audio input not ready for data")
             }
 
         @unknown default:
@@ -261,42 +298,61 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         }
     }
 
-    private func finalizeRecording(completion: @escaping (Result<URL, ScreenRecordingError>) -> Void) {
+    private func startSessionIfNeededLocked(with sampleBuffer: CMSampleBuffer, writer: AVAssetWriter) {
+        guard !isWritingStarted else { return }
+        guard writer.status == .unknown else { return }
+
+        print("🎬 ScreenRecordingService: Starting writing session...")
+        let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        writer.startWriting()
+        writer.startSession(atSourceTime: timestamp)
+        firstVideoTimestamp = timestamp
+        isWritingStarted = true
+        print("🎬 ScreenRecordingService: Writing session started successfully at \(timestamp)")
+    }
+
+    private func finalizeRecordingLocked(completion: @escaping (Result<URL, ScreenRecordingError>) -> Void) {
         print("🚨🚨🚨 ScreenRecordingService: FINALIZE RECORDING - NEW CODE VERSION 2024-11-11 🚨🚨🚨")
         print("🎬 ScreenRecordingService: finalizeRecording called")
 
-        guard let videoWriter = videoWriter, let outputURL = outputURL else {
+        guard let writer = videoWriter, let outputURL = outputURL else {
             print("❌ ScreenRecordingService: No video writer or output URL")
             completion(.failure(.savingFailed("No video writer or output URL")))
             return
         }
 
-        print("🎬 ScreenRecordingService: Writer status before finalize: \(videoWriter.status.rawValue)")
+        print("🎬 ScreenRecordingService: Writer status before finalize: \(writer.status.rawValue)")
         print("🎬 ScreenRecordingService: Writing started: \(isWritingStarted)")
         print("🎬 ScreenRecordingService: Buffers received - Video: \(videoBufferCount), Audio: \(audioBufferCount)")
         print("🎬 ScreenRecordingService: Output URL: \(outputURL.path)")
+
+        guard isWritingStarted, videoBufferCount > 0 else {
+            print("❌ ScreenRecordingService: No video frames captured; aborting save")
+            if FileManager.default.fileExists(atPath: outputURL.path) {
+                try? FileManager.default.removeItem(at: outputURL)
+            }
+            cleanupWriterLocked()
+            completion(.failure(.recordingFailed("Screen recording did not capture any video frames")))
+            return
+        }
 
         videoWriterInput?.markAsFinished()
         audioWriterInput?.markAsFinished()
         print("🎬 ScreenRecordingService: Marked inputs as finished, calling finishWriting...")
 
-        videoWriter.finishWriting { [weak self] in
-            DispatchQueue.main.async {
-                guard let self = self else {
-                    print("❌ ScreenRecordingService: Service deallocated during finishWriting")
-                    completion(.failure(.savingFailed("Service deallocated")))
-                    return
-                }
+        let finalURL = outputURL
+        writer.finishWriting { [weak self] in
+            guard let self = self else { return }
 
-                print("🎬 ScreenRecordingService: finishWriting completed, status: \(videoWriter.status.rawValue)")
+            self.writerQueue.async {
+                let statusValue = writer.status.rawValue
+                print("🎬 ScreenRecordingService: finishWriting completed, status: \(statusValue)")
 
-                if videoWriter.status == .completed {
-                    print("✅ ScreenRecordingService: Recording saved to \(outputURL.path)")
-
-                    // Verify file exists and has size
-                    if FileManager.default.fileExists(atPath: outputURL.path) {
+                if writer.status == .completed {
+                    print("✅ ScreenRecordingService: Recording saved to \(finalURL.path)")
+                    if FileManager.default.fileExists(atPath: finalURL.path) {
                         do {
-                            let attributes = try FileManager.default.attributesOfItem(atPath: outputURL.path)
+                            let attributes = try FileManager.default.attributesOfItem(atPath: finalURL.path)
                             let fileSize = attributes[.size] as? Int64 ?? 0
                             print("📁 ScreenRecordingService: File size: \(fileSize) bytes")
                         } catch {
@@ -306,26 +362,30 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
                         print("⚠️ ScreenRecordingService: File does not exist at path!")
                     }
 
-                    self.cleanupWriter()
-                    completion(.success(outputURL))
+                    self.cleanupWriterLocked()
+                    completion(.success(finalURL))
                 } else {
-                    let error = videoWriter.error?.localizedDescription ?? "Unknown error"
+                    let errorMessage = writer.error?.localizedDescription ?? "Unknown error"
                     print("❌ ScreenRecordingService: Failed to finalize recording")
-                    print("❌ ScreenRecordingService: Writer status: \(videoWriter.status.rawValue)")
-                    print("❌ ScreenRecordingService: Error: \(error)")
-                    if let writerError = videoWriter.error {
+                    print("❌ ScreenRecordingService: Writer status: \(statusValue)")
+                    print("❌ ScreenRecordingService: Error: \(errorMessage)")
+                    if let writerError = writer.error {
                         print("❌ ScreenRecordingService: Error code: \((writerError as NSError).code)")
                         print("❌ ScreenRecordingService: Error domain: \((writerError as NSError).domain)")
                     }
-                    self.cleanupWriter()
-                    completion(.failure(.savingFailed(error)))
+
+                    if FileManager.default.fileExists(atPath: finalURL.path) {
+                        try? FileManager.default.removeItem(at: finalURL)
+                    }
+                    self.cleanupWriterLocked()
+                    completion(.failure(.savingFailed(errorMessage)))
                 }
             }
         }
     }
 
-    private func createVideoWriter(outputURL: URL) -> Bool {
-        print("🎬 ScreenRecordingService: createVideoWriter called for: \(outputURL.path)")
+    private func configureVideoWriterLocked(outputURL: URL, videoSize: CGSize) -> Bool {
+        print("🎬 ScreenRecordingService: configureVideoWriterLocked called for: \(outputURL.path)")
 
         do {
             // Remove existing file if it exists
@@ -350,8 +410,8 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
             print("✅ ScreenRecordingService: AVAssetWriter created successfully")
 
             // Video settings
-            let width = Int(UIScreen.main.bounds.width * UIScreen.main.scale)
-            let height = Int(UIScreen.main.bounds.height * UIScreen.main.scale)
+            let width = Int(videoSize.width.rounded())
+            let height = Int(videoSize.height.rounded())
             print("🎬 ScreenRecordingService: Video dimensions: \(width)x\(height)")
 
             let videoSettings: [String: Any] = [
@@ -411,7 +471,7 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         }
     }
 
-    private func cleanupWriter() {
+    private func cleanupWriterLocked() {
         videoWriter = nil
         videoWriterInput = nil
         audioWriterInput = nil
@@ -419,6 +479,8 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         videoBufferCount = 0
         audioBufferCount = 0
         outputURL = nil
+        firstVideoTimestamp = nil
+        isStoppingCapture = false
         print("🧹 ScreenRecordingService: Cleaned up writer and reset counters")
     }
     

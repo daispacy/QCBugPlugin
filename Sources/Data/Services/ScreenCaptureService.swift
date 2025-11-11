@@ -63,17 +63,24 @@ final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
 
     func cleanupScreenshots() {
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let qcDirectory = documentsPath.appendingPathComponent("QCBugPlugin", isDirectory: true)
 
-        do {
-            let files = try FileManager.default.contentsOfDirectory(at: documentsPath, includingPropertiesForKeys: nil)
-            let screenshotFiles = files.filter { $0.lastPathComponent.hasPrefix("qc_screenshot_") }
+        let directoriesToCheck: [URL] = [qcDirectory, documentsPath]
 
-            for fileURL in screenshotFiles {
-                try? FileManager.default.removeItem(at: fileURL)
-                print("🗑️ ScreenCaptureService: Cleaned up screenshot: \(fileURL.lastPathComponent)")
+        for directory in directoriesToCheck {
+            guard FileManager.default.fileExists(atPath: directory.path) else { continue }
+
+            do {
+                let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+                let screenshotFiles = files.filter { $0.lastPathComponent.hasPrefix("qc_screenshot_") }
+
+                for fileURL in screenshotFiles {
+                    try? FileManager.default.removeItem(at: fileURL)
+                    print("🗑️ ScreenCaptureService: Cleaned up screenshot: \(fileURL.lastPathComponent)")
+                }
+            } catch {
+                print("❌ ScreenCaptureService: Failed to cleanup screenshots in \(directory.lastPathComponent): \(error)")
             }
-        } catch {
-            print("❌ ScreenCaptureService: Failed to cleanup screenshots: \(error)")
         }
     }
 
@@ -82,8 +89,18 @@ final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     private func saveImage(_ image: UIImage, completion: @escaping (Result<URL, ScreenCaptureError>) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let qcDirectory = documentsPath.appendingPathComponent("QCBugPlugin", isDirectory: true)
             let fileName = "qc_screenshot_\(Date().timeIntervalSince1970).png"
-            let fileURL = documentsPath.appendingPathComponent(fileName)
+            do {
+                try FileManager.default.createDirectory(at: qcDirectory, withIntermediateDirectories: true, attributes: nil)
+            } catch {
+                DispatchQueue.main.async {
+                    completion(.failure(.savingFailed("Failed to create screenshot directory")))
+                }
+                return
+            }
+
+            let fileURL = qcDirectory.appendingPathComponent(fileName)
 
             guard let pngData = image.pngData() else {
                 DispatchQueue.main.async {
