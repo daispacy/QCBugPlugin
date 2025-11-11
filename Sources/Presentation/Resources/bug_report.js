@@ -964,7 +964,6 @@
         }
         var removed = state.capturedMedia.splice(index, 1);
         updateMediaList();
-        window.closeMediaPreview();
 
         if (removed.length && removed[0] && removed[0].fileURL) {
             postMessage({
@@ -1030,89 +1029,14 @@
             return;
         }
 
-        var media = state.capturedMedia[index];
-        var type = media && media.type ? String(media.type).toLowerCase() : '';
-        var fileURL = media && media.fileURL ? String(media.fileURL) : '';
-        var isRecording = type === 'screenrecording' || type === 'screen_recording';
-        var isScreenshot = type === 'screenshot';
-        var isImage = isScreenshot || (fileURL && /(\.jpg|\.jpeg|\.png|\.gif|\.webp)$/i.test(fileURL));
-
-        // Always use native preview for videos
-        if (isRecording) {
-            requestNativePreviewByIndex(index);
-            return;
-        }
-
-        var overlay = document.getElementById('mediaPreviewOverlay');
-        var body = document.getElementById('mediaPreviewBody');
-        var caption = document.getElementById('mediaPreviewCaption');
-
-        if (!overlay || !body || !caption) {
-            return;
-        }
-
-        while (body.firstChild) {
-            body.removeChild(body.firstChild);
-        }
-        caption.textContent = '';
-
-        var displayName = media && media.fileName ? media.fileName : 'Attachment ' + (index + 1);
-
-        if (isImage && fileURL) {
-            var img = document.createElement('img');
-            img.className = 'media-preview-image';
-            img.src = fileURL;
-            img.alt = displayName;
-            img.onerror = function () {
-                handlePreviewFailure(index);
-            };
-            body.appendChild(img);
-        } else {
-            handlePreviewFailure(index);
-            return;
-        }
-
-        caption.textContent = displayName;
-        overlay.classList.add('is-visible');
-        if (document.body) {
-            document.body.classList.add('media-preview-active');
-        }
+        // Always use native QuickLook preview for all media types
+        requestNativePreviewByIndex(index);
     };
 
     window.closeMediaPreview = function () {
-        var overlay = document.getElementById('mediaPreviewOverlay');
-        var body = document.getElementById('mediaPreviewBody');
-        var caption = document.getElementById('mediaPreviewCaption');
-
-        if (!overlay || !overlay.classList.contains('is-visible')) {
-            return;
-        }
-
-        var video = overlay.querySelector('video');
-        if (video) {
-            video.pause();
-        }
-
-        overlay.classList.remove('is-visible');
-        if (document.body) {
-            document.body.classList.remove('media-preview-active');
-        }
-
-        if (caption) {
-            caption.textContent = '';
-        }
-
-        if (body) {
-            while (body.firstChild) {
-                body.removeChild(body.firstChild);
-            }
-        }
+        // No longer needed - using native preview only
+        // Kept as stub for backward compatibility
     };
-
-    function handlePreviewFailure(index) {
-        window.closeMediaPreview();
-        requestNativePreviewByIndex(index);
-    }
 
     function requestNativePreviewByIndex(index) {
         if (typeof index !== 'number' || index < 0 || index >= state.capturedMedia.length) {
