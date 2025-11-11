@@ -41,6 +41,7 @@ final class QCBugReportViewController: UIViewController {
 
     // Track if view controller was explicitly dismissed (via cancel/submit)
     private var wasExplicitlyDismissed = false
+    private var isPresentingChildController = false
 
     // Bug report data
     private var bugDescription = ""
@@ -109,6 +110,8 @@ final class QCBugReportViewController: UIViewController {
 
         // Reset dismissal flag when view appears
         wasExplicitlyDismissed = false
+        // Clear child presentation flag once we're back on screen
+        isPresentingChildController = false
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -116,6 +119,10 @@ final class QCBugReportViewController: UIViewController {
 
         // If view was dismissed without explicit cancel/submit (e.g., by tapping outside),
         // notify delegate to restore floating button and save session state
+        if isPresentingChildController {
+            return
+        }
+
         if !wasExplicitlyDismissed {
             delegate?.bugReportViewControllerDidCancel(self)
         }
@@ -146,6 +153,16 @@ final class QCBugReportViewController: UIViewController {
             action: #selector(submitTapped)
         )
         navigationItem.rightBarButtonItem?.isEnabled = false
+    }
+
+    // MARK: - Child Presentation Management
+
+    func beginChildPresentation() {
+        isPresentingChildController = true
+    }
+
+    func endChildPresentation() {
+        isPresentingChildController = false
     }
     
     private func setupWebView() {

@@ -390,6 +390,7 @@ final class QCBugPluginManager: NSObject {
     private func showRecordingPreview(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
         print("🎬 QCBugPlugin: Showing recording preview for \(recordingURL.lastPathComponent)")
 
+        sessionBugReportViewController?.beginChildPresentation()
         suspendFloatingUI(for: "recordingPreview")
         activePreviewMode = .recordingEditor
 
@@ -406,6 +407,7 @@ final class QCBugPluginManager: NSObject {
             self.previewDataSource = nil
             self.activePreviewController = nil
             self.activePreviewMode = .none
+            self.sessionBugReportViewController?.endChildPresentation()
             // Skip preview and go directly to confirmation
             self.showRecordingConfirmation(recordingURL: recordingURL, completion: completion)
             return
@@ -984,6 +986,8 @@ final class QCBugPluginManager: NSObject {
         pendingScreenshotCompletion = completion
         pendingScreenshotOriginalURL = screenshotURL
 
+    sessionBugReportViewController?.beginChildPresentation()
+
         // Hide floating button before presenting annotation
         floatingActionButtons?.isHidden = true
 
@@ -1001,6 +1005,8 @@ final class QCBugPluginManager: NSObject {
 
     private func handleScreenshotAnnotationResult(_ result: Result<URL, Error>) {
         DispatchQueue.main.async {
+            self.sessionBugReportViewController?.endChildPresentation()
+
             let completion = self.pendingScreenshotCompletion
             let originalURL = self.pendingScreenshotOriginalURL
 
@@ -1075,6 +1081,7 @@ final class QCBugPluginManager: NSObject {
         }
 
         DispatchQueue.main.async {
+            self.sessionBugReportViewController?.beginChildPresentation()
             self.suspendFloatingUI(for: "attachmentPreview")
             print("📂 QCBugPlugin: Preparing QLPreviewController for \(url.lastPathComponent)")
 
@@ -1091,6 +1098,7 @@ final class QCBugPluginManager: NSObject {
                 self.previewDataSource = nil
                 self.activePreviewController = nil
                 self.activePreviewMode = .none
+                self.sessionBugReportViewController?.endChildPresentation()
                 self.resumeFloatingUIIfNeeded(reason: "attachmentPreviewNoPresenter")
                 return
             }
@@ -1438,6 +1446,8 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+
+            self.sessionBugReportViewController?.endChildPresentation()
 
             if let reason = self.pendingFloatingUIResumeReason {
                 self.pendingFloatingUIResumeReason = nil
