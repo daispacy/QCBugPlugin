@@ -29,7 +29,6 @@ final class BugReportAPIService: BugReportProtocol {
     private struct BugReportPayload: Encodable {
         let whtype: String
         let stage: String
-        let team: String
 
         struct MediaAttachmentDTO: Encodable {
             let type: MediaType
@@ -56,6 +55,7 @@ final class BugReportAPIService: BugReportProtocol {
             let gitLabProject: String?
             let assigneeUsername: String?
             let issueNumber: Int?
+            let team: String
         }
 
         struct GitLabPayload: Encodable {
@@ -83,7 +83,6 @@ final class BugReportAPIService: BugReportProtocol {
         init(report: BugReport, attachments: [AttachmentPayload], gitLabCredentials: GitLabCredentials?) {
             self.whtype = report.whtype
             self.stage = report.stage
-            self.team = "ios"
             let mediaDTO = report.mediaAttachments.map { attachment in
                 MediaAttachmentDTO(
                     type: attachment.type,
@@ -110,7 +109,8 @@ final class BugReportAPIService: BugReportProtocol {
                 memoryInfo: report.memoryInfo,
                 gitLabProject: report.gitLabProject,
                 assigneeUsername: report.assigneeUsername,
-                issueNumber: report.issueNumber ?? -1
+                issueNumber: report.issueNumber ?? -1,
+                team: "ios"
             )
             self.attachments = attachments
             self.metadata = gitLabCredentials.map { MetadataPayload(gitlab: GitLabPayload(credentials: $0)) }
