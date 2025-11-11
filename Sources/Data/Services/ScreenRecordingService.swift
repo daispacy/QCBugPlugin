@@ -15,8 +15,11 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
 
     // MARK: - Properties
     private let recorder = RPScreenRecorder.shared()
+    private var videoWriter: AVAssetWriter?
+    private var videoWriterInput: AVAssetWriterInput?
+    private var audioWriterInput: AVAssetWriterInput?
     private var outputURL: URL?
-    private var recordingCompletion: ((Result<URL, ScreenRecordingError>) -> Void)?
+    private var isWritingStarted = false
 
     /// Tracks whether this service instance started the current recording
     private var isRecordingStartedByService = false
@@ -70,7 +73,7 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
             }
         }
 
-        // Create output URL for future use
+        // Create output URL
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let qcDirectory = documentsPath.appendingPathComponent("QCBugPlugin", isDirectory: true)
 
@@ -80,17 +83,39 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         let videoFileName = "qc_screen_recording_\(Date().timeIntervalSince1970).mp4"
         outputURL = qcDirectory.appendingPathComponent(videoFileName)
 
-        // Start recording (simple API)
-        recorder.startRecording { [weak self] error in
+        guard let outputURL = outputURL else {
+            completion(.failure(.savingFailed("Failed to create output URL")))
+            return
+        }
+
+        // Setup video writer
+        guard createVideoWriter(outputURL: outputURL) else {
+            completion(.failure(.savingFailed("Failed to create video writer")))
+            return
+        }
+
+        // Start capture with handler to save video data
+        recorder.startCapture(handler: { [weak self] sampleBuffer, bufferType, error in
+            guard let self = self else { return }
+
+            if let error = error {
+                print("❌ ScreenRecordingService: Capture error: \(error.localizedDescription)")
+                return
+            }
+
+            self.processSampleBuffer(sampleBuffer, of: bufferType)
+
+        }) { [weak self] error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
 
                 if let error = error {
                     self.isRecordingStartedByService = false
+                    self.cleanupWriter()
                     completion(.failure(.recordingFailed(error.localizedDescription)))
                 } else {
                     self.isRecordingStartedByService = true
-                    print("🎥 ScreenRecordingService: Started screen recording")
+                    print("🎥 ScreenRecordingService: Started screen recording with capture")
                     completion(.success(()))
                 }
             }
@@ -110,74 +135,173 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
             return
         }
 
-        // Store completion for later use
-        recordingCompletion = completion
-
-        // Stop recording and get preview controller
-        recorder.stopRecording { [weak self] previewViewController, error in
+        // Stop capture
+        recorder.stopCapture { [weak self] error in
             DispatchQueue.main.async {
                 guard let self = self else {
                     completion(.failure(.savingFailed("Service deallocated")))
                     return
                 }
 
-                // Reset the tracking flag
                 self.isRecordingStartedByService = false
 
                 if let error = error {
-                    print("❌ ScreenRecordingService: Failed to stop recording: \(error.localizedDescription)")
-                    self.recordingCompletion = nil
+                    print("❌ ScreenRecordingService: Failed to stop capture: \(error.localizedDescription)")
+                    self.cleanupWriter()
                     completion(.failure(.recordingFailed(error.localizedDescription)))
                     return
                 }
 
-                // Handle the preview view controller
-                if let previewVC = previewViewController {
-                    print("📹 ScreenRecordingService: Recording stopped, presenting preview for editing")
-                    self.handleRecordingPreview(previewVC, completion: completion)
-                } else {
-                    print("⚠️ ScreenRecordingService: No preview controller available")
-                    self.recordingCompletion = nil
-                    completion(.failure(.savingFailed("No preview controller available")))
-                }
+                // Finalize the video file
+                self.finalizeRecording(completion: completion)
             }
         }
     }
     
     // MARK: - Private Methods
 
-    private func handleRecordingPreview(
-        _ previewViewController: RPPreviewViewController,
-        completion: @escaping (Result<URL, ScreenRecordingError>) -> Void
-    ) {
-        previewViewController.previewControllerDelegate = self
+    private func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, of type: RPSampleBufferType) {
+        guard let videoWriter = videoWriter else { return }
 
-        // Present preview controller for editing
-        if let topViewController = UIApplication.shared.topViewController() {
-            topViewController.present(previewViewController, animated: true) {
-                print("✅ ScreenRecordingService: Preview controller presented")
+        // Start writing session if not started
+        if !isWritingStarted {
+            if videoWriter.status == .unknown {
+                videoWriter.startWriting()
+                let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                videoWriter.startSession(atSourceTime: timestamp)
+                isWritingStarted = true
+                print("🎬 ScreenRecordingService: Started writing session")
             }
-        } else {
-            // If no view controller to present, save directly
-            print("⚠️ ScreenRecordingService: No top view controller, saving directly")
-            saveRecordingFromPreview(previewViewController, completion: completion)
         }
-    }
 
-    private func saveRecordingFromPreview(
-        _ previewViewController: RPPreviewViewController,
-        completion: @escaping (Result<URL, ScreenRecordingError>) -> Void
-    ) {
-        guard let outputURL = outputURL else {
-            completion(.failure(.savingFailed("No output URL")))
+        guard videoWriter.status == .writing else {
+            if videoWriter.status == .failed {
+                if let error = videoWriter.error {
+                    print("⚠️ ScreenRecordingService: Writer failed: \(error.localizedDescription)")
+                }
+            }
             return
         }
 
-        // The video is automatically saved by iOS to the camera roll when using RPPreviewViewController
-        // We need to export it to our app's directory
-        // For now, we'll create a reference URL and let the manager handle the confirmation
-        print("✅ ScreenRecordingService: Recording completed, URL: \(outputURL.path)")
-        completion(.success(outputURL))
+        switch type {
+        case .video:
+            if let input = videoWriterInput, input.isReadyForMoreMediaData {
+                input.append(sampleBuffer)
+            }
+
+        case .audioApp, .audioMic:
+            if let input = audioWriterInput, input.isReadyForMoreMediaData {
+                input.append(sampleBuffer)
+            }
+
+        @unknown default:
+            break
+        }
+    }
+
+    private func finalizeRecording(completion: @escaping (Result<URL, ScreenRecordingError>) -> Void) {
+        guard let videoWriter = videoWriter, let outputURL = outputURL else {
+            completion(.failure(.savingFailed("No video writer or output URL")))
+            return
+        }
+
+        videoWriterInput?.markAsFinished()
+        audioWriterInput?.markAsFinished()
+
+        videoWriter.finishWriting { [weak self] in
+            DispatchQueue.main.async {
+                guard let self = self else {
+                    completion(.failure(.savingFailed("Service deallocated")))
+                    return
+                }
+
+                if videoWriter.status == .completed {
+                    print("✅ ScreenRecordingService: Recording saved to \(outputURL.path)")
+
+                    // Verify file exists and has size
+                    if FileManager.default.fileExists(atPath: outputURL.path) {
+                        do {
+                            let attributes = try FileManager.default.attributesOfItem(atPath: outputURL.path)
+                            let fileSize = attributes[.size] as? Int64 ?? 0
+                            print("📁 ScreenRecordingService: File size: \(fileSize) bytes")
+                        } catch {
+                            print("⚠️ ScreenRecordingService: Could not get file attributes: \(error)")
+                        }
+                    }
+
+                    self.cleanupWriter()
+                    completion(.success(outputURL))
+                } else {
+                    let error = videoWriter.error?.localizedDescription ?? "Unknown error"
+                    print("❌ ScreenRecordingService: Failed to finalize recording: \(error)")
+                    self.cleanupWriter()
+                    completion(.failure(.savingFailed(error)))
+                }
+            }
+        }
+    }
+
+    private func createVideoWriter(outputURL: URL) -> Bool {
+        do {
+            // Remove existing file if it exists
+            if FileManager.default.fileExists(atPath: outputURL.path) {
+                try? FileManager.default.removeItem(at: outputURL)
+            }
+
+            videoWriter = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
+
+            // Video settings
+            let videoSettings: [String: Any] = [
+                AVVideoCodecKey: AVVideoCodecType.h264,
+                AVVideoWidthKey: Int(UIScreen.main.bounds.width * UIScreen.main.scale),
+                AVVideoHeightKey: Int(UIScreen.main.bounds.height * UIScreen.main.scale),
+                AVVideoCompressionPropertiesKey: [
+                    AVVideoAverageBitRateKey: 6000000,
+                    AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+                ]
+            ]
+
+            videoWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+            videoWriterInput?.expectsMediaDataInRealTime = true
+
+            // Audio settings
+            let audioSettings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: 44100,
+                AVNumberOfChannelsKey: 2,
+                AVEncoderBitRateKey: 128000
+            ]
+
+            audioWriterInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+            audioWriterInput?.expectsMediaDataInRealTime = true
+
+            // Add inputs to writer
+            if let videoInput = videoWriterInput, videoWriter?.canAdd(videoInput) == true {
+                videoWriter?.add(videoInput)
+            } else {
+                print("❌ ScreenRecordingService: Cannot add video input")
+                return false
+            }
+
+            if let audioInput = audioWriterInput, videoWriter?.canAdd(audioInput) == true {
+                videoWriter?.add(audioInput)
+            }
+
+            print("✅ ScreenRecordingService: Video writer created successfully")
+            return true
+
+        } catch {
+            print("❌ ScreenRecordingService: Failed to create video writer: \(error)")
+            return false
+        }
+    }
+
+    private func cleanupWriter() {
+        videoWriter = nil
+        videoWriterInput = nil
+        audioWriterInput = nil
+        isWritingStarted = false
+        outputURL = nil
     }
     
     func cleanupRecordingFiles() {
@@ -195,69 +319,5 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         } catch {
             print("❌ ScreenRecordingService: Failed to cleanup recording files: \(error)")
         }
-    }
-}
-
-// MARK: - RPPreviewViewControllerDelegate
-
-extension ScreenRecordingService: RPPreviewViewControllerDelegate {
-
-    func previewControllerDidFinish(_ previewController: RPPreviewViewController) {
-        print("📹 ScreenRecordingService: Preview controller dismissed")
-        previewController.dismiss(animated: true) { [weak self] in
-            guard let self = self, let outputURL = self.outputURL else { return }
-
-            // User dismissed the preview - proceed with the recording URL
-            print("✅ ScreenRecordingService: User finished preview, proceeding with URL: \(outputURL.path)")
-            self.recordingCompletion?(.success(outputURL))
-            self.recordingCompletion = nil
-            self.outputURL = nil
-        }
-    }
-
-    func previewController(_ previewController: RPPreviewViewController, didFinishWithActivityTypes activityTypes: Set<String>) {
-        print("📹 ScreenRecordingService: Preview controller finished with activities: \(activityTypes)")
-        previewController.dismiss(animated: true) { [weak self] in
-            guard let self = self, let outputURL = self.outputURL else { return }
-
-            // User completed editing/sharing - proceed with the recording URL
-            print("✅ ScreenRecordingService: User finished with activities, proceeding with URL: \(outputURL.path)")
-            self.recordingCompletion?(.success(outputURL))
-            self.recordingCompletion = nil
-            self.outputURL = nil
-        }
-    }
-}
-
-// MARK: - UIApplication Extension
-
-private extension UIApplication {
-    func topViewController() -> UIViewController? {
-        // iOS 12 compatible window access
-        let window: UIWindow?
-        if #available(iOS 13.0, *) {
-            window = windows.first(where: { $0.isKeyWindow })
-        } else {
-            window = keyWindow
-        }
-
-        guard let rootWindow = window else { return nil }
-        return topViewController(from: rootWindow.rootViewController)
-    }
-
-    private func topViewController(from viewController: UIViewController?) -> UIViewController? {
-        if let navigationController = viewController as? UINavigationController {
-            return topViewController(from: navigationController.visibleViewController)
-        }
-
-        if let tabBarController = viewController as? UITabBarController {
-            return topViewController(from: tabBarController.selectedViewController)
-        }
-
-        if let presentedViewController = viewController?.presentedViewController {
-            return topViewController(from: presentedViewController)
-        }
-
-        return viewController
     }
 }

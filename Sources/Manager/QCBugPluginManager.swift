@@ -78,8 +78,10 @@ final class QCBugPluginManager: NSObject {
     private var sessionIssueNumber: Int?
     private var pendingScreenshotCompletion: ((Result<URL, Error>) -> Void)?
     private var pendingScreenshotOriginalURL: URL?
+    private var pendingRecordingURL: URL?
+    private var pendingRecordingCompletion: ((Result<URL, Error>) -> Void)?
     private var previewDataSource: SingleAttachmentPreviewDataSource?
-    
+
     // MARK: - Delegate
     weak var delegate: QCBugPluginDelegate?
     
@@ -335,15 +337,26 @@ final class QCBugPluginManager: NSObject {
             switch result {
             case .success(let url):
                 print("🎬 QCBugPlugin: Screen recording stopped successfully")
-                print("📁 QCBugPlugin: Recording will be saved to: \(url.path)")
+                print("📁 QCBugPlugin: Recording saved to: \(url.path)")
+
+                // Verify file exists
+                if !FileManager.default.fileExists(atPath: url.path) {
+                    print("❌ QCBugPlugin: Recording file missing at path: \(url.path)")
+                    let error = NSError(
+                        domain: "com.qcbugplugin",
+                        code: -3,
+                        userInfo: [NSLocalizedDescriptionKey: "Recording file not found"]
+                    )
+                    completion(.failure(error))
+                    return
+                }
 
                 // Notify delegate
                 self.delegate?.bugPlugin(didStopRecordingWith: url)
 
-                // The RPPreviewViewController is shown by ScreenRecordingService
-                // After user dismisses the preview, show confirmation dialog
+                // Show preview first, then confirmation
                 DispatchQueue.main.async {
-                    self.showRecordingConfirmation(recordingURL: url, completion: completion)
+                    self.showRecordingPreview(recordingURL: url, completion: completion)
                 }
 
             case .failure(let error):
@@ -364,55 +377,78 @@ final class QCBugPluginManager: NSObject {
         return screenRecorder?.isRecordingOwnedByService ?? false
     }
 
+    private func showRecordingPreview(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
+        print("🎬 QCBugPlugin: Showing recording preview")
+
+        // Hide floating button during preview
+        self.floatingActionButtons?.isHidden = true
+        self.internalShakeWindow?.isHidden = true
+
+        let previewController = QLPreviewController()
+        self.previewDataSource = SingleAttachmentPreviewDataSource(url: recordingURL)
+        previewController.dataSource = self.previewDataSource
+        previewController.delegate = self
+        previewController.currentPreviewItemIndex = 0
+
+        guard let presenter = UIApplication.shared.topViewController() else {
+            print("⚠️ QCBugPlugin: No top view controller for preview")
+            self.floatingActionButtons?.isHidden = false
+            self.internalShakeWindow?.isHidden = false
+            // Skip preview and go directly to confirmation
+            self.showRecordingConfirmation(recordingURL: recordingURL, completion: completion)
+            return
+        }
+
+        // Store completion for after preview dismisses
+        self.pendingRecordingURL = recordingURL
+        self.pendingRecordingCompletion = completion
+
+        presenter.present(previewController, animated: true) {
+            print("✅ QCBugPlugin: Recording preview presented")
+        }
+    }
+
     private func showRecordingConfirmation(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
-        print("🎬 QCBugPlugin: Will show recording confirmation after preview dismisses")
+        print("🎬 QCBugPlugin: Showing recording confirmation dialog")
 
-        // Wait longer to ensure RPPreviewViewController is dismissed first
-        // The preview controller is shown by ScreenRecordingService and user can edit the video there
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            guard let self = self else { return }
+        guard let presenter = UIApplication.shared.topViewController() else {
+            print("⚠️ QCBugPlugin: No top view controller, auto-adding recording")
+            // Fallback: auto-add if no presenter found
+            self.addRecordingToSession(recordingURL: recordingURL, completion: completion)
+            return
+        }
 
-            print("🎬 QCBugPlugin: Checking for top view controller to show confirmation")
+        print("📱 QCBugPlugin: Presenting recording confirmation alert on \(type(of: presenter))")
 
-            guard let presenter = UIApplication.shared.topViewController() else {
-                print("⚠️ QCBugPlugin: No top view controller, auto-adding recording")
-                // Fallback: auto-add if no presenter found
-                self.addRecordingToSession(recordingURL: recordingURL, completion: completion)
-                return
-            }
+        let alert = UIAlertController(
+            title: "Add Recording",
+            message: "Do you want to add this screen recording to the bug report?",
+            preferredStyle: .alert
+        )
 
-            print("📱 QCBugPlugin: Presenting recording confirmation alert on \(type(of: presenter))")
+        alert.addAction(UIAlertAction(title: "Discard", style: .destructive) { [weak self] _ in
+            print("🗑️ QCBugPlugin: User chose to discard recording")
+            // Clean up the recording file
+            try? FileManager.default.removeItem(at: recordingURL)
 
-            let alert = UIAlertController(
-                title: "Add Recording",
-                message: "Do you want to add this screen recording to the bug report?",
-                preferredStyle: .alert
+            // Show floating button after discard
+            self?.floatingActionButtons?.isHidden = false
+
+            let error = NSError(
+                domain: "com.qcbugplugin",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Recording discarded by user"]
             )
+            completion(.failure(error))
+        })
 
-            alert.addAction(UIAlertAction(title: "Discard", style: .destructive) { [weak self] _ in
-                print("🗑️ QCBugPlugin: User chose to discard recording")
-                // Clean up the recording file
-                try? FileManager.default.removeItem(at: recordingURL)
+        alert.addAction(UIAlertAction(title: "Add", style: .default) { [weak self] _ in
+            print("✅ QCBugPlugin: User chose to add recording")
+            self?.addRecordingToSession(recordingURL: recordingURL, completion: completion)
+        })
 
-                // Show floating button after discard
-                self?.floatingActionButtons?.isHidden = false
-
-                let error = NSError(
-                    domain: "com.qcbugplugin",
-                    code: -2,
-                    userInfo: [NSLocalizedDescriptionKey: "Recording discarded by user"]
-                )
-                completion(.failure(error))
-            })
-
-            alert.addAction(UIAlertAction(title: "Add", style: .default) { [weak self] _ in
-                print("✅ QCBugPlugin: User chose to add recording")
-                self?.addRecordingToSession(recordingURL: recordingURL, completion: completion)
-            })
-
-            presenter.present(alert, animated: true) {
-                print("✅ QCBugPlugin: Recording confirmation alert presented")
-            }
+        presenter.present(alert, animated: true) {
+            print("✅ QCBugPlugin: Recording confirmation alert presented")
         }
     }
 
@@ -1169,12 +1205,27 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
         // Re-show shake window
         internalShakeWindow?.isHidden = false
 
-        // Show floating button when preview is dismissed (check if bug report is not visible)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            guard let self = self else { return }
-            let isBugReportVisible = self.sessionBugReportViewController?.viewIfLoaded?.window != nil
-            if !isBugReportVisible {
-                self.floatingActionButtons?.isHidden = false
+        // Check if this was a recording preview and handle it here
+        // (willDismiss is more reliable than didDismiss when swiping to dismiss)
+        if let recordingURL = pendingRecordingURL, let completion = pendingRecordingCompletion {
+            print("🎬 QCBugPlugin: Recording preview will dismiss, preparing confirmation")
+
+            // Clear pending recording data
+            pendingRecordingURL = nil
+            pendingRecordingCompletion = nil
+
+            // Show confirmation dialog after dismissal completes
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.showRecordingConfirmation(recordingURL: recordingURL, completion: completion)
+            }
+        } else {
+            // Regular preview (not recording) - show floating button if needed
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self = self else { return }
+                let isBugReportVisible = self.sessionBugReportViewController?.viewIfLoaded?.window != nil
+                if !isBugReportVisible {
+                    self.floatingActionButtons?.isHidden = false
+                }
             }
         }
     }
@@ -1188,7 +1239,10 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
         // Ensure shake window is visible
         internalShakeWindow?.isHidden = false
 
-        // Ensure floating button is shown if needed
+        // Note: Recording confirmation is already handled in willDismiss
+        // This method is just for additional cleanup
+
+        // Show floating button if needed (for regular previews)
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             let isBugReportVisible = self.sessionBugReportViewController?.viewIfLoaded?.window != nil
