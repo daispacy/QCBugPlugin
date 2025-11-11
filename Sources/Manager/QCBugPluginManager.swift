@@ -344,6 +344,9 @@ final class QCBugPluginManager: NSObject {
                 }
 
             case .failure(let error):
+                // Update floating button state on error
+                self.floatingActionButtons?.updateRecordingState(isRecording: false)
+
                 // Notify delegate
                 self.delegate?.bugPluginDidFailRecording(error)
                 completion(.failure(error))
@@ -991,16 +994,8 @@ extension QCBugPluginManager: QCFloatingActionButtonsDelegate {
         }
 
         if recorder.isRecording {
-            // Stop recording
-            shouldAutoPresentForm = true
-            stopScreenRecording { result in
-                switch result {
-                case .success(let url):
-                    print("✅ Recording stopped: \(url)")
-                case .failure(let error):
-                    print("❌ Failed to stop recording: \(error)")
-                }
-            }
+            // Stop recording via record button
+            floatingButtonsDidTapStopRecording()
         } else {
             // Start recording
             startScreenRecording { [weak self] result in
@@ -1010,6 +1005,32 @@ extension QCBugPluginManager: QCFloatingActionButtonsDelegate {
                 case .failure(let error):
                     print("❌ Failed to start recording: \(error)")
                 }
+            }
+        }
+    }
+
+    func floatingButtonsDidTapStopRecording() {
+        guard let recorder = screenRecorder else {
+            print("❌ QCBugPlugin: Screen recording not enabled")
+            return
+        }
+
+        guard recorder.isRecording else {
+            print("⚠️ QCBugPlugin: No recording in progress")
+            floatingActionButtons?.updateRecordingState(isRecording: false)
+            return
+        }
+
+        // Stop recording and show confirmation
+        shouldAutoPresentForm = true
+        stopScreenRecording { [weak self] result in
+            switch result {
+            case .success(let url):
+                print("✅ Recording stopped: \(url)")
+            case .failure(let error):
+                print("❌ Failed to stop recording: \(error)")
+                // Reset button state on error
+                self?.floatingActionButtons?.updateRecordingState(isRecording: false)
             }
         }
     }
@@ -1028,7 +1049,7 @@ extension QCBugPluginManager: QCFloatingActionButtonsDelegate {
     func floatingButtonsDidTapBugReport() {
         presentBugReport()
     }
-    
+
     func floatingButtonsDidTapClearSession() {
         clearSession()
     }

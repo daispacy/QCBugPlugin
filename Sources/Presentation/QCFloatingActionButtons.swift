@@ -14,6 +14,7 @@ protocol QCFloatingActionButtonsDelegate: AnyObject {
     func floatingButtonsDidTapScreenshot()
     func floatingButtonsDidTapBugReport()
     func floatingButtonsDidTapClearSession()
+    func floatingButtonsDidTapStopRecording()
 }
 
 /// Floating action buttons container with record, screenshot, form, and session control buttons
@@ -28,6 +29,7 @@ final class QCFloatingActionButtons: UIView {
     private let formButton: UIButton
     private let clearSessionButton: UIButton
     private var isExpanded: Bool = false
+    private var isRecording: Bool = false
 
     private var panGesture: UIPanGestureRecognizer!
     private var lastLocation: CGPoint = .zero
@@ -503,7 +505,11 @@ final class QCFloatingActionButtons: UIView {
     // MARK: - Actions
 
     @objc private func mainButtonTapped() {
-        if isExpanded {
+        if isRecording {
+            // Stop recording when main button is tapped during recording
+            hapticFeedback.impactOccurred()
+            delegate?.floatingButtonsDidTapStopRecording()
+        } else if isExpanded {
             collapse()
         } else {
             expand()
@@ -754,9 +760,34 @@ final class QCFloatingActionButtons: UIView {
 
     func updateRecordingState(isRecording: Bool) {
         DispatchQueue.main.async {
+            self.isRecording = isRecording
+
             if isRecording {
+                // Change main button to Stop
+                self.mainButton.setTitle("⏹️", for: .normal)
+                if #available(iOS 13.0, *) {
+                    self.mainButton.backgroundColor = UIColor.systemRed.withAlphaComponent(0.9)
+                } else {
+                    self.mainButton.backgroundColor = UIColor(red: 1.0, green: 0.231, blue: 0.188, alpha: 0.9)
+                }
+
+                // Collapse expanded menu when recording starts
+                if self.isExpanded {
+                    self.collapse()
+                }
+
+                // Update record button
                 self.recordButton.setTitle("⏹️", for: .normal)
             } else {
+                // Change main button back to Bug
+                self.mainButton.setTitle("🐛", for: .normal)
+                if #available(iOS 13.0, *) {
+                    self.mainButton.backgroundColor = UIColor.systemRed.withAlphaComponent(0.9)
+                } else {
+                    self.mainButton.backgroundColor = UIColor(red: 1.0, green: 0.231, blue: 0.188, alpha: 0.9)
+                }
+
+                // Update record button
                 self.recordButton.setTitle("🎥", for: .normal)
             }
         }
