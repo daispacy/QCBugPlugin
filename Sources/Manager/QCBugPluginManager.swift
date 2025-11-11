@@ -83,6 +83,7 @@ final class QCBugPluginManager: NSObject {
     private var previewDataSource: SingleAttachmentPreviewDataSource?
     private var activePreviewController: QLPreviewController?
     private var isFloatingUISuspended = false
+    private var pendingFloatingUIResumeReason: String?
 
     // MARK: - Delegate
     weak var delegate: QCBugPluginDelegate?
@@ -1371,7 +1372,13 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
                 guard let self = self else { return }
 
                 self.previewDataSource = nil
-                self.resumeFloatingUIIfNeeded(reason: "attachmentPreviewDismissed")
+                let reason = "attachmentPreviewDismissed"
+                self.pendingFloatingUIResumeReason = reason
+
+                if self.activePreviewController == nil {
+                    self.pendingFloatingUIResumeReason = nil
+                    self.resumeFloatingUIIfNeeded(reason: reason)
+                }
             }
         }
     }
@@ -1386,6 +1393,13 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
         // Note: Recording confirmation is already handled in willDismiss
         // This method is just for additional cleanup and logging
         print("📱 QCBugPlugin: Preview dismissal complete")
+
+        if let reason = pendingFloatingUIResumeReason {
+            pendingFloatingUIResumeReason = nil
+            resumeFloatingUIIfNeeded(reason: reason)
+        } else if !isFloatingUISuspended {
+            evaluateFloatingUIVisibility()
+        }
     }
 }
 
