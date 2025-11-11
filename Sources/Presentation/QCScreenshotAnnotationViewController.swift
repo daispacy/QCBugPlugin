@@ -152,18 +152,36 @@ final class QCScreenshotAnnotationViewController: UIViewController {
         let wasModified = composition.modified
 
         if !wasModified {
-            complete(with: .success(originalURL))
+            showSaveConfirmation(imageURL: originalURL)
             return
         }
 
         do {
             let annotatedURL = try saveAnnotatedImage(resultImage)
-            complete(with: .success(annotatedURL))
+            showSaveConfirmation(imageURL: annotatedURL)
         } catch {
             presentErrorAlert(message: error.localizedDescription) { [weak self] in
                 self?.complete(with: .failure(ScreenshotAnnotationError.failedToSaveImage))
             }
         }
+    }
+
+    private func showSaveConfirmation(imageURL: URL) {
+        let alert = UIAlertController(
+            title: "Add Screenshot",
+            message: "Do you want to add this screenshot to the bug report?",
+            preferredStyle: .alert
+        )
+
+        alert.addAction(UIAlertAction(title: "Discard", style: .destructive) { [weak self] _ in
+            self?.complete(with: .failure(ScreenshotAnnotationError.cancelled))
+        })
+
+        alert.addAction(UIAlertAction(title: "Add", style: .default) { [weak self] _ in
+            self?.complete(with: .success(imageURL))
+        })
+
+        present(alert, animated: true)
     }
 
     @objc private func undoTapped() {

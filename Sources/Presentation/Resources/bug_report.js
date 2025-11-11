@@ -507,6 +507,33 @@
             .replace(/'/g, '&#39;');
     }
 
+    function truncateMiddle(str, maxLength) {
+        if (!str || str.length <= maxLength) {
+            return str;
+        }
+
+        var extension = '';
+        var lastDotIndex = str.lastIndexOf('.');
+        if (lastDotIndex > 0) {
+            extension = str.substring(lastDotIndex);
+            str = str.substring(0, lastDotIndex);
+        }
+
+        if (str.length + extension.length <= maxLength) {
+            return str + extension;
+        }
+
+        var remainingLength = maxLength - extension.length - 3; // 3 for "..."
+        if (remainingLength <= 0) {
+            return str.substring(0, maxLength - 3) + '...';
+        }
+
+        var frontLength = Math.ceil(remainingLength / 2);
+        var backLength = Math.floor(remainingLength / 2);
+
+        return str.substring(0, frontLength) + '...' + str.substring(str.length - backLength) + extension;
+    }
+
     function updateSystemInfo() {
         var deviceLabel = document.getElementById('deviceModel');
         var systemLabel = document.getElementById('systemVersion');
@@ -969,7 +996,9 @@
             var isScreenshot = type === 'screenshot';
             var fileURL = media && media.fileURL ? String(media.fileURL) : '';
             var fileNameRaw = media && media.fileName ? media.fileName : 'Attachment ' + (index + 1);
-            var fileName = escapeHtml(fileNameRaw);
+            var truncatedFileName = truncateMiddle(fileNameRaw, 20);
+            var fileName = escapeHtml(truncatedFileName);
+            var fullFileName = escapeHtml(fileNameRaw);
             var icon = isRecording ? '🎥' : (isScreenshot ? '📸' : '📎');
             var deleteButton = '<button type="button" class="media-delete-btn" onclick="event.stopPropagation(); deleteMediaAttachment(' + index + ');">✕</button>';
             var fallbackIcon = '<span class="media-thumbnail-icon media-thumbnail-icon--fallback">' + icon + '</span>';
@@ -977,16 +1006,16 @@
 
             if (isImage && fileURL.indexOf('file://') === 0) {
                 return '' +
-                    '<div class="media-thumbnail" title="' + fileName + '" onclick="showMediaPreview(' + index + ');">' +
+                    '<div class="media-thumbnail" title="' + fullFileName + '" onclick="showMediaPreview(' + index + ');">' +
                         deleteButton +
-                        '<img src="' + fileURL + '" alt="' + fileName + '" onerror="qcBugHandleThumbnailError(this)">' +
+                        '<img src="' + fileURL + '" alt="' + fullFileName + '" onerror="qcBugHandleThumbnailError(this)">' +
                         fallbackIcon +
                         '<div class="media-thumbnail-label">' + fileName + '</div>' +
                     '</div>';
             }
 
             return '' +
-                '<div class="media-thumbnail" title="' + fileName + '" onclick="showMediaPreview(' + index + ');">' +
+                '<div class="media-thumbnail" title="' + fullFileName + '" onclick="showMediaPreview(' + index + ');">' +
                     deleteButton +
                     '<span class="media-thumbnail-icon">' + icon + '</span>' +
                     '<div class="media-thumbnail-label">' + fileName + '</div>' +

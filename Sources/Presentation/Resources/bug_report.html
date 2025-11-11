@@ -280,30 +280,34 @@
 
         .media-delete-btn {
             position: absolute;
-            top: 6px;
-            right: 6px;
-            width: 28px;
-            height: 28px;
+            top: 4px;
+            right: 4px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
-            background: rgba(255, 59, 48, 0.92);
+            background: rgba(255, 59, 48, 0.95);
             color: #ffffff;
-            border: none;
+            border: 2px solid rgba(255, 255, 255, 0.9);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
+            font-size: 18px;
+            font-weight: bold;
             cursor: pointer;
-            box-shadow: 0 4px 12px rgba(255, 59, 48, 0.4);
-            transition: transform 0.2s ease, opacity 0.2s ease;
-        }
-
-        .media-thumbnail:hover .media-delete-btn {
-            transform: scale(1.08);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s ease, background 0.2s ease;
+            z-index: 10;
             opacity: 1;
         }
 
+        .media-delete-btn:hover {
+            transform: scale(1.1);
+            background: rgba(255, 59, 48, 1);
+            box-shadow: 0 4px 12px rgba(255, 59, 48, 0.5);
+        }
+
         .media-delete-btn:active {
-            transform: scale(0.92);
+            transform: scale(0.95);
         }
 
         .media-preview-overlay {
@@ -623,10 +627,15 @@
             </div>
         </div>
 
+        <div class="section" id="mediaSection" style="display: none;">
+            <h2>📎 Attachments</h2>
+            <div id="mediaList" class="media-list"></div>
+        </div>
+
         <div class="section">
-            <h2>🏗️ Stage</h2>
+            <h2>🔧 Development Settings</h2>
             <div class="field-group">
-                <label class="field-label">Deployment Stage</label>
+                <label class="field-label">Test Environment</label>
                 <div class="radio-group">
                     <label class="radio-option">
                         <input type="radio" name="stage" value="product" checked onchange="updateStage()">
@@ -637,7 +646,7 @@
                         <span class="radio-label">Test</span>
                     </label>
                 </div>
-                <p class="field-hint">Select the deployment environment where the bug was encountered.</p>
+                <p class="field-hint">For development/testing only: Select which environment you're testing in (not related to app lifecycle stage).</p>
             </div>
         </div>
 
@@ -654,35 +663,6 @@
                 spellcheck="false"
             >
             <p class="field-hint">Bug reports are sent to this endpoint. Leave blank to use the default webhook.</p>
-        </div>
-
-        <div class="section" id="mediaSection" style="display: none;">
-            <h2>📎 Attachments</h2>
-            <div id="mediaList" class="media-list"></div>
-        </div>
-
-        <div class="section">
-            <h2> System Information</h2>
-            <div class="system-info" id="systemInfo">
-                <div class="info-grid">
-                    <div class="info-item">
-                        <span class="label">Device</span>
-                        <span id="deviceModel">-</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">OS</span>
-                        <span id="systemVersion">-</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">App Version</span>
-                        <span id="appVersion">-</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">Screen Size</span>
-                        <span id="screenSize">-</span>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 

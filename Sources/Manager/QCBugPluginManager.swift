@@ -223,6 +223,9 @@ final class QCBugPluginManager {
             if let topViewController = UIApplication.shared.topViewController() {
                 let navController = UINavigationController(rootViewController: bugReportVC)
                 navController.modalPresentationStyle = .formSheet
+                if #available(iOS 13.0, *) {
+                    navController.isModalInPresentation = true
+                }
                 if #available(iOS 15.0, *) {
                     if let sheet = navController.sheetPresentationController {
                         sheet.detents = [.medium(), .large()]
@@ -317,13 +320,6 @@ final class QCBugPluginManager {
 
             switch result {
             case .success(let url):
-                // Create media attachment
-                let attachment = MediaAttachment(type: .screenRecording, fileURL: url)
-                self.sessionMediaAttachments.append(attachment)
-                DispatchQueue.main.async {
-                    self.sessionBugReportViewController?.addMediaAttachment(attachment)
-                }
-
                 // Update floating button state
                 self.floatingActionButtons?.updateRecordingState(isRecording: false)
 
@@ -331,15 +327,10 @@ final class QCBugPluginManager {
                 self.delegate?.bugPlugin(didStopRecordingWith: url)
                 print("🎬 QCBugPlugin: Screen recording stopped - \(url)")
 
-                // Auto-present bug report form if enabled
-                if self.shouldAutoPresentForm {
-                    self.shouldAutoPresentForm = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        self.presentBugReport()
-                    }
+                // Show confirmation before adding to attachments
+                DispatchQueue.main.async {
+                    self.showRecordingConfirmation(recordingURL: url, completion: completion)
                 }
-
-                completion(.success(url))
 
             case .failure(let error):
                 // Notify delegate
@@ -355,6 +346,54 @@ final class QCBugPluginManager {
 
     func isScreenRecordingOwnedByPlugin() -> Bool {
         return screenRecorder?.isRecordingOwnedByService ?? false
+    }
+
+    private func showRecordingConfirmation(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
+        guard let presenter = UIApplication.shared.topViewController() else {
+            // Fallback: auto-add if no presenter found
+            addRecordingToSession(recordingURL: recordingURL, completion: completion)
+            return
+        }
+
+        let alert = UIAlertController(
+            title: "Add Recording",
+            message: "Do you want to add this screen recording to the bug report?",
+            preferredStyle: .alert
+        )
+
+        alert.addAction(UIAlertAction(title: "Discard", style: .destructive) { [weak self] _ in
+            // Clean up the recording file
+            try? FileManager.default.removeItem(at: recordingURL)
+            let error = NSError(
+                domain: "com.qcbugplugin",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Recording discarded by user"]
+            )
+            completion(.failure(error))
+        })
+
+        alert.addAction(UIAlertAction(title: "Add", style: .default) { [weak self] _ in
+            self?.addRecordingToSession(recordingURL: recordingURL, completion: completion)
+        })
+
+        presenter.present(alert, animated: true)
+    }
+
+    private func addRecordingToSession(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
+        // Create media attachment
+        let attachment = MediaAttachment(type: .screenRecording, fileURL: recordingURL)
+        self.sessionMediaAttachments.append(attachment)
+        self.sessionBugReportViewController?.addMediaAttachment(attachment)
+
+        // Auto-present bug report form if enabled
+        if self.shouldAutoPresentForm {
+            self.shouldAutoPresentForm = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.presentBugReport()
+            }
+        }
+
+        completion(.success(recordingURL))
     }
 
     // MARK: - Private Methods

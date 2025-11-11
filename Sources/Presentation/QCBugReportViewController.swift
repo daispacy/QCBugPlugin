@@ -192,6 +192,25 @@ final class QCBugReportViewController: UIViewController {
     }
     
     @objc private func submitTapped() {
+        showSubmitConfirmation()
+    }
+
+    private func showSubmitConfirmation() {
+        let alert = UIAlertController(
+            title: "Submit Bug Report",
+            message: "Are you sure you want to submit this bug report?",
+            preferredStyle: .alert
+        )
+
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Submit", style: .default) { [weak self] _ in
+            self?.performSubmit()
+        })
+
+        present(alert, animated: true)
+    }
+
+    private func performSubmit() {
         if gitLabAuthProvider != nil && gitLabJWT == nil {
             shouldSubmitAfterGitLabLogin = true
             requestGitLabAuthentication(triggeredBySubmit: true)
