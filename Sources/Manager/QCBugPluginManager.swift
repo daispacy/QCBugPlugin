@@ -378,17 +378,19 @@ final class QCBugPluginManager: NSObject {
     }
 
     private func showRecordingPreview(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
-        print("🎬 QCBugPlugin: Showing recording preview")
+        print("🎬 QCBugPlugin: Showing recording preview for \(recordingURL.lastPathComponent)")
 
         // Hide floating button during preview
         self.floatingActionButtons?.isHidden = true
         self.internalShakeWindow?.isHidden = true
+        print("🎬 QCBugPlugin: Hidden floating buttons and shake window")
 
         let previewController = QLPreviewController()
         self.previewDataSource = SingleAttachmentPreviewDataSource(url: recordingURL)
         previewController.dataSource = self.previewDataSource
         previewController.delegate = self
         previewController.currentPreviewItemIndex = 0
+        print("🎬 QCBugPlugin: Preview controller configured")
 
         guard let presenter = UIApplication.shared.topViewController() else {
             print("⚠️ QCBugPlugin: No top view controller for preview")
@@ -399,12 +401,14 @@ final class QCBugPluginManager: NSObject {
             return
         }
 
+        print("🎬 QCBugPlugin: Presenting preview on \(type(of: presenter))")
+
         // Store completion for after preview dismisses
         self.pendingRecordingURL = recordingURL
         self.pendingRecordingCompletion = completion
 
         presenter.present(previewController, animated: true) {
-            print("✅ QCBugPlugin: Recording preview presented")
+            print("✅ QCBugPlugin: Recording preview presentation completed")
         }
     }
 
@@ -609,6 +613,11 @@ final class QCBugPluginManager: NSObject {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
+            // Don't setup or re-add during preview
+            if self.previewDataSource != nil {
+                return
+            }
+
             // Get the key window
             let window: UIWindow?
             if #available(iOS 13.0, *) {
@@ -623,7 +632,9 @@ final class QCBugPluginManager: NSObject {
             }
 
             if let controls = self.floatingActionButtons {
-                if controls.superview !== window {
+                // Only re-add if superview is different AND buttons are not hidden
+                // (Don't interfere during modal presentations like QLPreviewController)
+                if controls.superview !== window && !controls.isHidden {
                     controls.removeFromSuperview()
                     window.addSubview(controls)
                     window.bringSubviewToFront(controls)
@@ -742,16 +753,19 @@ final class QCBugPluginManager: NSObject {
     }
 
     @objc private func windowDidBecomeKey(_ notification: Notification) {
+        print("🪟 QCBugPlugin: Window became key, preview active: \(previewDataSource != nil)")
         // Ensure floating buttons stay on top when window becomes key
         bringFloatingButtonsToFront()
     }
 
     @objc private func windowDidBecomeVisible(_ notification: Notification) {
+        print("🪟 QCBugPlugin: Window became visible, preview active: \(previewDataSource != nil)")
         // Ensure floating buttons stay on top when window becomes visible
         bringFloatingButtonsToFront()
     }
 
     @objc private func viewControllerDidPresent(_ notification: Notification) {
+        print("🪟 QCBugPlugin: View controller presented, preview active: \(previewDataSource != nil)")
         // Ensure floating buttons stay on top when view controllers are presented
         bringFloatingButtonsToFront()
     }
@@ -761,12 +775,28 @@ final class QCBugPluginManager: NSObject {
             guard let self = self,
                   let controls = self.floatingActionButtons,
                   let superview = controls.superview else {
+                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - no controls or superview")
+                return
+            }
+
+            // Don't manipulate if buttons are hidden (e.g., during preview)
+            if controls.isHidden {
+                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - skipped (buttons hidden)")
+                return
+            }
+
+            // Don't manipulate if a preview is active
+            if self.previewDataSource != nil {
+                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - skipped (preview active)")
                 return
             }
 
             // Bring to front if not already the topmost subview
             if superview.subviews.last !== controls {
+                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - bringing to front")
                 superview.bringSubviewToFront(controls)
+            } else {
+                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - already at front")
             }
         }
     }
