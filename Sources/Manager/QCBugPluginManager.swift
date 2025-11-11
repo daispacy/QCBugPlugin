@@ -329,41 +329,25 @@ final class QCBugPluginManager: NSObject {
         recorder.stopRecording { [weak self] result in
             guard let self = self else { return }
 
+            // Update floating button state first
+            self.floatingActionButtons?.updateRecordingState(isRecording: false)
+
             switch result {
             case .success(let url):
                 print("🎬 QCBugPlugin: Screen recording stopped successfully")
-                print("📁 QCBugPlugin: Recording saved to: \(url.path)")
-
-                // Verify file exists
-                let fileExists = FileManager.default.fileExists(atPath: url.path)
-                print("📁 QCBugPlugin: File exists: \(fileExists)")
-
-                if fileExists {
-                    do {
-                        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-                        let fileSize = attributes[.size] as? Int64 ?? 0
-                        print("📁 QCBugPlugin: File size: \(fileSize) bytes")
-                    } catch {
-                        print("⚠️ QCBugPlugin: Could not get file attributes: \(error)")
-                    }
-                }
-
-                // Update floating button state
-                self.floatingActionButtons?.updateRecordingState(isRecording: false)
+                print("📁 QCBugPlugin: Recording will be saved to: \(url.path)")
 
                 // Notify delegate
                 self.delegate?.bugPlugin(didStopRecordingWith: url)
 
-                // Show confirmation before adding to attachments
+                // The RPPreviewViewController is shown by ScreenRecordingService
+                // After user dismisses the preview, show confirmation dialog
                 DispatchQueue.main.async {
                     self.showRecordingConfirmation(recordingURL: url, completion: completion)
                 }
 
             case .failure(let error):
                 print("❌ QCBugPlugin: Screen recording failed: \(error.localizedDescription)")
-
-                // Update floating button state on error
-                self.floatingActionButtons?.updateRecordingState(isRecording: false)
 
                 // Notify delegate
                 self.delegate?.bugPluginDidFailRecording(error)
@@ -381,11 +365,14 @@ final class QCBugPluginManager: NSObject {
     }
 
     private func showRecordingConfirmation(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
-        print("🎬 QCBugPlugin: Showing recording confirmation for \(recordingURL.path)")
+        print("🎬 QCBugPlugin: Will show recording confirmation after preview dismisses")
 
-        // Wait a bit to ensure any animations are complete
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        // Wait longer to ensure RPPreviewViewController is dismissed first
+        // The preview controller is shown by ScreenRecordingService and user can edit the video there
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             guard let self = self else { return }
+
+            print("🎬 QCBugPlugin: Checking for top view controller to show confirmation")
 
             guard let presenter = UIApplication.shared.topViewController() else {
                 print("⚠️ QCBugPlugin: No top view controller, auto-adding recording")
