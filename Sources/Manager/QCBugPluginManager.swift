@@ -1304,12 +1304,15 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
             controller.dismiss(animated: true) { [weak self] in
                 // Show floating buttons after dismissal
                 self?.floatingActionButtons?.isHidden = false
+                self?.floatingActionButtons?.hideSubmissionProgress()
 
                 // Show error alert
                 self?.showErrorAlert(message: "No webhook URL configured. Please configure the plugin with a valid webhook URL.")
             }
             return
         }
+
+        floatingActionButtons?.showSubmissionProgress()
 
         // Dismiss form immediately
         controller.dismiss(animated: true) { [weak self] in
@@ -1322,6 +1325,8 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
             guard let self = self else { return }
 
             DispatchQueue.main.async {
+                self.floatingActionButtons?.hideSubmissionProgress()
+
                 switch result {
                 case .success(let reportId):
                     self.delegate?.bugPluginDidSubmitReport(reportId)
@@ -1355,6 +1360,7 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         controller.dismiss(animated: true) { [weak self] in
             // Show floating buttons after dismissal
             self?.floatingActionButtons?.isHidden = false
+            self?.floatingActionButtons?.hideSubmissionProgress()
         }
     }
 

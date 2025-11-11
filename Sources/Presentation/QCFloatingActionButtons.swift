@@ -30,6 +30,8 @@ final class QCFloatingActionButtons: UIView {
     private let clearSessionButton: UIButton
     private var isExpanded: Bool = false
     private var isRecording: Bool = false
+    private let submissionProgressLayer = CAShapeLayer()
+    private var isShowingSubmissionProgress = false
 
     private var panGesture: UIPanGestureRecognizer!
     private var lastLocation: CGPoint = .zero
@@ -138,6 +140,8 @@ final class QCFloatingActionButtons: UIView {
         mainButton.titleLabel?.font = UIFont.systemFont(ofSize: 24)
 
         mainButton.addTarget(self, action: #selector(mainButtonTapped), for: .touchUpInside)
+
+        configureSubmissionProgressLayer()
     }
 
     private func setupRecordButton() {
@@ -519,6 +523,62 @@ final class QCFloatingActionButtons: UIView {
             }
             lastLocation = newCenter
         }
+    }
+
+    // MARK: - Submission Progress
+
+    private func configureSubmissionProgressLayer() {
+        submissionProgressLayer.strokeColor = UIColor.white.withAlphaComponent(0.9).cgColor
+        submissionProgressLayer.fillColor = UIColor.clear.cgColor
+        submissionProgressLayer.lineWidth = 3
+        submissionProgressLayer.lineCap = .round
+        submissionProgressLayer.strokeStart = 0
+        submissionProgressLayer.strokeEnd = 0.25
+        submissionProgressLayer.zPosition = 1
+        submissionProgressLayer.isHidden = true
+        submissionProgressLayer.opacity = 0
+        mainButton.layer.addSublayer(submissionProgressLayer)
+        updateSubmissionProgressPath()
+    }
+
+    private func updateSubmissionProgressPath() {
+        let inset: CGFloat = -6
+        let pathRect = mainButton.bounds.insetBy(dx: inset, dy: inset)
+        submissionProgressLayer.frame = mainButton.bounds
+        submissionProgressLayer.path = UIBezierPath(ovalIn: pathRect).cgPath
+    }
+
+    func showSubmissionProgress() {
+        guard !isShowingSubmissionProgress else { return }
+        isShowingSubmissionProgress = true
+        updateSubmissionProgressPath()
+        submissionProgressLayer.isHidden = false
+        submissionProgressLayer.opacity = 1
+        submissionProgressLayer.strokeStart = 0
+        submissionProgressLayer.strokeEnd = 0.25
+
+        let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
+        rotation.fromValue = 0
+        rotation.toValue = 2 * CGFloat.pi
+        rotation.duration = 1.1
+        rotation.repeatCount = .infinity
+        rotation.isRemovedOnCompletion = false
+        submissionProgressLayer.add(rotation, forKey: "qcSubmissionSpin")
+    }
+
+    func hideSubmissionProgress() {
+        guard isShowingSubmissionProgress else { return }
+        isShowingSubmissionProgress = false
+        submissionProgressLayer.removeAnimation(forKey: "qcSubmissionSpin")
+        submissionProgressLayer.isHidden = true
+        submissionProgressLayer.opacity = 0
+    }
+
+    // MARK: - Layout
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        updateSubmissionProgressPath()
     }
 
     // MARK: - Actions
