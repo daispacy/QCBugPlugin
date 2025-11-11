@@ -49,6 +49,12 @@ private final class SingleAttachmentPreviewDataSource: NSObject, QLPreviewContro
     }
 }
 
+private enum AttachmentPreviewMode {
+    case none
+    case recordingEditor
+    case attachmentViewer
+}
+
 /// Main manager class for the QC Bug Plugin
 final class QCBugPluginManager: NSObject {
 
@@ -84,6 +90,7 @@ final class QCBugPluginManager: NSObject {
     private var activePreviewController: QLPreviewController?
     private var isFloatingUISuspended = false
     private var pendingFloatingUIResumeReason: String?
+    private var activePreviewMode: AttachmentPreviewMode = .none
 
     // MARK: - Delegate
     weak var delegate: QCBugPluginDelegate?
@@ -384,6 +391,7 @@ final class QCBugPluginManager: NSObject {
         print("🎬 QCBugPlugin: Showing recording preview for \(recordingURL.lastPathComponent)")
 
         suspendFloatingUI(for: "recordingPreview")
+        activePreviewMode = .recordingEditor
 
         let previewController = QLPreviewController()
         self.previewDataSource = SingleAttachmentPreviewDataSource(url: recordingURL)
@@ -397,6 +405,7 @@ final class QCBugPluginManager: NSObject {
             print("⚠️ QCBugPlugin: No top view controller for preview")
             self.previewDataSource = nil
             self.activePreviewController = nil
+            self.activePreviewMode = .none
             // Skip preview and go directly to confirmation
             self.showRecordingConfirmation(recordingURL: recordingURL, completion: completion)
             return
@@ -797,7 +806,8 @@ final class QCBugPluginManager: NSObject {
         // Ignore if bug report form is visible
         if let bugReportVC = sessionBugReportViewController,
            bugReportVC.viewIfLoaded?.window != nil {
-            return "bugReport-visible"
+            let top = UIApplication.shared.topViewController().map { String(describing: type(of: $0)) } ?? "nil"
+            return "bugReport-visible(top=\(top))"
         }
 
         // Ignore if any of our internal view controllers are presented
@@ -1074,17 +1084,22 @@ final class QCBugPluginManager: NSObject {
             previewController.delegate = self
             previewController.currentPreviewItemIndex = 0
             self.activePreviewController = previewController
+            self.activePreviewMode = .attachmentViewer
 
             guard let presenter = UIApplication.shared.topViewController() else {
                 print("❌ QCBugPlugin: Unable to present attachment preview controller")
                 self.previewDataSource = nil
                 self.activePreviewController = nil
+                self.activePreviewMode = .none
                 self.resumeFloatingUIIfNeeded(reason: "attachmentPreviewNoPresenter")
                 return
             }
 
             print("📂 QCBugPlugin: Presenting QLPreviewController on \(type(of: presenter))")
-            presenter.present(previewController, animated: true)
+            presenter.present(previewController, animated: true) {
+                let top = UIApplication.shared.topViewController().map { String(describing: type(of: $0)) } ?? "nil"
+                print("📂 QCBugPlugin: QLPreviewController presented, top VC is \(top)")
+            }
         }
     }
     
@@ -1343,33 +1358,54 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
 // MARK: - QLPreviewControllerDelegate
 
 extension QCBugPluginManager: QLPreviewControllerDelegate {
+    @available(iOS 13.0, *)
+    func previewController(_ controller: QLPreviewController, editingModeFor previewItem: QLPreviewItem) -> QLPreviewItemEditingMode {
+        switch activePreviewMode {
+        case .recordingEditor:
+            return .updateContents
+        case .attachmentViewer, .none:
+            return .disabled
+        }
+    }
+
     func previewControllerWillDismiss(_ controller: QLPreviewController) {
         print("📱 QCBugPlugin: Preview controller will dismiss")
 
         // DON'T clear previewDataSource yet - keep it to prevent window notifications from interfering
         // We'll clear it after showing the confirmation dialog
 
-        // Check if this was a recording preview and handle it here
-        // (willDismiss is more reliable than didDismiss when swiping to dismiss)
-        if let recordingURL = pendingRecordingURL, let completion = pendingRecordingCompletion {
-            print("🎬 QCBugPlugin: Recording preview will dismiss, preparing confirmation")
+        switch activePreviewMode {
+        case .recordingEditor:
+            // Check if this was a recording preview and handle it here
+            // (willDismiss is more reliable than didDismiss when swiping to dismiss)
+            if let recordingURL = pendingRecordingURL, let completion = pendingRecordingCompletion {
+                print("🎬 QCBugPlugin: Recording preview will dismiss, preparing confirmation")
 
-            // Clear pending recording data
-            pendingRecordingURL = nil
-            pendingRecordingCompletion = nil
+                // Clear pending recording data
+                pendingRecordingURL = nil
+                pendingRecordingCompletion = nil
 
-            // Show confirmation dialog after dismissal completes
-            // Keep previewDataSource set until then to prevent window notification interference
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                guard let self = self else { return }
+                // Show confirmation dialog after dismissal completes
+                // Keep previewDataSource set until then to prevent window notification interference
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self = self else { return }
 
-                // Now clear previewDataSource before showing confirmation
-                self.previewDataSource = nil
-                print("📱 QCBugPlugin: Cleared preview data source, showing confirmation")
+                    // Now clear previewDataSource before showing confirmation
+                    self.previewDataSource = nil
+                    print("📱 QCBugPlugin: Cleared preview data source, showing confirmation")
 
-                self.showRecordingConfirmation(recordingURL: recordingURL, completion: completion)
+                    self.showRecordingConfirmation(recordingURL: recordingURL, completion: completion)
+                }
+            } else {
+                print("⚠️ QCBugPlugin: Recording preview dismissing without pending completion")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                    guard let self = self else { return }
+                    self.previewDataSource = nil
+                    self.resumeFloatingUIIfNeeded(reason: "recordingPreviewDismissed")
+                }
             }
-        } else {
+
+        case .attachmentViewer, .none:
             // Regular preview (not recording) - clear data source and show floating button
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 guard let self = self else { return }
@@ -1410,6 +1446,8 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
             } else if !self.isFloatingUISuspended {
                 self.evaluateFloatingUIVisibility()
             }
+
+            self.activePreviewMode = .none
         }
     }
 }
