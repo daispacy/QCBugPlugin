@@ -1434,6 +1434,7 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                     guard let self = self else { return }
                     self.previewDataSource = nil
+                    print("📱 QCBugPlugin: No pending completion; resuming floating UI")
                     self.resumeFloatingUIIfNeeded(reason: "recordingPreviewDismissed")
                 }
             }
@@ -1484,8 +1485,10 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
                 print("📱 QCBugPlugin: Preview dismissal complete - top VC: \(summary)")
 
                 if let top, self.isInternalController(top) {
+                    print("📱 QCBugPlugin: Top controller internal; evaluating visibility")
                     self.evaluateFloatingUIVisibility()
                 } else {
+                    print("📱 QCBugPlugin: Top controller external; resuming floating UI")
                     self.resumeFloatingUIIfNeeded(reason: "previewDismissed")
                 }
             }
