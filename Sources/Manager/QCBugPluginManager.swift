@@ -92,6 +92,7 @@ final class QCBugPluginManager: NSObject {
     private var pendingFloatingUIResumeReason: String?
     private var activePreviewMode: AttachmentPreviewMode = .none
     private var submissionTimeoutWorkItem: DispatchWorkItem?
+    private weak var recordingPreviewPresenter: UIViewController?
 
     // MARK: - Delegate
     weak var delegate: QCBugPluginDelegate?
@@ -419,6 +420,7 @@ final class QCBugPluginManager: NSObject {
         // Store completion for after preview dismisses
         self.pendingRecordingURL = recordingURL
         self.pendingRecordingCompletion = completion
+        self.recordingPreviewPresenter = presenter
 
         presenter.present(previewController, animated: true) {
             print("✅ QCBugPlugin: Recording preview presentation completed")
@@ -428,9 +430,10 @@ final class QCBugPluginManager: NSObject {
     private func showRecordingConfirmation(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
         print("🎬 QCBugPlugin: Showing recording confirmation dialog")
 
-        guard let presenter = UIApplication.shared.topViewController() else {
+        guard let presenter = resolveRecordingConfirmationPresenter() else {
             print("⚠️ QCBugPlugin: No top view controller, auto-adding recording")
             // Fallback: auto-add if no presenter found
+            recordingPreviewPresenter = nil
             self.addRecordingToSession(recordingURL: recordingURL, completion: completion)
             return
         }
@@ -466,6 +469,7 @@ final class QCBugPluginManager: NSObject {
         presenter.present(alert, animated: true) {
             print("✅ QCBugPlugin: Recording confirmation alert presented")
         }
+        recordingPreviewPresenter = nil
     }
 
     private func addRecordingToSession(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
@@ -890,6 +894,23 @@ final class QCBugPluginManager: NSObject {
                 print("🔧 QCBugPlugin: bringFloatingButtonsToFront - already at front")
             }
         }
+    }
+
+    private func resolveRecordingConfirmationPresenter() -> UIViewController? {
+        if let presenter = recordingPreviewPresenter, presenter.viewIfLoaded?.window != nil {
+            return presenter
+        }
+
+        if let bugReportVC = sessionBugReportViewController,
+           bugReportVC.viewIfLoaded?.window != nil {
+            return bugReportVC
+        }
+
+        if let top = UIApplication.shared.topViewController(), top.viewIfLoaded?.window != nil {
+            return top
+        }
+
+        return nil
     }
 
     private func suspendFloatingUI(for reason: String) {
