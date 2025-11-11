@@ -806,7 +806,7 @@ final class QCBugPluginManager: NSObject {
         if topVC is QCBugReportViewController ||
            topVC is QCScreenshotAnnotationViewController ||
            topVC is QLPreviewController ||
-           topVC is QCCrashReportAlertController {
+           topVC is UIAlertController {  // QCCrashReportAlertController is UIAlertController
             return true
         }
 

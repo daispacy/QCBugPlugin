@@ -20,6 +20,8 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     private var audioWriterInput: AVAssetWriterInput?
     private var outputURL: URL?
     private var isWritingStarted = false
+    private var videoBufferCount = 0
+    private var audioBufferCount = 0
 
     /// Tracks whether this service instance started the current recording
     private var isRecordingStartedByService = false
@@ -73,6 +75,11 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
             }
         }
 
+        // Reset counters for new recording
+        videoBufferCount = 0
+        audioBufferCount = 0
+        print("🎬 ScreenRecordingService: Starting new recording, counters reset")
+
         // Create output URL
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let qcDirectory = documentsPath.appendingPathComponent("QCBugPlugin", isDirectory: true)
@@ -82,6 +89,7 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
 
         let videoFileName = "qc_screen_recording_\(Date().timeIntervalSince1970).mp4"
         outputURL = qcDirectory.appendingPathComponent(videoFileName)
+        print("🎬 ScreenRecordingService: Output URL will be: \(qcDirectory.appendingPathComponent(videoFileName).path)")
 
         guard let outputURL = outputURL else {
             completion(.failure(.savingFailed("Failed to create output URL")))
@@ -139,6 +147,7 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         }
 
         print("🎬 ScreenRecordingService: Stopping capture, writing started: \(isWritingStarted)")
+        print("🎬 ScreenRecordingService: Buffers written - Video: \(videoBufferCount), Audio: \(audioBufferCount)")
 
         // Stop capture
         recorder.stopCapture { [weak self] error in
@@ -201,7 +210,12 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         case .video:
             if let input = videoWriterInput, input.isReadyForMoreMediaData {
                 let success = input.append(sampleBuffer)
-                if !success {
+                if success {
+                    videoBufferCount += 1
+                    if videoBufferCount == 1 {
+                        print("🎬 ScreenRecordingService: First video buffer written")
+                    }
+                } else {
                     print("⚠️ ScreenRecordingService: Failed to append video buffer")
                 }
             } else {
@@ -211,7 +225,12 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         case .audioApp, .audioMic:
             if let input = audioWriterInput, input.isReadyForMoreMediaData {
                 let success = input.append(sampleBuffer)
-                if !success {
+                if success {
+                    audioBufferCount += 1
+                    if audioBufferCount == 1 {
+                        print("🎬 ScreenRecordingService: First audio buffer written")
+                    }
+                } else {
                     print("⚠️ ScreenRecordingService: Failed to append audio buffer")
                 }
             }
@@ -232,6 +251,7 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
 
         print("🎬 ScreenRecordingService: Writer status before finalize: \(videoWriter.status.rawValue)")
         print("🎬 ScreenRecordingService: Writing started: \(isWritingStarted)")
+        print("🎬 ScreenRecordingService: Buffers received - Video: \(videoBufferCount), Audio: \(audioBufferCount)")
         print("🎬 ScreenRecordingService: Output URL: \(outputURL.path)")
 
         videoWriterInput?.markAsFinished()
@@ -342,7 +362,10 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         videoWriterInput = nil
         audioWriterInput = nil
         isWritingStarted = false
+        videoBufferCount = 0
+        audioBufferCount = 0
         outputURL = nil
+        print("🧹 ScreenRecordingService: Cleaned up writer and reset counters")
     }
     
     func cleanupRecordingFiles() {
