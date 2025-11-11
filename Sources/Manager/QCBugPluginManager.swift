@@ -1482,13 +1482,27 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
-            self.sessionBugReportViewController?.endChildPresentation()
+            var handledRecordingConfirmation = false
+
+            if self.activePreviewMode == .recordingEditor,
+               let recordingURL = self.pendingRecordingURL,
+               let completion = self.pendingRecordingCompletion {
+                print("🎬 QCBugPlugin: Recording preview dismissal fallback triggered")
+                self.pendingRecordingURL = nil
+                self.pendingRecordingCompletion = nil
+                self.previewDataSource = nil
+                self.showRecordingConfirmation(recordingURL: recordingURL, completion: completion)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                    self?.resumeFloatingUIIfNeeded(reason: "recordingConfirmationPresentedFallback")
+                }
+                handledRecordingConfirmation = true
+            }
 
             if let reason = self.pendingFloatingUIResumeReason {
                 self.pendingFloatingUIResumeReason = nil
                 print("📱 QCBugPlugin: Completing deferred UI resume (\(reason))")
                 self.resumeFloatingUIIfNeeded(reason: reason)
-            } else if !self.isFloatingUISuspended {
+            } else if !handledRecordingConfirmation, !self.isFloatingUISuspended {
                 let top = UIApplication.shared.topViewController()
                 let summary = top.map { String(describing: type(of: $0)) } ?? "none"
                 print("📱 QCBugPlugin: Preview dismissal complete - top VC: \(summary)")
