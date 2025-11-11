@@ -1341,7 +1341,6 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
 extension QCBugPluginManager: QLPreviewControllerDelegate {
     func previewControllerWillDismiss(_ controller: QLPreviewController) {
         print("📱 QCBugPlugin: Preview controller will dismiss")
-        activePreviewController = nil
 
         // DON'T clear previewDataSource yet - keep it to prevent window notifications from interfering
         // We'll clear it after showing the confirmation dialog
@@ -1375,7 +1374,7 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
                 let reason = "attachmentPreviewDismissed"
                 self.pendingFloatingUIResumeReason = reason
 
-                if self.activePreviewController == nil {
+                if self.activePreviewController !== controller {
                     self.pendingFloatingUIResumeReason = nil
                     self.resumeFloatingUIIfNeeded(reason: reason)
                 }
@@ -1385,7 +1384,9 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
 
     func previewControllerDidDismiss(_ controller: QLPreviewController) {
         print("📱 QCBugPlugin: Preview controller did dismiss")
-        activePreviewController = nil
+        if activePreviewController === controller {
+            activePreviewController = nil
+        }
 
         // Note: DON'T clear previewDataSource here - it's handled in willDismiss with proper delay
         // This prevents race conditions with window notifications
@@ -1394,11 +1395,15 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
         // This method is just for additional cleanup and logging
         print("📱 QCBugPlugin: Preview dismissal complete")
 
-        if let reason = pendingFloatingUIResumeReason {
-            pendingFloatingUIResumeReason = nil
-            resumeFloatingUIIfNeeded(reason: reason)
-        } else if !isFloatingUISuspended {
-            evaluateFloatingUIVisibility()
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            if let reason = self.pendingFloatingUIResumeReason {
+                self.pendingFloatingUIResumeReason = nil
+                self.resumeFloatingUIIfNeeded(reason: reason)
+            } else if !self.isFloatingUISuspended {
+                self.evaluateFloatingUIVisibility()
+            }
         }
     }
 }
