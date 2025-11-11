@@ -1433,6 +1433,10 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
                     print("📱 QCBugPlugin: Cleared preview data source, showing confirmation")
 
                     self.showRecordingConfirmation(recordingURL: recordingURL, completion: completion)
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                        self?.resumeFloatingUIIfNeeded(reason: "recordingConfirmationPresented")
+                    }
                 }
             } else {
                 print("⚠️ QCBugPlugin: Recording preview dismissing without pending completion")
