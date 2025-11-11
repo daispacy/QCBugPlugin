@@ -755,9 +755,8 @@ final class QCBugPluginManager: NSObject {
     }
 
     @objc private func windowDidBecomeKey(_ notification: Notification) {
-        // Don't bring floating buttons to front when our internal view controllers are presented
-        if shouldIgnoreFloatingButtonManagement() {
-            print("🪟 QCBugPlugin: Window became key - ignoring (internal VC active)")
+        if let reason = floatingUIBlockingReason() {
+            print("🪟 QCBugPlugin: Window became key - ignoring (\(reason))")
             return
         }
         print("🪟 QCBugPlugin: Window became key, preview active: \(previewDataSource != nil)")
@@ -766,9 +765,8 @@ final class QCBugPluginManager: NSObject {
     }
 
     @objc private func windowDidBecomeVisible(_ notification: Notification) {
-        // Don't bring floating buttons to front when our internal view controllers are presented
-        if shouldIgnoreFloatingButtonManagement() {
-            print("🪟 QCBugPlugin: Window became visible - ignoring (internal VC active)")
+        if let reason = floatingUIBlockingReason() {
+            print("🪟 QCBugPlugin: Window became visible - ignoring (\(reason))")
             return
         }
         print("🪟 QCBugPlugin: Window became visible, preview active: \(previewDataSource != nil)")
@@ -777,9 +775,8 @@ final class QCBugPluginManager: NSObject {
     }
 
     @objc private func viewControllerDidPresent(_ notification: Notification) {
-        // Don't bring floating buttons to front when our internal view controllers are presented
-        if shouldIgnoreFloatingButtonManagement() {
-            print("🪟 QCBugPlugin: View controller presented - ignoring (internal VC active)")
+        if let reason = floatingUIBlockingReason() {
+            print("🪟 QCBugPlugin: View controller presented - ignoring (\(reason))")
             return
         }
         print("🪟 QCBugPlugin: View controller presented, preview active: \(previewDataSource != nil)")
@@ -787,25 +784,25 @@ final class QCBugPluginManager: NSObject {
         bringFloatingButtonsToFront()
     }
 
-    private func shouldIgnoreFloatingButtonManagement() -> Bool {
+    private func floatingUIBlockingReason() -> String? {
         if isFloatingUISuspended {
-            return true
+            return "floatingUI-suspended"
         }
 
         // Ignore if preview is active
         if previewDataSource != nil {
-            return true
+            return "preview-active"
         }
 
         // Ignore if bug report form is visible
         if let bugReportVC = sessionBugReportViewController,
            bugReportVC.viewIfLoaded?.window != nil {
-            return true
+            return "bugReport-visible"
         }
 
         // Ignore if any of our internal view controllers are presented
         guard let topVC = UIApplication.shared.topViewController() else {
-            return false
+            return nil
         }
 
         // Check if it's one of our internal view controllers
@@ -813,18 +810,18 @@ final class QCBugPluginManager: NSObject {
            topVC is QCScreenshotAnnotationViewController ||
            topVC is QLPreviewController ||
            topVC is UIAlertController {  // QCCrashReportAlertController is UIAlertController
-            return true
+            return "topVC=\(String(describing: type(of: topVC)))"
         }
 
         // Check if it's presented by our view controllers
         if let presentingVC = topVC.presentingViewController {
             if presentingVC is QCBugReportViewController ||
                presentingVC is QCScreenshotAnnotationViewController {
-                return true
+                return "presentedBy=\(String(describing: type(of: presentingVC)))"
             }
         }
 
-        return false
+        return nil
     }
 
     private func bringFloatingButtonsToFront() {
@@ -894,17 +891,20 @@ final class QCBugPluginManager: NSObject {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
-            if self.isFloatingUISuspended {
+            if let reason = self.floatingUIBlockingReason() {
+                print("🔧 QCBugPlugin: Evaluating floating UI - keeping hidden (\(reason))")
                 self.floatingActionButtons?.isHidden = true
                 self.internalShakeWindow?.isHidden = true
                 return
             }
 
-            let shouldHide = self.shouldIgnoreFloatingButtonManagement()
-            self.floatingActionButtons?.isHidden = shouldHide
-            self.internalShakeWindow?.isHidden = shouldHide
+            self.floatingActionButtons?.isHidden = false
+            self.internalShakeWindow?.isHidden = false
 
-            if shouldHide {
+            if let reason = self.floatingUIBlockingReason() {
+                print("🔧 QCBugPlugin: Floating UI should hide (\(reason)) - scheduling retry")
+                self.floatingActionButtons?.isHidden = true
+                self.internalShakeWindow?.isHidden = true
                 if retryCount < 5 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                         self?.evaluateFloatingUIVisibility(retryCount: retryCount + 1)
