@@ -160,9 +160,9 @@ final class BugReportAPIService: BugReportProtocol {
         self.apiKey = apiKey
         self.gitLabAuthProvider = gitLabAuthProvider
 
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 60
+    let config = URLSessionConfiguration.default
+    config.timeoutIntervalForRequest = 5 * 60
+    config.timeoutIntervalForResource = 5 * 60
         self.session = URLSession(configuration: config)
 
         self.jsonEncoder = JSONEncoder()

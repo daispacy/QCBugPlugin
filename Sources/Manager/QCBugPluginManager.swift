@@ -91,6 +91,7 @@ final class QCBugPluginManager: NSObject {
     private var isFloatingUISuspended = false
     private var pendingFloatingUIResumeReason: String?
     private var activePreviewMode: AttachmentPreviewMode = .none
+    private var submissionTimeoutWorkItem: DispatchWorkItem?
 
     // MARK: - Delegate
     weak var delegate: QCBugPluginDelegate?
@@ -1325,6 +1326,8 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
 
         guard let bugReportService = bugReportService else {
             print("❌ QCBugPlugin: No webhook URL configured. Cannot submit bug report.")
+            submissionTimeoutWorkItem?.cancel()
+            submissionTimeoutWorkItem = nil
             controller.dismiss(animated: true) { [weak self] in
                 // Show floating buttons after dismissal
                 self?.floatingActionButtons?.isHidden = false
@@ -1337,6 +1340,8 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         }
 
         floatingActionButtons?.showSubmissionProgress()
+        submissionTimeoutWorkItem?.cancel()
+        submissionTimeoutWorkItem = nil
 
         // Dismiss form immediately
         controller.dismiss(animated: true) { [weak self] in
@@ -1345,10 +1350,14 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         }
 
         // Submit in background
+        let submissionTimeout: TimeInterval = 5 * 60 // 5 minutes
+
         bugReportService.submitBugReport(report) { [weak self] result in
             guard let self = self else { return }
 
             DispatchQueue.main.async {
+                self.submissionTimeoutWorkItem?.cancel()
+                self.submissionTimeoutWorkItem = nil
                 self.floatingActionButtons?.hideSubmissionProgress()
 
                 switch result {
@@ -1365,6 +1374,17 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
                 }
             }
         }
+
+        let timeoutItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            print("⏱️ QCBugPlugin: Submission timeout reached (\(submissionTimeout) seconds)")
+            self.floatingActionButtons?.hideSubmissionProgress()
+            self.showErrorAlert(message: "Submission is taking longer than expected. Please try again.")
+        }
+
+        self.submissionTimeoutWorkItem = timeoutItem
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + submissionTimeout, execute: timeoutItem)
     }
     
     func bugReportViewControllerDidCancel(_ controller: QCBugReportViewController) {
@@ -1385,6 +1405,8 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
             // Show floating buttons after dismissal
             self?.floatingActionButtons?.isHidden = false
             self?.floatingActionButtons?.hideSubmissionProgress()
+            self?.submissionTimeoutWorkItem?.cancel()
+            self?.submissionTimeoutWorkItem = nil
         }
     }
 
