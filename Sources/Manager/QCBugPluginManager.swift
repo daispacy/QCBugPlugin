@@ -818,10 +818,7 @@ final class QCBugPluginManager: NSObject {
         }
 
         // Check if it's one of our internal view controllers
-        if topVC is QCBugReportViewController ||
-           topVC is QCScreenshotAnnotationViewController ||
-           topVC is QLPreviewController ||
-           topVC is UIAlertController {  // QCCrashReportAlertController is UIAlertController
+        if isInternalController(topVC) {
             return "topVC=\(String(describing: type(of: topVC)))"
         }
 
@@ -834,6 +831,28 @@ final class QCBugPluginManager: NSObject {
         }
 
         return nil
+    }
+
+    private func isInternalController(_ controller: UIViewController) -> Bool {
+        if controller is QCBugReportViewController ||
+            controller is QCScreenshotAnnotationViewController ||
+            controller is QLPreviewController ||
+            controller is UIAlertController { // QCCrashReportAlertController is UIAlertController
+            return true
+        }
+
+        if let nav = controller as? UINavigationController,
+           let root = nav.viewControllers.first,
+           isInternalController(root) {
+            return true
+        }
+
+        if let presenting = controller.presentingViewController,
+           isInternalController(presenting) {
+            return true
+        }
+
+        return false
     }
 
     private func bringFloatingButtonsToFront() {
@@ -1460,10 +1479,19 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
                 print("📱 QCBugPlugin: Completing deferred UI resume (\(reason))")
                 self.resumeFloatingUIIfNeeded(reason: reason)
             } else if !self.isFloatingUISuspended {
-                self.evaluateFloatingUIVisibility()
+                let top = UIApplication.shared.topViewController()
+                let summary = top.map { String(describing: type(of: $0)) } ?? "none"
+                print("📱 QCBugPlugin: Preview dismissal complete - top VC: \(summary)")
+
+                if let top, self.isInternalController(top) {
+                    self.evaluateFloatingUIVisibility()
+                } else {
+                    self.resumeFloatingUIIfNeeded(reason: "previewDismissed")
+                }
             }
 
             self.activePreviewMode = .none
+            self.sessionBugReportViewController?.endChildPresentation()
         }
     }
 }
