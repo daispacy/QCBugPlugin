@@ -54,6 +54,8 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     }
     
     func startRecording(completion: @escaping (Result<Void, ScreenRecordingError>) -> Void) {
+        print("🚨🚨🚨 ScreenRecordingService: START RECORDING - NEW CODE VERSION 2024-11-11 🚨🚨🚨")
+
         guard isAvailable else {
             completion(.failure(.notAvailable))
             return
@@ -80,16 +82,34 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         audioBufferCount = 0
         print("🎬 ScreenRecordingService: Starting new recording, counters reset")
 
-        // Create output URL
+        // Create output URL with validation
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let qcDirectory = documentsPath.appendingPathComponent("QCBugPlugin", isDirectory: true)
+        print("📁 ScreenRecordingService: Documents path: \(documentsPath.path)")
 
-        // Create directory if needed
-        try? FileManager.default.createDirectory(at: qcDirectory, withIntermediateDirectories: true)
+        let qcDirectory = documentsPath.appendingPathComponent("QCBugPlugin", isDirectory: true)
+        print("📁 ScreenRecordingService: QC directory: \(qcDirectory.path)")
+
+        // Create directory if needed and verify
+        do {
+            try FileManager.default.createDirectory(at: qcDirectory, withIntermediateDirectories: true, attributes: nil)
+            print("✅ ScreenRecordingService: Directory created/verified successfully")
+
+            // Verify directory is writable
+            let testFilePath = qcDirectory.appendingPathComponent(".test_write").path
+            let testData = "test".data(using: .utf8)!
+            if FileManager.default.createFile(atPath: testFilePath, contents: testData, attributes: nil) {
+                try? FileManager.default.removeItem(atPath: testFilePath)
+                print("✅ ScreenRecordingService: Directory is writable")
+            } else {
+                print("❌ ScreenRecordingService: Directory is NOT writable!")
+            }
+        } catch {
+            print("❌ ScreenRecordingService: Failed to create directory: \(error.localizedDescription)")
+        }
 
         let videoFileName = "qc_screen_recording_\(Date().timeIntervalSince1970).mp4"
         outputURL = qcDirectory.appendingPathComponent(videoFileName)
-        print("🎬 ScreenRecordingService: Output URL will be: \(qcDirectory.appendingPathComponent(videoFileName).path)")
+        print("🎬 ScreenRecordingService: Output URL will be: \(outputURL!.path)")
 
         guard let outputURL = outputURL else {
             completion(.failure(.savingFailed("Failed to create output URL")))
@@ -131,6 +151,7 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     }
     
     func stopRecording(completion: @escaping (Result<URL, ScreenRecordingError>) -> Void) {
+        print("🚨🚨🚨 ScreenRecordingService: STOP RECORDING - NEW CODE VERSION 2024-11-11 🚨🚨🚨")
         print("🎬 ScreenRecordingService: stopRecording called")
 
         guard isRecording else {
@@ -241,6 +262,7 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     }
 
     private func finalizeRecording(completion: @escaping (Result<URL, ScreenRecordingError>) -> Void) {
+        print("🚨🚨🚨 ScreenRecordingService: FINALIZE RECORDING - NEW CODE VERSION 2024-11-11 🚨🚨🚨")
         print("🎬 ScreenRecordingService: finalizeRecording called")
 
         guard let videoWriter = videoWriter, let outputURL = outputURL else {
@@ -303,19 +325,39 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     }
 
     private func createVideoWriter(outputURL: URL) -> Bool {
+        print("🎬 ScreenRecordingService: createVideoWriter called for: \(outputURL.path)")
+
         do {
             // Remove existing file if it exists
             if FileManager.default.fileExists(atPath: outputURL.path) {
-                try? FileManager.default.removeItem(at: outputURL)
+                print("⚠️ ScreenRecordingService: File already exists, removing...")
+                try FileManager.default.removeItem(at: outputURL)
+                print("✅ ScreenRecordingService: Existing file removed")
             }
 
+            // Verify parent directory exists and is writable
+            let parentDir = outputURL.deletingLastPathComponent()
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: parentDir.path, isDirectory: &isDirectory) {
+                print("✅ ScreenRecordingService: Parent directory exists, isDirectory: \(isDirectory.boolValue)")
+            } else {
+                print("❌ ScreenRecordingService: Parent directory does NOT exist!")
+                return false
+            }
+
+            print("🎬 ScreenRecordingService: Creating AVAssetWriter...")
             videoWriter = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
+            print("✅ ScreenRecordingService: AVAssetWriter created successfully")
 
             // Video settings
+            let width = Int(UIScreen.main.bounds.width * UIScreen.main.scale)
+            let height = Int(UIScreen.main.bounds.height * UIScreen.main.scale)
+            print("🎬 ScreenRecordingService: Video dimensions: \(width)x\(height)")
+
             let videoSettings: [String: Any] = [
                 AVVideoCodecKey: AVVideoCodecType.h264,
-                AVVideoWidthKey: Int(UIScreen.main.bounds.width * UIScreen.main.scale),
-                AVVideoHeightKey: Int(UIScreen.main.bounds.height * UIScreen.main.scale),
+                AVVideoWidthKey: width,
+                AVVideoHeightKey: height,
                 AVVideoCompressionPropertiesKey: [
                     AVVideoAverageBitRateKey: 6000000,
                     AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
@@ -324,6 +366,7 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
 
             videoWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
             videoWriterInput?.expectsMediaDataInRealTime = true
+            print("✅ ScreenRecordingService: Video input created")
 
             // Audio settings
             let audioSettings: [String: Any] = [
@@ -335,24 +378,35 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
 
             audioWriterInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
             audioWriterInput?.expectsMediaDataInRealTime = true
+            print("✅ ScreenRecordingService: Audio input created")
 
             // Add inputs to writer
             if let videoInput = videoWriterInput, videoWriter?.canAdd(videoInput) == true {
                 videoWriter?.add(videoInput)
+                print("✅ ScreenRecordingService: Video input added to writer")
             } else {
                 print("❌ ScreenRecordingService: Cannot add video input")
+                print("❌ ScreenRecordingService: Writer status: \(videoWriter?.status.rawValue ?? -1)")
                 return false
             }
 
             if let audioInput = audioWriterInput, videoWriter?.canAdd(audioInput) == true {
                 videoWriter?.add(audioInput)
+                print("✅ ScreenRecordingService: Audio input added to writer")
+            } else {
+                print("⚠️ ScreenRecordingService: Cannot add audio input (will record video only)")
             }
 
             print("✅ ScreenRecordingService: Video writer created successfully")
             return true
 
         } catch {
-            print("❌ ScreenRecordingService: Failed to create video writer: \(error)")
+            print("❌ ScreenRecordingService: Failed to create video writer: \(error.localizedDescription)")
+            print("❌ ScreenRecordingService: Error domain: \((error as NSError).domain)")
+            print("❌ ScreenRecordingService: Error code: \((error as NSError).code)")
+            if let underlyingError = (error as NSError).userInfo[NSUnderlyingErrorKey] as? NSError {
+                print("❌ ScreenRecordingService: Underlying error: \(underlyingError.localizedDescription)")
+            }
             return false
         }
     }
