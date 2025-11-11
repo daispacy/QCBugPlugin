@@ -1050,8 +1050,10 @@ final class QCBugPluginManager: NSObject {
     }
 
     private func presentNativeAttachmentPreview(for url: URL) {
+        print("📂 QCBugPlugin: Requesting native preview for URL: \(url)")
         if !url.isFileURL {
             DispatchQueue.main.async {
+                print("🌐 QCBugPlugin: Opening non-file URL in external app")
                 UIApplication.shared.open(url, options: [:], completionHandler: nil)
             }
             return
@@ -1064,6 +1066,7 @@ final class QCBugPluginManager: NSObject {
 
         DispatchQueue.main.async {
             self.suspendFloatingUI(for: "attachmentPreview")
+            print("📂 QCBugPlugin: Preparing QLPreviewController for \(url.lastPathComponent)")
 
             let previewController = QLPreviewController()
             self.previewDataSource = SingleAttachmentPreviewDataSource(url: url)
@@ -1080,6 +1083,7 @@ final class QCBugPluginManager: NSObject {
                 return
             }
 
+            print("📂 QCBugPlugin: Presenting QLPreviewController on \(type(of: presenter))")
             presenter.present(previewController, animated: true)
         }
     }
@@ -1375,6 +1379,7 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
                 self.pendingFloatingUIResumeReason = reason
 
                 if self.activePreviewController !== controller {
+                    print("📱 QCBugPlugin: Preview already dismissed; resuming floating UI")
                     self.pendingFloatingUIResumeReason = nil
                     self.resumeFloatingUIIfNeeded(reason: reason)
                 }
@@ -1400,6 +1405,7 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
 
             if let reason = self.pendingFloatingUIResumeReason {
                 self.pendingFloatingUIResumeReason = nil
+                print("📱 QCBugPlugin: Completing deferred UI resume (\(reason))")
                 self.resumeFloatingUIIfNeeded(reason: reason)
             } else if !self.isFloatingUISuspended {
                 self.evaluateFloatingUIVisibility()
