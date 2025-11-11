@@ -872,16 +872,47 @@ final class QCBugPluginManager: NSObject {
     }
 
     private func resumeFloatingUIIfNeeded(reason: String? = nil) {
-        guard isFloatingUISuspended else { return }
+        let wasSuspended = isFloatingUISuspended
         isFloatingUISuspended = false
         floatingActionButtons?.setSuspended(false)
-        let shouldRemainHidden = shouldIgnoreFloatingButtonManagement()
-        floatingActionButtons?.isHidden = shouldRemainHidden
-        internalShakeWindow?.isHidden = shouldRemainHidden
+
         if let reason {
-            print("▶️ QCBugPlugin: Resumed floating UI (\(reason))")
-        } else {
+            if wasSuspended {
+                print("▶️ QCBugPlugin: Resumed floating UI (\(reason))")
+            } else {
+                print("▶️ QCBugPlugin: Evaluating floating UI visibility (\(reason))")
+            }
+        } else if wasSuspended {
             print("▶️ QCBugPlugin: Resumed floating UI")
+        }
+
+        evaluateFloatingUIVisibility()
+    }
+
+    private func evaluateFloatingUIVisibility(retryCount: Int = 0) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            if self.isFloatingUISuspended {
+                self.floatingActionButtons?.isHidden = true
+                self.internalShakeWindow?.isHidden = true
+                return
+            }
+
+            let shouldHide = self.shouldIgnoreFloatingButtonManagement()
+            self.floatingActionButtons?.isHidden = shouldHide
+            self.internalShakeWindow?.isHidden = shouldHide
+
+            if shouldHide {
+                if retryCount < 5 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                        self?.evaluateFloatingUIVisibility(retryCount: retryCount + 1)
+                    }
+                }
+            } else {
+                self.floatingActionButtons?.show(animated: false)
+                self.bringFloatingButtonsToFront()
+            }
         }
     }
 
