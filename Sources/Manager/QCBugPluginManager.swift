@@ -1229,8 +1229,8 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
     func previewControllerWillDismiss(_ controller: QLPreviewController) {
         print("📱 QCBugPlugin: Preview controller will dismiss")
 
-        // Clean up the preview data source
-        previewDataSource = nil
+        // DON'T clear previewDataSource yet - keep it to prevent window notifications from interfering
+        // We'll clear it after showing the confirmation dialog
 
         // Re-show shake window
         internalShakeWindow?.isHidden = false
@@ -1245,13 +1245,23 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
             pendingRecordingCompletion = nil
 
             // Show confirmation dialog after dismissal completes
+            // Keep previewDataSource set until then to prevent window notification interference
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.showRecordingConfirmation(recordingURL: recordingURL, completion: completion)
+                guard let self = self else { return }
+
+                // Now clear previewDataSource before showing confirmation
+                self.previewDataSource = nil
+                print("📱 QCBugPlugin: Cleared preview data source, showing confirmation")
+
+                self.showRecordingConfirmation(recordingURL: recordingURL, completion: completion)
             }
         } else {
-            // Regular preview (not recording) - show floating button if needed
+            // Regular preview (not recording) - clear data source and show floating button
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 guard let self = self else { return }
+
+                self.previewDataSource = nil
+
                 let isBugReportVisible = self.sessionBugReportViewController?.viewIfLoaded?.window != nil
                 if !isBugReportVisible {
                     self.floatingActionButtons?.isHidden = false
@@ -1263,23 +1273,15 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
     func previewControllerDidDismiss(_ controller: QLPreviewController) {
         print("📱 QCBugPlugin: Preview controller did dismiss")
 
-        // Additional cleanup after dismissal is complete
-        previewDataSource = nil
+        // Note: DON'T clear previewDataSource here - it's handled in willDismiss with proper delay
+        // This prevents race conditions with window notifications
 
         // Ensure shake window is visible
         internalShakeWindow?.isHidden = false
 
         // Note: Recording confirmation is already handled in willDismiss
-        // This method is just for additional cleanup
-
-        // Show floating button if needed (for regular previews)
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            let isBugReportVisible = self.sessionBugReportViewController?.viewIfLoaded?.window != nil
-            if !isBugReportVisible {
-                self.floatingActionButtons?.isHidden = false
-            }
-        }
+        // This method is just for additional cleanup and logging
+        print("📱 QCBugPlugin: Preview dismissal complete")
     }
 }
 
