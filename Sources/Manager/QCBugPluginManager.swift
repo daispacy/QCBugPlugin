@@ -40,7 +40,7 @@ private final class SingleAttachmentPreviewDataSource: NSObject, QLPreviewContro
 }
 
 /// Main manager class for the QC Bug Plugin
-final class QCBugPluginManager {
+final class QCBugPluginManager: NSObject {
 
     // MARK: - Singleton
     static let shared = QCBugPluginManager()
@@ -98,7 +98,8 @@ final class QCBugPluginManager {
     }
 
     // MARK: - Initialization
-    private init() {
+    private override init() {
+        super.init()
         setupNotificationObservers()
     }
     
@@ -845,12 +846,18 @@ final class QCBugPluginManager {
         }
 
         DispatchQueue.main.async {
+            // Hide floating button before showing preview
+            self.floatingActionButtons?.isHidden = true
+
             let previewController = QLPreviewController()
             self.previewDataSource = SingleAttachmentPreviewDataSource(url: url)
             previewController.dataSource = self.previewDataSource
+            previewController.delegate = self
 
             guard let presenter = UIApplication.shared.topViewController() else {
                 print("❌ QCBugPlugin: Unable to present attachment preview controller")
+                // Show floating button if presentation fails
+                self.floatingActionButtons?.isHidden = false
                 return
             }
 
@@ -1089,6 +1096,24 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
 
     func bugReportViewController(_ controller: QCBugReportViewController, requestNativePreviewFor url: URL) {
         presentNativeAttachmentPreview(for: url)
+    }
+}
+
+// MARK: - QLPreviewControllerDelegate
+
+extension QCBugPluginManager: QLPreviewControllerDelegate {
+    func previewControllerWillDismiss(_ controller: QLPreviewController) {
+        // Clean up the preview data source
+        previewDataSource = nil
+
+        // Show floating button when preview is dismissed (check if bug report is not visible)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            let isBugReportVisible = self.sessionBugReportViewController?.viewIfLoaded?.window != nil
+            if !isBugReportVisible {
+                self.floatingActionButtons?.isHidden = false
+            }
+        }
     }
 }
 

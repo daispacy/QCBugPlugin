@@ -1031,6 +1031,18 @@
         }
 
         var media = state.capturedMedia[index];
+        var type = media && media.type ? String(media.type).toLowerCase() : '';
+        var fileURL = media && media.fileURL ? String(media.fileURL) : '';
+        var isRecording = type === 'screenrecording' || type === 'screen_recording';
+        var isScreenshot = type === 'screenshot';
+        var isImage = isScreenshot || (fileURL && /(\.jpg|\.jpeg|\.png|\.gif|\.webp)$/i.test(fileURL));
+
+        // Always use native preview for videos
+        if (isRecording) {
+            requestNativePreviewByIndex(index);
+            return;
+        }
+
         var overlay = document.getElementById('mediaPreviewOverlay');
         var body = document.getElementById('mediaPreviewBody');
         var caption = document.getElementById('mediaPreviewCaption');
@@ -1044,12 +1056,7 @@
         }
         caption.textContent = '';
 
-        var type = media && media.type ? String(media.type).toLowerCase() : '';
-        var fileURL = media && media.fileURL ? String(media.fileURL) : '';
         var displayName = media && media.fileName ? media.fileName : 'Attachment ' + (index + 1);
-        var isRecording = type === 'screenrecording' || type === 'screen_recording';
-        var isScreenshot = type === 'screenshot';
-        var isImage = isScreenshot || (fileURL && /(\.jpg|\.jpeg|\.png|\.gif|\.webp)$/i.test(fileURL));
 
         if (isImage && fileURL) {
             var img = document.createElement('img');
@@ -1060,20 +1067,6 @@
                 handlePreviewFailure(index);
             };
             body.appendChild(img);
-        } else if (isRecording && fileURL) {
-            var video = document.createElement('video');
-            video.className = 'media-preview-video';
-            video.controls = true;
-            video.autoplay = true;
-            video.playsInline = true;
-            video.onerror = function () {
-                handlePreviewFailure(index);
-            };
-            var source = document.createElement('source');
-            source.src = fileURL;
-            source.type = 'video/mp4';
-            video.appendChild(source);
-            body.appendChild(video);
         } else {
             handlePreviewFailure(index);
             return;
