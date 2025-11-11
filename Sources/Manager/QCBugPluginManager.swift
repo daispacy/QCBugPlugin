@@ -364,6 +364,10 @@ final class QCBugPluginManager {
         alert.addAction(UIAlertAction(title: "Discard", style: .destructive) { [weak self] _ in
             // Clean up the recording file
             try? FileManager.default.removeItem(at: recordingURL)
+
+            // Show floating button after discard
+            self?.floatingActionButtons?.isHidden = false
+
             let error = NSError(
                 domain: "com.qcbugplugin",
                 code: -2,
@@ -386,11 +390,15 @@ final class QCBugPluginManager {
         self.sessionBugReportViewController?.addMediaAttachment(attachment)
 
         // Auto-present bug report form if enabled
-        if self.shouldAutoPresentForm {
+        let isBugReportVisible = self.sessionBugReportViewController?.viewIfLoaded?.window != nil
+        if !isBugReportVisible && self.shouldAutoPresentForm {
             self.shouldAutoPresentForm = false
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.presentBugReport()
             }
+        } else {
+            // Show floating button if bug report won't be presented or is already visible
+            self.floatingActionButtons?.isHidden = false
         }
 
         completion(.success(recordingURL))
@@ -748,6 +756,9 @@ final class QCBugPluginManager {
         pendingScreenshotCompletion = completion
         pendingScreenshotOriginalURL = screenshotURL
 
+        // Hide floating button before presenting annotation
+        floatingActionButtons?.isHidden = true
+
         let annotationController = QCScreenshotAnnotationViewController(
             image: image,
             originalURL: screenshotURL
@@ -786,10 +797,14 @@ final class QCBugPluginManager {
                 let isBugReportVisible = self.sessionBugReportViewController?.viewIfLoaded?.window != nil
                 if !isBugReportVisible {
                     self.shouldAutoPresentForm = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    // Short delay to ensure UI is ready after dismissal
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         self.shouldAutoPresentForm = false
                         self.presentBugReport()
                     }
+                } else {
+                    // Show floating button if bug report is already visible
+                    self.floatingActionButtons?.isHidden = false
                 }
 
                 print("🖍️ QCBugPlugin: Screenshot annotated and saved - \(annotatedURL)")
@@ -800,6 +815,9 @@ final class QCBugPluginManager {
                    FileManager.default.fileExists(atPath: originalURL.path) {
                     try? FileManager.default.removeItem(at: originalURL)
                 }
+
+                // Show floating button on cancellation/failure
+                self.floatingActionButtons?.isHidden = false
 
                 print("❌ QCBugPlugin: Screenshot annotation failed - \(error.localizedDescription)")
                 completion(.failure(error))

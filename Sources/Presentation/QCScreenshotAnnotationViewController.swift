@@ -230,8 +230,11 @@ final class QCScreenshotAnnotationViewController: UIViewController {
     private func complete(with result: Result<URL, Error>) {
         guard !hasCompleted else { return }
         hasCompleted = true
-        completion(result)
-        dismiss(animated: true)
+
+        // Dismiss first, then call completion after dismissal is complete
+        dismiss(animated: true) { [weak self] in
+            self?.completion(result)
+        }
     }
 
     private func updateActionButtons() {
