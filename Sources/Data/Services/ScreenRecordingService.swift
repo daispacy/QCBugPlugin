@@ -123,7 +123,10 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     }
     
     func stopRecording(completion: @escaping (Result<URL, ScreenRecordingError>) -> Void) {
+        print("🎬 ScreenRecordingService: stopRecording called")
+
         guard isRecording else {
+            print("❌ ScreenRecordingService: Not currently recording")
             completion(.failure(.notRecording))
             return
         }
@@ -135,10 +138,13 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
             return
         }
 
+        print("🎬 ScreenRecordingService: Stopping capture, writing started: \(isWritingStarted)")
+
         // Stop capture
         recorder.stopCapture { [weak self] error in
             DispatchQueue.main.async {
                 guard let self = self else {
+                    print("❌ ScreenRecordingService: Service deallocated during stop")
                     completion(.failure(.savingFailed("Service deallocated")))
                     return
                 }
@@ -152,6 +158,8 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
                     return
                 }
 
+                print("✅ ScreenRecordingService: Capture stopped successfully, finalizing video...")
+
                 // Finalize the video file
                 self.finalizeRecording(completion: completion)
             }
@@ -161,16 +169,20 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     // MARK: - Private Methods
 
     private func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, of type: RPSampleBufferType) {
-        guard let videoWriter = videoWriter else { return }
+        guard let videoWriter = videoWriter else {
+            print("⚠️ ScreenRecordingService: No video writer available")
+            return
+        }
 
         // Start writing session if not started
         if !isWritingStarted {
             if videoWriter.status == .unknown {
+                print("🎬 ScreenRecordingService: Starting writing session...")
                 videoWriter.startWriting()
                 let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
                 videoWriter.startSession(atSourceTime: timestamp)
                 isWritingStarted = true
-                print("🎬 ScreenRecordingService: Started writing session")
+                print("🎬 ScreenRecordingService: Writing session started successfully")
             }
         }
 
@@ -179,6 +191,8 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
                 if let error = videoWriter.error {
                     print("⚠️ ScreenRecordingService: Writer failed: \(error.localizedDescription)")
                 }
+            } else {
+                print("⚠️ ScreenRecordingService: Writer status: \(videoWriter.status.rawValue)")
             }
             return
         }
@@ -186,12 +200,20 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
         switch type {
         case .video:
             if let input = videoWriterInput, input.isReadyForMoreMediaData {
-                input.append(sampleBuffer)
+                let success = input.append(sampleBuffer)
+                if !success {
+                    print("⚠️ ScreenRecordingService: Failed to append video buffer")
+                }
+            } else {
+                print("⚠️ ScreenRecordingService: Video input not ready for data")
             }
 
         case .audioApp, .audioMic:
             if let input = audioWriterInput, input.isReadyForMoreMediaData {
-                input.append(sampleBuffer)
+                let success = input.append(sampleBuffer)
+                if !success {
+                    print("⚠️ ScreenRecordingService: Failed to append audio buffer")
+                }
             }
 
         @unknown default:
@@ -200,20 +222,31 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     }
 
     private func finalizeRecording(completion: @escaping (Result<URL, ScreenRecordingError>) -> Void) {
+        print("🎬 ScreenRecordingService: finalizeRecording called")
+
         guard let videoWriter = videoWriter, let outputURL = outputURL else {
+            print("❌ ScreenRecordingService: No video writer or output URL")
             completion(.failure(.savingFailed("No video writer or output URL")))
             return
         }
 
+        print("🎬 ScreenRecordingService: Writer status before finalize: \(videoWriter.status.rawValue)")
+        print("🎬 ScreenRecordingService: Writing started: \(isWritingStarted)")
+        print("🎬 ScreenRecordingService: Output URL: \(outputURL.path)")
+
         videoWriterInput?.markAsFinished()
         audioWriterInput?.markAsFinished()
+        print("🎬 ScreenRecordingService: Marked inputs as finished, calling finishWriting...")
 
         videoWriter.finishWriting { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else {
+                    print("❌ ScreenRecordingService: Service deallocated during finishWriting")
                     completion(.failure(.savingFailed("Service deallocated")))
                     return
                 }
+
+                print("🎬 ScreenRecordingService: finishWriting completed, status: \(videoWriter.status.rawValue)")
 
                 if videoWriter.status == .completed {
                     print("✅ ScreenRecordingService: Recording saved to \(outputURL.path)")
@@ -227,13 +260,21 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
                         } catch {
                             print("⚠️ ScreenRecordingService: Could not get file attributes: \(error)")
                         }
+                    } else {
+                        print("⚠️ ScreenRecordingService: File does not exist at path!")
                     }
 
                     self.cleanupWriter()
                     completion(.success(outputURL))
                 } else {
                     let error = videoWriter.error?.localizedDescription ?? "Unknown error"
-                    print("❌ ScreenRecordingService: Failed to finalize recording: \(error)")
+                    print("❌ ScreenRecordingService: Failed to finalize recording")
+                    print("❌ ScreenRecordingService: Writer status: \(videoWriter.status.rawValue)")
+                    print("❌ ScreenRecordingService: Error: \(error)")
+                    if let writerError = videoWriter.error {
+                        print("❌ ScreenRecordingService: Error code: \((writerError as NSError).code)")
+                        print("❌ ScreenRecordingService: Error domain: \((writerError as NSError).domain)")
+                    }
                     self.cleanupWriter()
                     completion(.failure(.savingFailed(error)))
                 }

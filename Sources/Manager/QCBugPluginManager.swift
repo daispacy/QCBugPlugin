@@ -753,21 +753,72 @@ final class QCBugPluginManager: NSObject {
     }
 
     @objc private func windowDidBecomeKey(_ notification: Notification) {
+        // Don't bring floating buttons to front when our internal view controllers are presented
+        if shouldIgnoreFloatingButtonManagement() {
+            print("🪟 QCBugPlugin: Window became key - ignoring (internal VC active)")
+            return
+        }
         print("🪟 QCBugPlugin: Window became key, preview active: \(previewDataSource != nil)")
         // Ensure floating buttons stay on top when window becomes key
         bringFloatingButtonsToFront()
     }
 
     @objc private func windowDidBecomeVisible(_ notification: Notification) {
+        // Don't bring floating buttons to front when our internal view controllers are presented
+        if shouldIgnoreFloatingButtonManagement() {
+            print("🪟 QCBugPlugin: Window became visible - ignoring (internal VC active)")
+            return
+        }
         print("🪟 QCBugPlugin: Window became visible, preview active: \(previewDataSource != nil)")
         // Ensure floating buttons stay on top when window becomes visible
         bringFloatingButtonsToFront()
     }
 
     @objc private func viewControllerDidPresent(_ notification: Notification) {
+        // Don't bring floating buttons to front when our internal view controllers are presented
+        if shouldIgnoreFloatingButtonManagement() {
+            print("🪟 QCBugPlugin: View controller presented - ignoring (internal VC active)")
+            return
+        }
         print("🪟 QCBugPlugin: View controller presented, preview active: \(previewDataSource != nil)")
         // Ensure floating buttons stay on top when view controllers are presented
         bringFloatingButtonsToFront()
+    }
+
+    private func shouldIgnoreFloatingButtonManagement() -> Bool {
+        // Ignore if preview is active
+        if previewDataSource != nil {
+            return true
+        }
+
+        // Ignore if bug report form is visible
+        if let bugReportVC = sessionBugReportViewController,
+           bugReportVC.viewIfLoaded?.window != nil {
+            return true
+        }
+
+        // Ignore if any of our internal view controllers are presented
+        guard let topVC = UIApplication.shared.topViewController() else {
+            return false
+        }
+
+        // Check if it's one of our internal view controllers
+        if topVC is QCBugReportViewController ||
+           topVC is QCScreenshotAnnotationViewController ||
+           topVC is QLPreviewController ||
+           topVC is QCCrashReportAlertController {
+            return true
+        }
+
+        // Check if it's presented by our view controllers
+        if let presentingVC = topVC.presentingViewController {
+            if presentingVC is QCBugReportViewController ||
+               presentingVC is QCScreenshotAnnotationViewController {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func bringFloatingButtonsToFront() {
