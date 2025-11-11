@@ -14,6 +14,16 @@ import QuickLook
 private class QCInternalShakeDetectingWindow: UIWindow {
     var shakeHandler: (() -> Void)?
 
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        // Make sure the window doesn't intercept touches
+        isUserInteractionEnabled = false
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
     override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
         super.motionEnded(motion, with: event)
 
@@ -588,8 +598,10 @@ final class QCBugPluginManager: NSObject {
             if self.internalShakeWindow == nil {
                 let shakeWindow = QCInternalShakeDetectingWindow(frame: UIScreen.main.bounds)
                 shakeWindow.windowLevel = .normal - 1 // Behind everything
+                shakeWindow.backgroundColor = .clear // Transparent background
                 shakeWindow.isHidden = false
                 shakeWindow.rootViewController = UIViewController() // Needed for shake to work
+                shakeWindow.rootViewController?.view.backgroundColor = .clear
                 shakeWindow.shakeHandler = { [weak self] in
                     self?.handleShakeGesture()
                 }
@@ -849,15 +861,21 @@ final class QCBugPluginManager: NSObject {
             // Hide floating button before showing preview
             self.floatingActionButtons?.isHidden = true
 
+            // Temporarily hide shake window to prevent interference
+            self.internalShakeWindow?.isHidden = true
+
             let previewController = QLPreviewController()
             self.previewDataSource = SingleAttachmentPreviewDataSource(url: url)
             previewController.dataSource = self.previewDataSource
             previewController.delegate = self
+            previewController.currentPreviewItemIndex = 0
 
             guard let presenter = UIApplication.shared.topViewController() else {
                 print("❌ QCBugPlugin: Unable to present attachment preview controller")
                 // Show floating button if presentation fails
                 self.floatingActionButtons?.isHidden = false
+                // Re-show shake window
+                self.internalShakeWindow?.isHidden = false
                 return
             }
 
@@ -1113,6 +1131,9 @@ extension QCBugPluginManager: QLPreviewControllerDelegate {
             if !isBugReportVisible {
                 self.floatingActionButtons?.isHidden = false
             }
+
+            // Re-show shake window after preview is dismissed
+            self.internalShakeWindow?.isHidden = false
         }
     }
 }
