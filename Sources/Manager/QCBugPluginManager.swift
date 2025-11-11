@@ -926,6 +926,11 @@ final class QCBugPluginManager: NSObject {
                 print("🔧 QCBugPlugin: Evaluating floating UI - keeping hidden (\(reason))")
                 self.floatingActionButtons?.isHidden = true
                 self.internalShakeWindow?.isHidden = true
+                if retryCount < 5 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                        self?.evaluateFloatingUIVisibility(retryCount: retryCount + 1)
+                    }
+                }
                 return
             }
 
