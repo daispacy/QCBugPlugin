@@ -45,6 +45,10 @@ final class QCBugReportViewController: UIViewController {
 
     // Bug report data
     private var bugDescription = ""
+    private var isManualMode: Bool = false
+    private var manualPrerequisite: String = ""
+    private var manualShortDescription: String = ""
+    private var manualSteps: String = ""
     private var selectedPriority: String = ""
     private var selectedStage: String = BugStage.product.rawValue
     private var webhookURL: String
@@ -265,7 +269,10 @@ final class QCBugReportViewController: UIViewController {
             gitLabProject: gitLabProject,
             assigneeUsername: selectedAssigneeUsername,
             issueNumber: issueNumber,
-            gitLabCredentials: gitLabCredentials
+            gitLabCredentials: gitLabCredentials,
+            manualPrerequisite: isManualMode ? manualPrerequisite : nil,
+            manualDescription: isManualMode ? manualShortDescription : nil,
+            manualSteps: isManualMode ? manualSteps : nil
         )
     }
 
@@ -647,8 +654,33 @@ extension QCBugReportViewController: WKScriptMessageHandler {
                 issueNumber = parsed >= 0 ? parsed : nil
             } else {
                 issueNumber = nil
-            }
+                updateSubmitButtonState()
         
+            case "setMode":
+                if let mode = data["mode"] as? String {
+                    let isManual = mode.lowercased() == "manual"
+                    isManualMode = isManual
+                }
+                updateSubmitButtonState()
+
+            case "setManualMode":
+                // Backwards-compatible: older UI may send boolean
+                if let manual = data["manual"] as? Bool {
+                    isManualMode = manual
+                }
+                updateSubmitButtonState()
+
+            case "updateManualPrerequisite":
+                manualPrerequisite = data["prerequisite"] as? String ?? ""
+                updateSubmitButtonState()
+
+            case "updateManualDescription":
+                manualShortDescription = data["description"] as? String ?? ""
+                updateSubmitButtonState()
+
+            case "updateManualSteps":
+                manualSteps = data["steps"] as? String ?? ""
+                updateSubmitButtonState()
         case "deleteMediaAttachment":
             if let fileURL = data["fileURL"] as? String {
                 removeMediaAttachment(withFileURL: fileURL)
@@ -678,7 +710,15 @@ extension QCBugReportViewController: WKScriptMessageHandler {
     }
     
     private func updateSubmitButtonState() {
-        navigationItem.rightBarButtonItem?.isEnabled = !bugDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let enabled: Bool
+        if isManualMode {
+            let descOk = !manualShortDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let stepsOk = !manualSteps.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            enabled = descOk && stepsOk
+        } else {
+            enabled = !bugDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        navigationItem.rightBarButtonItem?.isEnabled = enabled
     }
 }
 
@@ -741,6 +781,18 @@ extension QCBugReportViewController: WKNavigationDelegate {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
         let issueNumberString = issueNumber.map(String.init) ?? ""
+        let escapedManualPrerequisite = manualPrerequisite
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        let escapedManualShortDescription = manualShortDescription
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        let escapedManualSteps = manualSteps
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
         let script = """
         (function() {
             const descriptionField = document.getElementById('bugDescription');
@@ -755,8 +807,19 @@ extension QCBugReportViewController: WKNavigationDelegate {
             if (typeof setInitialPriority === 'function') { setInitialPriority('\(selectedPriority)'); }
             if (typeof setInitialStage === 'function') { setInitialStage('\(selectedStage)'); }
             if (typeof setInitialIssueNumber === 'function') { setInitialIssueNumber('\(issueNumberString)'); }
+            if (typeof setInitialMode === 'function') { setInitialMode('\(isManualMode ? "manual" : "llm")'); }
+            // Populate manual fields if present
+            const mp = document.getElementById('manualPrerequisite');
+            if (mp) { mp.value = '\(escapedManualPrerequisite)'; }
+            const md = document.getElementById('manualDescription');
+            if (md) { md.value = '\(escapedManualShortDescription)'; }
+            const ms = document.getElementById('manualSteps');
+            if (ms) { ms.value = '\(escapedManualSteps)'; }
             if (typeof updateDescription === 'function') { updateDescription(); }
             if (typeof updateWebhookURL === 'function') { updateWebhookURL(); }
+            if (typeof updateManualPrerequisite === 'function') { updateManualPrerequisite(); }
+            if (typeof updateManualDescription === 'function') { updateManualDescription(); }
+            if (typeof updateManualSteps === 'function') { updateManualSteps(); }
         })();
         """
         webView.evaluateJavaScript(script)

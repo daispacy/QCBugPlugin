@@ -412,6 +412,22 @@
             transform: none;
         }
 
+        /* Collapsible animation for manual fields */
+        .collapsible {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 280ms cubic-bezier(0.2, 0, 0, 1);
+        }
+
+        .collapsible.expanded {
+            max-height: 800px; /* large enough to show content */
+        }
+
+        .invalid {
+            border-color: #d70015 !important;
+            box-shadow: 0 0 0 3px rgba(215, 0, 21, 0.06);
+        }
+
         .gitlab-error {
             margin-top: 8px;
             font-size: 12px;
@@ -524,15 +540,21 @@
         <div class="section">
             <h2>🤖 LLM or Manual</h2>
             <div class="field-group">
-                <label class="field-label">Use LLM or Manual</label>
-                <label class="radio-option" style="min-width: unset;">
-                    <input type="checkbox" id="manualToggle" onchange="toggleManualMode()">
-                    <span class="radio-label">Manual</span>
-                </label>
-                <p class="field-hint">If Manual is selected, provide Prerequisite, Description and Steps fields below.</p>
+                <label class="field-label">Mode</label>
+                <div class="radio-group">
+                    <label class="radio-option">
+                        <input type="radio" name="mode" id="modeLLM" value="llm" checked onchange="setMode('llm')">
+                        <span class="radio-label">Use LLM</span>
+                    </label>
+                    <label class="radio-option">
+                        <input type="radio" name="mode" id="modeManual" value="manual" onchange="setMode('manual')">
+                        <span class="radio-label">Manual</span>
+                    </label>
+                </div>
+                <p class="field-hint">Choose automatic LLM-generated description or provide manual inputs below.</p>
             </div>
 
-            <div id="manualFields" style="display: none;">
+            <div id="manualFields" class="collapsible">
                 <div class="field-group">
                     <label class="field-label" for="manualPrerequisite">Prerequisite</label>
                     <textarea id="manualPrerequisite" placeholder="List any prerequisites (e.g., account state, app settings)" oninput="updateManualPrerequisite()"></textarea>

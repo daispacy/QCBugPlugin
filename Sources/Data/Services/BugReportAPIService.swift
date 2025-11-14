@@ -56,6 +56,9 @@ final class BugReportAPIService: BugReportProtocol {
             let assigneeUsername: String?
             let issueNumber: Int?
             let team: String
+            let manualPrerequisite: String?
+            let manualDescription: String?
+            let manualSteps: String?
         }
 
         struct GitLabPayload: Encodable {
@@ -92,7 +95,7 @@ final class BugReportAPIService: BugReportProtocol {
                 )
             }
 
-            self.report = ReportDTO(
+                self.report = ReportDTO(
                 id: report.id,
                 timestamp: report.timestamp,
                 description: report.description,
@@ -109,8 +112,11 @@ final class BugReportAPIService: BugReportProtocol {
                 memoryInfo: report.memoryInfo,
                 gitLabProject: report.gitLabProject,
                 assigneeUsername: report.assigneeUsername,
-                issueNumber: report.issueNumber ?? -1,
-                team: team
+                    issueNumber: report.issueNumber ?? -1,
+                    team: team,
+                    manualPrerequisite: report.manualPrerequisite,
+                    manualDescription: report.manualDescription,
+                    manualSteps: report.manualSteps
             )
             self.attachments = attachments
             self.metadata = gitLabCredentials.map { MetadataPayload(gitlab: GitLabPayload(credentials: $0)) }
