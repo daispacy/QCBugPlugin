@@ -26,7 +26,7 @@ public struct QCBugPluginConfig {
         isScreenRecordingEnabled: Bool = true,
         enableFloatingButton: Bool = false,
         gitLabAppConfig: GitLabAppConfig? = nil,
-        enableCrashReporting: Bool = true
+        enableCrashReporting: Bool = true,
         team: String = "ios"
     ) {
         self.webhookURL = webhookURL
