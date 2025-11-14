@@ -80,7 +80,7 @@ final class BugReportAPIService: BugReportProtocol {
         let attachments: [AttachmentPayload]
         let metadata: MetadataPayload?
 
-        init(report: BugReport, attachments: [AttachmentPayload], gitLabCredentials: GitLabCredentials?) {
+        init(report: BugReport, attachments: [AttachmentPayload], gitLabCredentials: GitLabCredentials?, team: String) {
             self.whtype = report.whtype
             self.stage = report.stage
             let mediaDTO = report.mediaAttachments.map { attachment in
@@ -110,7 +110,7 @@ final class BugReportAPIService: BugReportProtocol {
                 gitLabProject: report.gitLabProject,
                 assigneeUsername: report.assigneeUsername,
                 issueNumber: report.issueNumber ?? -1,
-                team: "ios"
+                team: team
             )
             self.attachments = attachments
             self.metadata = gitLabCredentials.map { MetadataPayload(gitlab: GitLabPayload(credentials: $0)) }
@@ -148,6 +148,7 @@ final class BugReportAPIService: BugReportProtocol {
     private let webhookURL: String
     private let apiKey: String?
     private let gitLabAuthProvider: GitLabAuthProviding?
+    private let team: String
     private let session: URLSession
     private let jsonEncoder: JSONEncoder
     private let isoFormatter: ISO8601DateFormatter
@@ -157,10 +158,11 @@ final class BugReportAPIService: BugReportProtocol {
 
     // MARK: - Initialization
 
-    init(webhookURL: String, apiKey: String? = nil, gitLabAuthProvider: GitLabAuthProviding? = nil) {
+    init(webhookURL: String, apiKey: String? = nil, gitLabAuthProvider: GitLabAuthProviding? = nil, team: String = "ios") {
         self.webhookURL = webhookURL
         self.apiKey = apiKey
         self.gitLabAuthProvider = gitLabAuthProvider
+        self.team = team
 
     let config = URLSessionConfiguration.default
     config.timeoutIntervalForRequest = 5 * 60
@@ -194,7 +196,7 @@ final class BugReportAPIService: BugReportProtocol {
     internal func makeEncodedPayload(for report: BugReport, gitLabCredentials: GitLabCredentials?) throws -> Data {
         var attachmentsPayload: [AttachmentPayload] = []
         // We don't process attachments here; keep empty for unit test encoding
-        let payload = BugReportPayload(report: report, attachments: attachmentsPayload, gitLabCredentials: gitLabCredentials)
+        let payload = BugReportPayload(report: report, attachments: attachmentsPayload, gitLabCredentials: gitLabCredentials, team: team)
         return try jsonEncoder.encode(payload)
     }
 
@@ -431,14 +433,14 @@ final class BugReportAPIService: BugReportProtocol {
         completion: @escaping (Result<Data, BugReportError>) -> Void
     ) {
         processingQueue.async {
-            if report.mediaAttachments.isEmpty {
-                do {
-                    let payload = BugReportPayload(report: report, attachments: [], gitLabCredentials: gitLabCredentials)
-                    let data = try self.jsonEncoder.encode(payload)
-                    completion(.success(data))
-                } catch {
-                    completion(.failure(.invalidData))
-                }
+                if report.mediaAttachments.isEmpty {
+                    do {
+                        let payload = BugReportPayload(report: report, attachments: [], gitLabCredentials: gitLabCredentials, team: self.team)
+                        let data = try self.jsonEncoder.encode(payload)
+                        completion(.success(data))
+                    } catch {
+                        completion(.failure(.invalidData))
+                    }
                 return
             }
 
@@ -472,7 +474,7 @@ final class BugReportAPIService: BugReportProtocol {
                 let flattened = attachments.compactMap { $0 }
 
                 do {
-                    let payload = BugReportPayload(report: report, attachments: flattened, gitLabCredentials: gitLabCredentials)
+                    let payload = BugReportPayload(report: report, attachments: flattened, gitLabCredentials: gitLabCredentials, team: self.team)
                     let data = try self.jsonEncoder.encode(payload)
                     completion(.success(data))
                 } catch {

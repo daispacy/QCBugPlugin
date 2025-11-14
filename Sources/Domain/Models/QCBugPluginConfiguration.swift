@@ -17,6 +17,7 @@ public struct QCBugPluginConfig {
     public let enableFloatingButton: Bool
     public let gitLabAppConfig: GitLabAppConfig?
     public let enableCrashReporting: Bool
+    public let team: String
 
     public init(
         webhookURL: String,
@@ -26,6 +27,7 @@ public struct QCBugPluginConfig {
         enableFloatingButton: Bool = false,
         gitLabAppConfig: GitLabAppConfig? = nil,
         enableCrashReporting: Bool = true
+        team: String = "ios"
     ) {
         self.webhookURL = webhookURL
         self.apiKey = apiKey
@@ -34,5 +36,6 @@ public struct QCBugPluginConfig {
         self.enableFloatingButton = enableFloatingButton
         self.gitLabAppConfig = gitLabAppConfig
         self.enableCrashReporting = enableCrashReporting
+        self.team = team
     }
 }

@@ -129,8 +129,10 @@ final class QCBugPluginManager: NSObject {
         bugReportService = BugReportAPIService(
             webhookURL: webhook,
             apiKey: configuration?.apiKey,
-            gitLabAuthProvider: gitLabAuthService
+            gitLabAuthProvider: gitLabAuthService,
+            team: configuration?.team ?? "ios"
         )
+
     }
 
     // MARK: - Initialization
