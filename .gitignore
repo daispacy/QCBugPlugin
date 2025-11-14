@@ -38,6 +38,7 @@ memory/claude-flow-data.json
 memory/sessions/*
 !memory/sessions/README.md
 memory/agents/*
+.github/agents/*.log.md
 !memory/agents/README.md
 coordination/memory_bank/*
 coordination/subtasks/*
