@@ -655,8 +655,9 @@ extension QCBugReportViewController: WKScriptMessageHandler {
             } else {
                 issueNumber = nil
                 updateSubmitButtonState()
-        
-            case "setMode":
+            }
+
+        case "setMode":
                 if let mode = data["mode"] as? String {
                     let isManual = mode.lowercased() == "manual"
                     isManualMode = isManual
