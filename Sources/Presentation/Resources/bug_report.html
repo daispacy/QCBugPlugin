@@ -522,6 +522,38 @@
         </div>
 
         <div class="section">
+            <h2>🤖 LLM or Manual</h2>
+            <div class="field-group">
+                <label class="field-label">Use LLM or Manual</label>
+                <label class="radio-option" style="min-width: unset;">
+                    <input type="checkbox" id="manualToggle" onchange="toggleManualMode()">
+                    <span class="radio-label">Manual</span>
+                </label>
+                <p class="field-hint">If Manual is selected, provide Prerequisite, Description and Steps fields below.</p>
+            </div>
+
+            <div id="manualFields" style="display: none;">
+                <div class="field-group">
+                    <label class="field-label" for="manualPrerequisite">Prerequisite</label>
+                    <textarea id="manualPrerequisite" placeholder="List any prerequisites (e.g., account state, app settings)" oninput="updateManualPrerequisite()"></textarea>
+                    <p class="field-hint">Prerequisite details for reproducing the issue.</p>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label" for="manualDescription">Description</label>
+                    <input type="text" id="manualDescription" placeholder="Short description (manual)" oninput="updateManualDescription()">
+                    <p class="field-hint">A brief summary to appear with the manual report.</p>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label" for="manualSteps">Steps</label>
+                    <textarea id="manualSteps" placeholder="Step 1\nStep 2\nStep 3" oninput="updateManualSteps()"></textarea>
+                    <p class="field-hint">List the steps to reproduce the issue.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
             <h2>⚠️ Priority</h2>
             <div class="field-group">
                 <label class="field-label" for="prioritySelect">Priority</label>

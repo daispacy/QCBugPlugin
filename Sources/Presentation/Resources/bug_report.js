@@ -45,6 +45,39 @@
         return field.value.trim();
     }
 
+    // Manual mode handlers
+    window.toggleManualMode = function () {
+        var cb = document.getElementById('manualToggle');
+        var manualFields = document.getElementById('manualFields');
+        var mainDesc = document.getElementById('bugDescription');
+        var isManual = !!(cb && cb.checked);
+        if (manualFields) {
+            manualFields.style.display = isManual ? 'block' : 'none';
+        }
+        if (mainDesc) {
+            mainDesc.style.display = isManual ? 'none' : 'block';
+        }
+        postMessage({ action: 'setManualMode', manual: isManual });
+    };
+
+    window.updateManualPrerequisite = function () {
+        var field = document.getElementById('manualPrerequisite');
+        if (!field) { return; }
+        postMessage({ action: 'updateManualPrerequisite', prerequisite: field.value });
+    };
+
+    window.updateManualDescription = function () {
+        var field = document.getElementById('manualDescription');
+        if (!field) { return; }
+        postMessage({ action: 'updateManualDescription', description: field.value });
+    };
+
+    window.updateManualSteps = function () {
+        var field = document.getElementById('manualSteps');
+        if (!field) { return; }
+        postMessage({ action: 'updateManualSteps', steps: field.value });
+    };
+
     function notifyNativeLog(message) {
         if (!message) {
             return;
