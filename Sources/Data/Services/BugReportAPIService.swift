@@ -166,6 +166,8 @@ final class BugReportAPIService: BugReportProtocol {
     config.timeoutIntervalForRequest = 5 * 60
     config.timeoutIntervalForResource = 5 * 60
         self.session = URLSession(configuration: config)
+        // Expose configuration for tests (kept internal)
+        self.sessionConfigurationForTests = config
 
         self.jsonEncoder = JSONEncoder()
         self.jsonEncoder.dateEncodingStrategy = .iso8601
@@ -182,6 +184,26 @@ final class BugReportAPIService: BugReportProtocol {
             }
             self.screenSize = resolved
         }
+    }
+
+    // MARK: - Testing helpers
+    // Expose internal values for unit tests without changing public API
+    private let sessionConfigurationForTests: URLSessionConfiguration?
+
+    /// Returns encoded JSON payload for a report (used by unit tests)
+    internal func makeEncodedPayload(for report: BugReport, gitLabCredentials: GitLabCredentials?) throws -> Data {
+        var attachmentsPayload: [AttachmentPayload] = []
+        // We don't process attachments here; keep empty for unit test encoding
+        let payload = BugReportPayload(report: report, attachments: attachmentsPayload, gitLabCredentials: gitLabCredentials)
+        return try jsonEncoder.encode(payload)
+    }
+
+    internal var testTimeoutIntervalForRequest: TimeInterval? {
+        return sessionConfigurationForTests?.timeoutIntervalForRequest
+    }
+
+    internal var testTimeoutIntervalForResource: TimeInterval? {
+        return sessionConfigurationForTests?.timeoutIntervalForResource
     }
 
     func resetGitLabSession() {

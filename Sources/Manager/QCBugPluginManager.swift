@@ -94,6 +94,18 @@ final class QCBugPluginManager: NSObject {
     private var submissionTimeoutWorkItem: DispatchWorkItem?
     private weak var recordingPreviewPresenter: UIViewController?
 
+    // MARK: - Testing helpers
+    /// Test helper to directly invoke confirmation flow (fallback path)
+    internal func test_invokeShowRecordingConfirmationFallback(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
+        // Force fallback behavior by clearing any presenter
+        self.recordingPreviewPresenter = nil
+        self.showRecordingConfirmation(recordingURL: recordingURL, completion: completion)
+    }
+
+    internal func test_getSessionMediaCount() -> Int {
+        return sessionMediaAttachments.count
+    }
+
     // MARK: - Delegate
     weak var delegate: QCBugPluginDelegate?
     
@@ -429,7 +441,9 @@ final class QCBugPluginManager: NSObject {
 
     private func showRecordingConfirmation(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
         print("🎬 QCBugPlugin: Showing recording confirmation dialog")
-
+        // Prefer using the original presenter that presented the preview (stable),
+        // otherwise fallback to the bug report VC or top VC. If none are available,
+        // auto-add the recording to the session.
         guard let presenter = resolveRecordingConfirmationPresenter() else {
             print("⚠️ QCBugPlugin: No top view controller, auto-adding recording")
             // Fallback: auto-add if no presenter found
@@ -439,6 +453,13 @@ final class QCBugPluginManager: NSObject {
         }
 
         print("📱 QCBugPlugin: Presenting recording confirmation alert on \(type(of: presenter))")
+
+        // Ensure floating UI is visible and on top while the confirmation is presented
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.floatingActionButtons?.isHidden = false
+            self.bringFloatingButtonsToFront()
+        }
 
         let alert = UIAlertController(
             title: "Add Recording",
@@ -466,10 +487,32 @@ final class QCBugPluginManager: NSObject {
             self?.addRecordingToSession(recordingURL: recordingURL, completion: completion)
         })
 
-        presenter.present(alert, animated: true) {
-            print("✅ QCBugPlugin: Recording confirmation alert presented")
+        // Present the alert on the stable presenter. If the presenter is currently
+        // in the process of being dismissed, presenting from it can fail. In that
+        // case, fall back to the top view controller.
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            let stablePresenter: UIViewController
+            if presenter.viewIfLoaded?.window != nil {
+                stablePresenter = presenter
+            } else if let bugVC = self.sessionBugReportViewController, bugVC.viewIfLoaded?.window != nil {
+                stablePresenter = bugVC
+            } else if let top = UIApplication.shared.topViewController() {
+                stablePresenter = top
+            } else {
+                // Last resort: auto-add
+                print("⚠️ QCBugPlugin: No stable presenter available; auto-adding recording")
+                self.recordingPreviewPresenter = nil
+                self.addRecordingToSession(recordingURL: recordingURL, completion: completion)
+                return
+            }
+
+            stablePresenter.present(alert, animated: true) {
+                print("✅ QCBugPlugin: Recording confirmation alert presented")
+            }
+            // Clear stored presenter reference now that we've used it
+            self.recordingPreviewPresenter = nil
         }
-        recordingPreviewPresenter = nil
     }
 
     private func addRecordingToSession(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
@@ -948,7 +991,7 @@ final class QCBugPluginManager: NSObject {
                 print("🔧 QCBugPlugin: Evaluating floating UI - keeping hidden (\(reason))")
                 self.floatingActionButtons?.isHidden = true
                 self.internalShakeWindow?.isHidden = true
-                if retryCount < 5 {
+                if retryCount < 10 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
                         self?.evaluateFloatingUIVisibility(retryCount: retryCount + 1)
                     }
@@ -963,7 +1006,7 @@ final class QCBugPluginManager: NSObject {
                 print("🔧 QCBugPlugin: Floating UI should hide (\(reason)) - scheduling retry")
                 self.floatingActionButtons?.isHidden = true
                 self.internalShakeWindow?.isHidden = true
-                if retryCount < 5 {
+                if retryCount < 10 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                         self?.evaluateFloatingUIVisibility(retryCount: retryCount + 1)
                     }
