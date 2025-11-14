@@ -48,7 +48,7 @@ final class QCBugPluginTests: XCTestCase {
     }
 
     func testRecordingConfirmationFallbackAddsRecording() throws {
-        let manager = QCBugPluginManager()
+        let manager = QCBugPluginManager.shared
 
         // Create temporary dummy recording file
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())

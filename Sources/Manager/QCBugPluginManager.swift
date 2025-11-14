@@ -991,8 +991,15 @@ final class QCBugPluginManager: NSObject {
                 print("🔧 QCBugPlugin: Evaluating floating UI - keeping hidden (\(reason))")
                 self.floatingActionButtons?.isHidden = true
                 self.internalShakeWindow?.isHidden = true
-                if retryCount < 10 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+
+                // Exponential backoff for retries: start small, grow up to a cap
+                let maxRetries = 12
+                if retryCount < maxRetries {
+                    let baseDelay: Double = 0.12
+                    let multiplier: Double = 1.6
+                    let delay = min(baseDelay * pow(multiplier, Double(retryCount)), 1.5)
+                    print("🔁 QCBugPlugin: retrying floating UI visibility in \(String(format: "%.2fs", delay)) (attempt \(retryCount + 1)/\(maxRetries))")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                         self?.evaluateFloatingUIVisibility(retryCount: retryCount + 1)
                     }
                 }
@@ -1006,8 +1013,13 @@ final class QCBugPluginManager: NSObject {
                 print("🔧 QCBugPlugin: Floating UI should hide (\(reason)) - scheduling retry")
                 self.floatingActionButtons?.isHidden = true
                 self.internalShakeWindow?.isHidden = true
-                if retryCount < 10 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                let maxRetries = 12
+                if retryCount < maxRetries {
+                    let baseDelay: Double = 0.12
+                    let multiplier: Double = 1.6
+                    let delay = min(baseDelay * pow(multiplier, Double(retryCount)), 1.5)
+                    print("🔁 QCBugPlugin: scheduled retry in \(String(format: "%.2fs", delay)) (attempt \(retryCount + 1)/\(maxRetries))")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                         self?.evaluateFloatingUIVisibility(retryCount: retryCount + 1)
                     }
                 }

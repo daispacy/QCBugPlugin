@@ -52,3 +52,4 @@ claude-flow
 # Removed Windows wrapper files per user request
 hive-mind-prompt-*.txt
 .swiftpm/xcode/xcuserdata/homac34.xcuserdatad/xcdebugger/Breakpoints_v2.xcbkptlist
+DerivedData/*
