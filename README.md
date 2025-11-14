@@ -311,6 +311,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+Note: feature branch `feature/ui-agent-builder` contains UI improvements for recording preview handling and floating UI backoff timing. See tests for details.
+
 ## License
 
 QCBugPlugin is available under the MIT license. See the [LICENSE](LICENSE) file for more info.
