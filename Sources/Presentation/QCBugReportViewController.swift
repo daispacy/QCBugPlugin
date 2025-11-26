@@ -306,14 +306,14 @@ final class QCBugReportViewController: UIViewController {
             shouldSubmitAfterGitLabLogin = true
         }
 
-        emitGitLabState(
-            token: gitLabJWT,
-            header: gitLabJWT.map { "Bearer \($0)" },
-            username: gitLabUsername,
-            requiresLogin: false,
-            isLoading: true,
-            error: nil
-        )
+        // emitGitLabState(
+        //     token: gitLabJWT,
+        //     header: gitLabJWT.map { "Bearer \($0)" },
+        //     username: gitLabUsername,
+        //     requiresLogin: false,
+        //     isLoading: true,
+        //     error: nil
+        // )
 
         provider.authenticateInteractively(from: self) { [weak self] result in
             guard let self = self else { return }
