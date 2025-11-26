@@ -46,29 +46,55 @@
     }
 
     // Mode handlers (LLM vs Manual)
-    function validateManualFields() {
+    function validateFields() {
         var modeManual = document.getElementById('modeManual');
         var isManual = !!(modeManual && modeManual.checked);
-        var desc = document.getElementById('manualDescription');
-        var steps = document.getElementById('manualSteps');
-        if (!isManual) {
-            if (desc) { desc.classList.remove('invalid'); }
+
+        if (isManual) {
+            // Manual mode: validate What, Steps, Expected
+            var what = document.getElementById('manualWhat');
+            var steps = document.getElementById('manualSteps');
+            var expected = document.getElementById('manualExpected');
+            var bugDesc = document.getElementById('bugDescription');
+
+            // Clear LLM validation
+            if (bugDesc) { bugDesc.classList.remove('invalid'); }
+
+            // Validate manual fields
+            if (what) {
+                var whatOk = what.value && what.value.trim().length > 0;
+                what.classList.toggle('invalid', !whatOk);
+            }
+            if (steps) {
+                var stepsOk = steps.value && steps.value.trim().length > 0;
+                steps.classList.toggle('invalid', !stepsOk);
+            }
+            if (expected) {
+                var expectedOk = expected.value && expected.value.trim().length > 0;
+                expected.classList.toggle('invalid', !expectedOk);
+            }
+        } else {
+            // LLM mode: validate Description
+            var bugDesc = document.getElementById('bugDescription');
+            var what = document.getElementById('manualWhat');
+            var steps = document.getElementById('manualSteps');
+            var expected = document.getElementById('manualExpected');
+
+            // Clear manual validation
+            if (what) { what.classList.remove('invalid'); }
             if (steps) { steps.classList.remove('invalid'); }
-            return;
-        }
-        if (desc) {
-            var ok = desc.value && desc.value.trim().length > 0;
-            desc.classList.toggle('invalid', !ok);
-        }
-        if (steps) {
-            var ok2 = steps.value && steps.value.trim().length > 0;
-            steps.classList.toggle('invalid', !ok2);
+            if (expected) { expected.classList.remove('invalid'); }
+
+            // Validate LLM description
+            if (bugDesc) {
+                var descOk = bugDesc.value && bugDesc.value.trim().length > 0;
+                bugDesc.classList.toggle('invalid', !descOk);
+            }
         }
     }
 
     window.setMode = function (mode) {
         var manualFields = document.getElementById('manualFields');
-        var mainDesc = document.getElementById('bugDescription');
         var isManual = mode === 'manual';
         if (manualFields) {
             if (isManual) {
@@ -77,11 +103,8 @@
                 manualFields.classList.remove('expanded');
             }
         }
-        if (mainDesc) {
-            mainDesc.style.display = isManual ? 'none' : 'block';
-        }
         postMessage({ action: 'setMode', mode: mode });
-        validateManualFields();
+        validateFields();
     };
 
     window.setInitialMode = function (mode) {
@@ -91,7 +114,6 @@
         if (modeManual) { modeManual.checked = (mode === 'manual'); }
         // Reflect UI without posting back to native
         var manualFields = document.getElementById('manualFields');
-        var mainDesc = document.getElementById('bugDescription');
         var isManual = mode === 'manual';
         if (manualFields) {
             if (isManual) {
@@ -100,30 +122,28 @@
                 manualFields.classList.remove('expanded');
             }
         }
-        if (mainDesc) {
-            mainDesc.style.display = isManual ? 'none' : 'block';
-        }
-        validateManualFields();
+        validateFields();
     };
 
-    window.updateManualPrerequisite = function () {
-        var field = document.getElementById('manualPrerequisite');
+    window.updateManualWhat = function () {
+        var field = document.getElementById('manualWhat');
         if (!field) { return; }
-        postMessage({ action: 'updateManualPrerequisite', prerequisite: field.value });
-    };
-
-    window.updateManualDescription = function () {
-        var field = document.getElementById('manualDescription');
-        if (!field) { return; }
-        postMessage({ action: 'updateManualDescription', description: field.value });
-        validateManualFields();
+        postMessage({ action: 'updateManualWhat', what: field.value });
+        validateFields();
     };
 
     window.updateManualSteps = function () {
         var field = document.getElementById('manualSteps');
         if (!field) { return; }
         postMessage({ action: 'updateManualSteps', steps: field.value });
-        validateManualFields();
+        validateFields();
+    };
+
+    window.updateManualExpected = function () {
+        var field = document.getElementById('manualExpected');
+        if (!field) { return; }
+        postMessage({ action: 'updateManualExpected', expected: field.value });
+        validateFields();
     };
 
     function notifyNativeLog(message) {
@@ -736,6 +756,7 @@
             action: 'updateDescription',
             description: field.value
         });
+        validateFields();
     };
 
     window.updatePriority = function () {

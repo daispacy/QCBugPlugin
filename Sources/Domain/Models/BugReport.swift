@@ -94,9 +94,9 @@ struct BugReport: Codable {
     let whtype: String
     let gitLabCredentials: GitLabCredentials?
     /// Manual-mode fields entered by user when manual reporting is selected
-    let manualPrerequisite: String?
-    let manualDescription: String?
+    let manualWhat: String?
     let manualSteps: String?
+    let manualExpected: String?
 
     init(
         description: String,
@@ -117,9 +117,9 @@ struct BugReport: Codable {
         issueNumber: Int? = nil,
         whtype: String = "report_issue",
         gitLabCredentials: GitLabCredentials? = nil,
-        manualPrerequisite: String? = nil,
-        manualDescription: String? = nil,
-        manualSteps: String? = nil
+        manualWhat: String? = nil,
+        manualSteps: String? = nil,
+        manualExpected: String? = nil
     ) {
         self.id = UUID().uuidString
         self.timestamp = Date()
@@ -141,9 +141,9 @@ struct BugReport: Codable {
         self.issueNumber = issueNumber
         self.whtype = whtype
         self.gitLabCredentials = gitLabCredentials
-        self.manualPrerequisite = manualPrerequisite
-        self.manualDescription = manualDescription
+        self.manualWhat = manualWhat
         self.manualSteps = manualSteps
+        self.manualExpected = manualExpected
     }
 }
 

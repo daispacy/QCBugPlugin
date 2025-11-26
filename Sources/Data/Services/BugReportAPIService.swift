@@ -56,9 +56,9 @@ final class BugReportAPIService: BugReportProtocol {
             let assigneeUsername: String?
             let issueNumber: Int?
             let team: String
-            let manualPrerequisite: String?
-            let manualDescription: String?
+            let manualWhat: String?
             let manualSteps: String?
+            let manualExpected: String?
         }
 
         struct GitLabPayload: Encodable {
@@ -114,9 +114,9 @@ final class BugReportAPIService: BugReportProtocol {
                 assigneeUsername: report.assigneeUsername,
                     issueNumber: report.issueNumber ?? -1,
                     team: team,
-                    manualPrerequisite: report.manualPrerequisite,
-                    manualDescription: report.manualDescription,
-                    manualSteps: report.manualSteps
+                    manualWhat: report.manualWhat,
+                    manualSteps: report.manualSteps,
+                    manualExpected: report.manualExpected
             )
             self.attachments = attachments
             self.metadata = gitLabCredentials.map { MetadataPayload(gitlab: GitLabPayload(credentials: $0)) }

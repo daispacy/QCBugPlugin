@@ -46,9 +46,9 @@ final class QCBugReportViewController: UIViewController {
     // Bug report data
     private var bugDescription = ""
     private var isManualMode: Bool = false
-    private var manualPrerequisite: String = ""
-    private var manualShortDescription: String = ""
+    private var manualWhat: String = ""
     private var manualSteps: String = ""
+    private var manualExpected: String = ""
     private var selectedPriority: String = ""
     private var selectedStage: String = BugStage.product.rawValue
     private var webhookURL: String
@@ -270,9 +270,9 @@ final class QCBugReportViewController: UIViewController {
             assigneeUsername: selectedAssigneeUsername,
             issueNumber: issueNumber,
             gitLabCredentials: gitLabCredentials,
-            manualPrerequisite: isManualMode ? manualPrerequisite : nil,
-            manualDescription: isManualMode ? manualShortDescription : nil,
-            manualSteps: isManualMode ? manualSteps : nil
+            manualWhat: isManualMode ? manualWhat : nil,
+            manualSteps: isManualMode ? manualSteps : nil,
+            manualExpected: isManualMode ? manualExpected : nil
         )
     }
 
@@ -677,16 +677,16 @@ extension QCBugReportViewController: WKScriptMessageHandler {
                 }
                 updateSubmitButtonState()
 
-            case "updateManualPrerequisite":
-                manualPrerequisite = data["prerequisite"] as? String ?? ""
-                updateSubmitButtonState()
-
-            case "updateManualDescription":
-                manualShortDescription = data["description"] as? String ?? ""
+            case "updateManualWhat":
+                manualWhat = data["what"] as? String ?? ""
                 updateSubmitButtonState()
 
             case "updateManualSteps":
                 manualSteps = data["steps"] as? String ?? ""
+                updateSubmitButtonState()
+
+            case "updateManualExpected":
+                manualExpected = data["expected"] as? String ?? ""
                 updateSubmitButtonState()
         case "deleteMediaAttachment":
             if let fileURL = data["fileURL"] as? String {
@@ -719,9 +719,10 @@ extension QCBugReportViewController: WKScriptMessageHandler {
     private func updateSubmitButtonState() {
         let enabled: Bool
         if isManualMode {
-            let descOk = !manualShortDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let whatOk = !manualWhat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             let stepsOk = !manualSteps.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            enabled = descOk && stepsOk
+            let expectedOk = !manualExpected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            enabled = whatOk && stepsOk && expectedOk
         } else {
             enabled = !bugDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
@@ -788,15 +789,15 @@ extension QCBugReportViewController: WKNavigationDelegate {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
         let issueNumberString = issueNumber.map(String.init) ?? ""
-        let escapedManualPrerequisite = manualPrerequisite
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "'", with: "\\'")
-            .replacingOccurrences(of: "\n", with: "\\n")
-        let escapedManualShortDescription = manualShortDescription
+        let escapedManualWhat = manualWhat
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
             .replacingOccurrences(of: "\n", with: "\\n")
         let escapedManualSteps = manualSteps
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        let escapedManualExpected = manualExpected
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
             .replacingOccurrences(of: "\n", with: "\\n")
@@ -816,17 +817,17 @@ extension QCBugReportViewController: WKNavigationDelegate {
             if (typeof setInitialIssueNumber === 'function') { setInitialIssueNumber('\(issueNumberString)'); }
             if (typeof setInitialMode === 'function') { setInitialMode('\(isManualMode ? "manual" : "llm")'); }
             // Populate manual fields if present
-            const mp = document.getElementById('manualPrerequisite');
-            if (mp) { mp.value = '\(escapedManualPrerequisite)'; }
-            const md = document.getElementById('manualDescription');
-            if (md) { md.value = '\(escapedManualShortDescription)'; }
+            const mw = document.getElementById('manualWhat');
+            if (mw) { mw.value = '\(escapedManualWhat)'; }
             const ms = document.getElementById('manualSteps');
             if (ms) { ms.value = '\(escapedManualSteps)'; }
+            const me = document.getElementById('manualExpected');
+            if (me) { me.value = '\(escapedManualExpected)'; }
             if (typeof updateDescription === 'function') { updateDescription(); }
             if (typeof updateWebhookURL === 'function') { updateWebhookURL(); }
-            if (typeof updateManualPrerequisite === 'function') { updateManualPrerequisite(); }
-            if (typeof updateManualDescription === 'function') { updateManualDescription(); }
+            if (typeof updateManualWhat === 'function') { updateManualWhat(); }
             if (typeof updateManualSteps === 'function') { updateManualSteps(); }
+            if (typeof updateManualExpected === 'function') { updateManualExpected(); }
         })();
         """
         webView.evaluateJavaScript(script)
