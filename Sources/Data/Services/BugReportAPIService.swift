@@ -56,6 +56,7 @@ final class BugReportAPIService: BugReportProtocol {
             let assigneeUsername: String?
             let issueNumber: Int?
             let team: String
+            let mode: String
             let manualWhat: String?
             let manualSteps: String?
             let manualExpected: String?
@@ -114,6 +115,7 @@ final class BugReportAPIService: BugReportProtocol {
                 assigneeUsername: report.assigneeUsername,
                     issueNumber: report.issueNumber ?? -1,
                     team: team,
+                    mode: report.mode,
                     manualWhat: report.manualWhat,
                     manualSteps: report.manualSteps,
                     manualExpected: report.manualExpected

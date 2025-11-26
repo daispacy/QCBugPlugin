@@ -116,6 +116,12 @@ final class QCBugReportViewController: UIViewController {
         wasExplicitlyDismissed = false
         // Clear child presentation flag once we're back on screen
         isPresentingChildController = false
+
+        // Trigger LLM support check every time view appears (if WebView is loaded)
+        if isWebViewLoaded {
+            let script = "if (typeof checkLLMSupport === 'function') { checkLLMSupport(); }"
+            webView.evaluateJavaScript(script)
+        }
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -270,6 +276,7 @@ final class QCBugReportViewController: UIViewController {
             assigneeUsername: selectedAssigneeUsername,
             issueNumber: issueNumber,
             gitLabCredentials: gitLabCredentials,
+            mode: isManualMode ? "manual" : "llm",
             manualWhat: isManualMode ? manualWhat : nil,
             manualSteps: isManualMode ? manualSteps : nil,
             manualExpected: isManualMode ? manualExpected : nil
@@ -828,6 +835,8 @@ extension QCBugReportViewController: WKNavigationDelegate {
             if (typeof updateManualWhat === 'function') { updateManualWhat(); }
             if (typeof updateManualSteps === 'function') { updateManualSteps(); }
             if (typeof updateManualExpected === 'function') { updateManualExpected(); }
+            // Trigger LLM support check after webhook URL is set
+            if (typeof checkLLMSupport === 'function') { checkLLMSupport(); }
         })();
         """
         webView.evaluateJavaScript(script)

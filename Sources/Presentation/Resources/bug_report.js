@@ -95,7 +95,11 @@
 
     window.setMode = function (mode) {
         var manualFields = document.getElementById('manualFields');
+        var descriptionField = document.getElementById('bugDescription');
+        var descriptionFieldGroup = descriptionField ? descriptionField.closest('.field-group') : null;
         var isManual = mode === 'manual';
+
+        // Show/hide manual fields
         if (manualFields) {
             if (isManual) {
                 manualFields.classList.add('expanded');
@@ -103,6 +107,12 @@
                 manualFields.classList.remove('expanded');
             }
         }
+
+        // Show/hide description field (only show in LLM mode)
+        if (descriptionFieldGroup) {
+            descriptionFieldGroup.style.display = isManual ? 'none' : 'block';
+        }
+
         postMessage({ action: 'setMode', mode: mode });
         validateFields();
     };
@@ -114,7 +124,11 @@
         if (modeManual) { modeManual.checked = (mode === 'manual'); }
         // Reflect UI without posting back to native
         var manualFields = document.getElementById('manualFields');
+        var descriptionField = document.getElementById('bugDescription');
+        var descriptionFieldGroup = descriptionField ? descriptionField.closest('.field-group') : null;
         var isManual = mode === 'manual';
+
+        // Show/hide manual fields
         if (manualFields) {
             if (isManual) {
                 manualFields.classList.add('expanded');
@@ -122,6 +136,12 @@
                 manualFields.classList.remove('expanded');
             }
         }
+
+        // Show/hide description field (only show in LLM mode)
+        if (descriptionFieldGroup) {
+            descriptionFieldGroup.style.display = isManual ? 'none' : 'block';
+        }
+
         validateFields();
     };
 
@@ -844,6 +864,8 @@
                 scheduleAssigneeFetch(true);
                 schedulePriorityFetch(true);
             }
+            // Re-check LLM support when webhook URL changes
+            checkLLMSupport();
         }
 
         if (previous === trimmed) {
@@ -1200,11 +1222,81 @@
         }
     };
 
+    // Check if LLM mode is supported via webhook health check
+    function checkLLMSupport() {
+        var webhookURL = getWebhookInputValue();
+        if (!webhookURL) {
+            // No webhook configured, force manual mode
+            forceModeToManual();
+            return;
+        }
+
+        // Send health check request with whtype=llm_supported
+        fetch(webhookURL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                whtype: 'llm_supported'
+            })
+        })
+        .then(function(response) {
+            if (response.status === 200) {
+                // LLM is supported, show mode selector
+                showModeSelector();
+            } else {
+                // LLM not supported, force manual mode
+                forceModeToManual();
+            }
+        })
+        .catch(function(error) {
+            // Network error or endpoint unavailable, force manual mode
+            notifyNativeLog('LLM support check failed: ' + error.message);
+            forceModeToManual();
+        });
+    }
+
+    function showModeSelector() {
+        var modeFieldGroup = document.querySelector('#modeLLM, #modeManual');
+        if (modeFieldGroup) {
+            var fieldGroupContainer = modeFieldGroup.closest('.field-group');
+            if (fieldGroupContainer) {
+                fieldGroupContainer.style.display = 'flex';
+            }
+        }
+    }
+
+    function forceModeToManual() {
+        // Hide the mode selector
+        var modeFieldGroup = document.querySelector('#modeLLM, #modeManual');
+        if (modeFieldGroup) {
+            var fieldGroupContainer = modeFieldGroup.closest('.field-group');
+            if (fieldGroupContainer) {
+                fieldGroupContainer.style.display = 'none';
+            }
+        }
+
+        // Force manual mode
+        var modeManual = document.getElementById('modeManual');
+        if (modeManual) {
+            modeManual.checked = true;
+        }
+        var modeLLM = document.getElementById('modeLLM');
+        if (modeLLM) {
+            modeLLM.checked = false;
+        }
+
+        // Apply manual mode UI changes
+        setMode('manual');
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         updateSystemInfo();
         updateGitLabSection();
         renderAssignControls();
         renderPriorityControls();
+        checkLLMSupport();
     });
 
     document.addEventListener('keydown', function (event) {
