@@ -1258,9 +1258,10 @@
     }
 
     function showModeSelector() {
-        var modeFieldGroup = document.querySelector('#modeLLM, #modeManual');
-        if (modeFieldGroup) {
-            var fieldGroupContainer = modeFieldGroup.closest('.field-group');
+        // Find the field-group containing the Mode radio buttons
+        var modeLLM = document.getElementById('modeLLM');
+        if (modeLLM) {
+            var fieldGroupContainer = modeLLM.closest('.field-group');
             if (fieldGroupContainer) {
                 fieldGroupContainer.style.display = 'flex';
             }
@@ -1268,10 +1269,10 @@
     }
 
     function forceModeToManual() {
-        // Hide the mode selector
-        var modeFieldGroup = document.querySelector('#modeLLM, #modeManual');
-        if (modeFieldGroup) {
-            var fieldGroupContainer = modeFieldGroup.closest('.field-group');
+        // Hide the mode selector field-group
+        var modeLLM = document.getElementById('modeLLM');
+        if (modeLLM) {
+            var fieldGroupContainer = modeLLM.closest('.field-group');
             if (fieldGroupContainer) {
                 fieldGroupContainer.style.display = 'none';
             }
@@ -1282,7 +1283,6 @@
         if (modeManual) {
             modeManual.checked = true;
         }
-        var modeLLM = document.getElementById('modeLLM');
         if (modeLLM) {
             modeLLM.checked = false;
         }
