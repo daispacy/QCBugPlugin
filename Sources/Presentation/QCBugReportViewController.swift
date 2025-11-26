@@ -306,21 +306,26 @@ final class QCBugReportViewController: UIViewController {
             shouldSubmitAfterGitLabLogin = true
         }
 
-        // emitGitLabState(
-        //     token: gitLabJWT,
-        //     header: gitLabJWT.map { "Bearer \($0)" },
-        //     username: gitLabUsername,
-        //     requiresLogin: false,
-        //     isLoading: true,
-        //     error: nil
-        // )
+        emitGitLabState(
+            token: gitLabJWT,
+            header: gitLabJWT.map { "Bearer \($0)" },
+            username: gitLabUsername,
+            requiresLogin: false,
+            isLoading: true,
+            error: nil
+        )
 
-        provider.authenticateInteractively(from: self) { [weak self] result in
-            guard let self = self else { return }
-            self.isGitLabLoginInProgress = false
+        // Delay authentication to allow WebView to finish processing JavaScript injection
+        // This prevents UI freeze when ASWebAuthenticationSession tries to present
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self, weak provider] in
+            guard let self = self, let provider = provider else { return }
 
-            switch result {
-            case .success(let authorization):
+            provider.authenticateInteractively(from: self) { [weak self] result in
+                guard let self = self else { return }
+                self.isGitLabLoginInProgress = false
+
+                switch result {
+                case .success(let authorization):
                 self.gitLabJWT = authorization.jwt
                 self.gitLabUsername = authorization.username
                 let trimmedHeader = authorization.authorizationHeader.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -392,6 +397,7 @@ final class QCBugReportViewController: UIViewController {
                         self.showGitLabAuthAlert(message: errorMessage ?? "Please sign in to GitLab to continue.")
                     }
                 }
+            }
             }
         }
     }
