@@ -539,12 +539,6 @@
         <div class="section">
             <h2>🤖 LLM or Manual</h2>
             <div class="field-group">
-                <label class="field-label" for="bugDescription">Description</label>
-                <textarea id="bugDescription" placeholder="Describe the bug you encountered..." oninput="updateDescription()"></textarea>
-                <p class="field-hint">A general description of the issue you're reporting.</p>
-            </div>
-
-            <div class="field-group">
                 <label class="field-label">Mode</label>
                 <div class="radio-group">
                     <label class="radio-option">
@@ -559,23 +553,29 @@
                 <p class="field-hint">Choose automatic LLM-generated description or provide manual inputs below.</p>
             </div>
 
+            <div class="field-group">
+                <label class="field-label" for="bugDescription">Description</label>
+                <textarea id="bugDescription" placeholder="Describe the bug you encountered..." oninput="updateDescription()"></textarea>
+                <p class="field-hint">A general description of the issue you're reporting.</p>
+            </div>
+
             <div id="manualFields" class="collapsible">
                 <div class="field-group">
-                    <label class="field-label" for="manualPrerequisite">Prerequisite</label>
-                    <textarea id="manualPrerequisite" placeholder="List any prerequisites (e.g., account state, app settings)" oninput="updateManualPrerequisite()"></textarea>
-                    <p class="field-hint">Prerequisite details for reproducing the issue.</p>
-                </div>
-
-                <div class="field-group">
-                    <label class="field-label" for="manualDescription">Description</label>
-                    <input type="text" id="manualDescription" placeholder="Short description (manual)" oninput="updateManualDescription()">
-                    <p class="field-hint">A brief summary to appear with the manual report.</p>
+                    <label class="field-label" for="manualWhat">What</label>
+                    <textarea id="manualWhat" placeholder="What happened? Describe the issue you observed" oninput="updateManualWhat()"></textarea>
+                    <p class="field-hint">Describe what you observed or what went wrong.</p>
                 </div>
 
                 <div class="field-group">
                     <label class="field-label" for="manualSteps">Steps</label>
-                    <textarea id="manualSteps" placeholder="Step 1\nStep 2\nStep 3" oninput="updateManualSteps()"></textarea>
+                    <textarea id="manualSteps" placeholder="Step 1: Open the app&#10;Step 2: Navigate to...&#10;Step 3: Tap on..." oninput="updateManualSteps()"></textarea>
                     <p class="field-hint">List the steps to reproduce the issue.</p>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label" for="manualExpected">Expected</label>
+                    <textarea id="manualExpected" placeholder="What should have happened instead?" oninput="updateManualExpected()"></textarea>
+                    <p class="field-hint">Describe the expected behavior or outcome.</p>
                 </div>
             </div>
         </div>
