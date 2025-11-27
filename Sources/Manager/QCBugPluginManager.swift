@@ -231,8 +231,9 @@ final class QCBugPluginManager: NSObject {
                 issueNumber: self.sessionIssueNumber
             )
 
-            // Hide floating buttons while bug report is presented
+            // Hide floating UI (both buttons and overlay window) while bug report is presented
             self.floatingActionButtons?.isHidden = true
+            self.overlayWindow?.isHidden = true
 
             // Present modally
             if let topViewController = UIApplication.shared.topViewController() {
@@ -436,6 +437,7 @@ final class QCBugPluginManager: NSObject {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.floatingActionButtons?.isHidden = false
+            self.overlayWindow?.isHidden = false
         }
 
         let alert = UIAlertController(
@@ -508,8 +510,9 @@ final class QCBugPluginManager: NSObject {
                 self.presentBugReport()
             }
         } else {
-            // Show floating button if bug report won't be presented or is already visible
+            // Show floating UI if bug report won't be presented or is already visible
             self.floatingActionButtons?.isHidden = false
+            self.overlayWindow?.isHidden = false
         }
 
         completion(.success(recordingURL))
@@ -992,8 +995,9 @@ final class QCBugPluginManager: NSObject {
                         self.presentBugReport()
                     }
                 } else {
-                    // Show floating button if bug report is already visible
+                    // Show floating UI if bug report is already visible
                     self.floatingActionButtons?.isHidden = false
+                    self.overlayWindow?.isHidden = false
                 }
 
                 print("🖍️ QCBugPlugin: Screenshot annotated and saved - \(annotatedURL)")
@@ -1005,8 +1009,9 @@ final class QCBugPluginManager: NSObject {
                     try? FileManager.default.removeItem(at: originalURL)
                 }
 
-                // Show floating button on cancellation/failure
+                // Show floating UI on cancellation/failure
                 self.floatingActionButtons?.isHidden = false
+                self.overlayWindow?.isHidden = false
 
                 print("❌ QCBugPlugin: Screenshot annotation failed - \(error.localizedDescription)")
                 completion(.failure(error))
@@ -1259,8 +1264,9 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
             submissionTimeoutWorkItem?.cancel()
             submissionTimeoutWorkItem = nil
             controller.dismiss(animated: true) { [weak self] in
-                // Show floating buttons after dismissal
+                // Show floating UI (both buttons and overlay window) after dismissal
                 self?.floatingActionButtons?.isHidden = false
+                self?.overlayWindow?.isHidden = false
                 self?.floatingActionButtons?.hideSubmissionProgress()
 
                 // Show error alert
@@ -1275,8 +1281,9 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
 
         // Dismiss form immediately
         controller.dismiss(animated: true) { [weak self] in
-            // Show floating buttons after dismissal
+            // Show floating UI (both buttons and overlay window) after dismissal
             self?.floatingActionButtons?.isHidden = false
+            self?.overlayWindow?.isHidden = false
         }
 
         // Submit in background
@@ -1332,8 +1339,9 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         }
 
         controller.dismiss(animated: true) { [weak self] in
-            // Show floating buttons after dismissal
+            // Show floating UI (both buttons and overlay window) after dismissal
             self?.floatingActionButtons?.isHidden = false
+            self?.overlayWindow?.isHidden = false
             self?.floatingActionButtons?.hideSubmissionProgress()
             self?.submissionTimeoutWorkItem?.cancel()
             self?.submissionTimeoutWorkItem = nil
