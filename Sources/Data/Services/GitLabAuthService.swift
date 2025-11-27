@@ -120,38 +120,21 @@ final class GitLabAuthService: GitLabAuthProviding {
         }
 
         DispatchQueue.main.async {
-            let session = ASWebAuthenticationSession(url: authorizationURL, callbackURLScheme: callbackScheme) { [weak self] callbackURL, error in
-                guard let self = self else { return }
-                self.authSession = nil
-                if #available(iOS 13.0, *) {
-                    self.presentationContextProvider = nil
+            // Use modern callback-based API for iOS 17.4+, fall back to deprecated API for older versions
+            let session: ASWebAuthenticationSession
+            if #available(iOS 17.4, *) {
+                session = ASWebAuthenticationSession(
+                    url: authorizationURL,
+                    callback: .customScheme(callbackScheme)
+                ) { [weak self] callbackURL, error in
+                    self?.handleAuthenticationCallback(callbackURL: callbackURL, error: error, redirectURI: redirectURI, completion: completion)
                 }
-
-                if let error = error {
-                    if let sessionError = error as? ASWebAuthenticationSessionError,
-                       sessionError.code == .canceledLogin {
-                        DispatchQueue.main.async {
-                            completion(.failure(.authenticationCancelled))
-                        }
-                    } else {
-                        DispatchQueue.main.async {
-                            completion(.failure(.networkError(error.localizedDescription)))
-                        }
-                    }
-                    return
-                }
-
-                guard let callbackURL = callbackURL else {
-                    DispatchQueue.main.async {
-                        completion(.failure(.invalidResponse))
-                    }
-                    return
-                }
-
-                self.processAuthenticationCallback(callbackURL, redirectURI: redirectURI) { result in
-                    DispatchQueue.main.async {
-                        completion(result)
-                    }
+            } else {
+                session = ASWebAuthenticationSession(
+                    url: authorizationURL,
+                    callbackURLScheme: callbackScheme
+                ) { [weak self] callbackURL, error in
+                    self?.handleAuthenticationCallback(callbackURL: callbackURL, error: error, redirectURI: redirectURI, completion: completion)
                 }
             }
 
@@ -175,6 +158,45 @@ final class GitLabAuthService: GitLabAuthProviding {
             }
 
             self.authSession = session
+        }
+    }
+
+    private func handleAuthenticationCallback(
+        callbackURL: URL?,
+        error: Error?,
+        redirectURI: URL,
+        completion: @escaping (Result<GitLabAuthorization, GitLabAuthError>) -> Void
+    ) {
+        self.authSession = nil
+        if #available(iOS 13.0, *) {
+            self.presentationContextProvider = nil
+        }
+
+        if let error = error {
+            if let sessionError = error as? ASWebAuthenticationSessionError,
+               sessionError.code == .canceledLogin {
+                DispatchQueue.main.async {
+                    completion(.failure(.authenticationCancelled))
+                }
+            } else {
+                DispatchQueue.main.async {
+                    completion(.failure(.networkError(error.localizedDescription)))
+                }
+            }
+            return
+        }
+
+        guard let callbackURL = callbackURL else {
+            DispatchQueue.main.async {
+                completion(.failure(.invalidResponse))
+            }
+            return
+        }
+
+        self.processAuthenticationCallback(callbackURL, redirectURI: redirectURI) { result in
+            DispatchQueue.main.async {
+                completion(result)
+            }
         }
     }
 

@@ -38,6 +38,7 @@ memory/claude-flow-data.json
 memory/sessions/*
 !memory/sessions/README.md
 memory/agents/*
+.github/agents/*.log.md
 !memory/agents/README.md
 coordination/memory_bank/*
 coordination/subtasks/*
@@ -52,3 +53,4 @@ claude-flow
 # Removed Windows wrapper files per user request
 hive-mind-prompt-*.txt
 .swiftpm/xcode/xcuserdata/homac34.xcuserdatad/xcdebugger/Breakpoints_v2.xcbkptlist
+DerivedData/*

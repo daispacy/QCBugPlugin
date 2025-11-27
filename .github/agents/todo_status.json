@@ -1,0 +1,11 @@
+{
+  "todos": [
+    {"id": 1, "title": "Plan UI agent responsibilities", "status": "completed"},
+    {"id": 2, "title": "Scaffold agent branch & PR", "status": "completed"},
+    {"id": 3, "title": "Implement native UI updates", "status": "completed"},
+    {"id": 4, "title": "Wire native-web bridge and confirmations", "status": "completed"},
+    {"id": 5, "title": "Add tests and run builds", "status": "completed"},
+    {"id": 6, "title": "Create PR & report results", "status": "completed"},
+    {"id": 7, "title": "Tweak retry/backoff timing on floating UI visibility", "status": "completed"}
+  ]
+}

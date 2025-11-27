@@ -9,21 +9,6 @@
 import Foundation
 import UIKit
 
-/// Types of deployment stages
-public enum BugStage: String, Codable {
-    case test = "test"
-    case product = "product"
-
-    public var displayName: String {
-        switch self {
-        case .test:
-            return "Test"
-        case .product:
-            return "Product"
-        }
-    }
-}
-
 /// GitLab credentials associated with a bug report submission
 struct GitLabCredentials: Codable {
     let pat: String
@@ -45,12 +30,9 @@ struct BugReport: Codable {
     
     /// Bug description provided by the user
     let description: String
-    
+
     /// Priority level of the bug
     let priority: String
-
-    /// Stage of deployment (test or product)
-    let stage: String
 
     /// Steps to reproduce (user actions history)
     let userActions: [UserAction]
@@ -93,11 +75,16 @@ struct BugReport: Codable {
 
     let whtype: String
     let gitLabCredentials: GitLabCredentials?
+    /// Mode used for bug reporting: "llm" or "manual"
+    let mode: String
+    /// Manual-mode fields entered by user when manual reporting is selected
+    let manualWhat: String?
+    let manualSteps: String?
+    let manualExpected: String?
 
     init(
         description: String,
         priority: String,
-        stage: String = BugStage.product.rawValue,
         userActions: [UserAction],
         deviceInfo: DeviceInfo,
         appInfo: AppInfo,
@@ -112,13 +99,16 @@ struct BugReport: Codable {
         assigneeUsername: String? = nil,
         issueNumber: Int? = nil,
         whtype: String = "report_issue",
-        gitLabCredentials: GitLabCredentials? = nil
+        gitLabCredentials: GitLabCredentials? = nil,
+        mode: String = "llm",
+        manualWhat: String? = nil,
+        manualSteps: String? = nil,
+        manualExpected: String? = nil
     ) {
         self.id = UUID().uuidString
         self.timestamp = Date()
         self.description = description
         self.priority = priority
-        self.stage = stage
         self.userActions = userActions
         self.deviceInfo = deviceInfo
         self.appInfo = appInfo
@@ -134,6 +124,10 @@ struct BugReport: Codable {
         self.issueNumber = issueNumber
         self.whtype = whtype
         self.gitLabCredentials = gitLabCredentials
+        self.mode = mode
+        self.manualWhat = manualWhat
+        self.manualSteps = manualSteps
+        self.manualExpected = manualExpected
     }
 }
 

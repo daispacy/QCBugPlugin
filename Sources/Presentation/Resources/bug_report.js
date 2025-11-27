@@ -19,7 +19,6 @@
             lastFetchKey: null,
             requestId: 0
         },
-        stage: 'product',
         issueNumber: '',
         gitlab: {
             isAuthenticated: false,
@@ -44,6 +43,127 @@
         }
         return field.value.trim();
     }
+
+    // Mode handlers (LLM vs Manual)
+    function validateFields() {
+        var modeManual = document.getElementById('modeManual');
+        var isManual = !!(modeManual && modeManual.checked);
+
+        if (isManual) {
+            // Manual mode: validate What, Steps, Expected
+            var what = document.getElementById('manualWhat');
+            var steps = document.getElementById('manualSteps');
+            var expected = document.getElementById('manualExpected');
+            var bugDesc = document.getElementById('bugDescription');
+
+            // Clear LLM validation
+            if (bugDesc) { bugDesc.classList.remove('invalid'); }
+
+            // Validate manual fields
+            if (what) {
+                var whatOk = what.value && what.value.trim().length > 0;
+                what.classList.toggle('invalid', !whatOk);
+            }
+            if (steps) {
+                var stepsOk = steps.value && steps.value.trim().length > 0;
+                steps.classList.toggle('invalid', !stepsOk);
+            }
+            if (expected) {
+                var expectedOk = expected.value && expected.value.trim().length > 0;
+                expected.classList.toggle('invalid', !expectedOk);
+            }
+        } else {
+            // LLM mode: validate Description
+            var bugDesc = document.getElementById('bugDescription');
+            var what = document.getElementById('manualWhat');
+            var steps = document.getElementById('manualSteps');
+            var expected = document.getElementById('manualExpected');
+
+            // Clear manual validation
+            if (what) { what.classList.remove('invalid'); }
+            if (steps) { steps.classList.remove('invalid'); }
+            if (expected) { expected.classList.remove('invalid'); }
+
+            // Validate LLM description
+            if (bugDesc) {
+                var descOk = bugDesc.value && bugDesc.value.trim().length > 0;
+                bugDesc.classList.toggle('invalid', !descOk);
+            }
+        }
+    }
+
+    window.setMode = function (mode) {
+        var manualFields = document.getElementById('manualFields');
+        var descriptionField = document.getElementById('bugDescription');
+        var descriptionFieldGroup = descriptionField ? descriptionField.closest('.field-group') : null;
+        var isManual = mode === 'manual';
+
+        // Show/hide manual fields
+        if (manualFields) {
+            if (isManual) {
+                manualFields.classList.add('expanded');
+            } else {
+                manualFields.classList.remove('expanded');
+            }
+        }
+
+        // Show/hide description field (only show in LLM mode)
+        if (descriptionFieldGroup) {
+            descriptionFieldGroup.style.display = isManual ? 'none' : 'block';
+        }
+
+        postMessage({ action: 'setMode', mode: mode });
+        validateFields();
+    };
+
+    window.setInitialMode = function (mode) {
+        var modeLLM = document.getElementById('modeLLM');
+        var modeManual = document.getElementById('modeManual');
+        if (modeLLM) { modeLLM.checked = (mode !== 'manual'); }
+        if (modeManual) { modeManual.checked = (mode === 'manual'); }
+        // Reflect UI without posting back to native
+        var manualFields = document.getElementById('manualFields');
+        var descriptionField = document.getElementById('bugDescription');
+        var descriptionFieldGroup = descriptionField ? descriptionField.closest('.field-group') : null;
+        var isManual = mode === 'manual';
+
+        // Show/hide manual fields
+        if (manualFields) {
+            if (isManual) {
+                manualFields.classList.add('expanded');
+            } else {
+                manualFields.classList.remove('expanded');
+            }
+        }
+
+        // Show/hide description field (only show in LLM mode)
+        if (descriptionFieldGroup) {
+            descriptionFieldGroup.style.display = isManual ? 'none' : 'block';
+        }
+
+        validateFields();
+    };
+
+    window.updateManualWhat = function () {
+        var field = document.getElementById('manualWhat');
+        if (!field) { return; }
+        postMessage({ action: 'updateManualWhat', what: field.value });
+        validateFields();
+    };
+
+    window.updateManualSteps = function () {
+        var field = document.getElementById('manualSteps');
+        if (!field) { return; }
+        postMessage({ action: 'updateManualSteps', steps: field.value });
+        validateFields();
+    };
+
+    window.updateManualExpected = function () {
+        var field = document.getElementById('manualExpected');
+        if (!field) { return; }
+        postMessage({ action: 'updateManualExpected', expected: field.value });
+        validateFields();
+    };
 
     function notifyNativeLog(message) {
         if (!message) {
@@ -563,9 +683,8 @@
         var logoutButton = document.getElementById('gitlabLogoutButton');
         var authState = document.getElementById('gitlabAuthState');
         var usernameLabel = document.getElementById('gitlabUsernameLabel');
-        var errorLabel = document.getElementById('gitlabError');
 
-        if (!section || !loginButton || !logoutButton || !authState || !usernameLabel || !errorLabel) {
+        if (!section || !loginButton || !logoutButton || !authState || !usernameLabel) {
             return;
         }
 
@@ -576,37 +695,33 @@
         }
 
         section.style.display = 'block';
-        loginButton.style.display = 'inline-flex';
+        loginButton.style.display = 'inline-block';
         loginButton.disabled = false;
-        loginButton.textContent = 'Log in with GitLab';
+        loginButton.textContent = 'GitLab';
 
         authState.style.display = 'none';
         logoutButton.disabled = false;
 
         if (gitlab.isLoading) {
             if (gitlab.isAuthenticated && gitlab.username) {
-                usernameLabel.textContent = '@' + gitlab.username;
+                usernameLabel.textContent = gitlab.username;
                 authState.style.display = 'flex';
                 logoutButton.disabled = true;
                 loginButton.style.display = 'none';
             } else {
                 loginButton.disabled = true;
-                loginButton.textContent = 'Opening…';
+                loginButton.textContent = 'GitLab';
             }
         } else if (gitlab.isAuthenticated) {
-            var label = gitlab.username ? ('@' + gitlab.username) : 'GitLab account';
-            usernameLabel.textContent = label;
+            usernameLabel.textContent = gitlab.username || 'Connected';
             authState.style.display = 'flex';
             loginButton.style.display = 'none';
         } else if (gitlab.requiresLogin) {
-            loginButton.style.display = 'inline-flex';
+            loginButton.style.display = 'inline-block';
         } else {
             section.style.display = 'none';
             return;
         }
-
-        errorLabel.textContent = gitlab.error ? String(gitlab.error) : '';
-        errorLabel.style.display = errorLabel.textContent ? 'block' : 'none';
     }
 
     window.triggerGitLabLogin = function () {
@@ -616,7 +731,6 @@
 
         state.gitlab.available = true;
         state.gitlab.isLoading = true;
-        state.gitlab.error = '';
         state.gitlab.requiresLogin = true;
         updateGitLabSection();
     };
@@ -627,7 +741,6 @@
         }
 
         state.gitlab.isLoading = true;
-        state.gitlab.error = '';
         state.gitlab.isAuthenticated = false;
         state.gitlab.requiresLogin = true;
         state.gitlab.username = null;
@@ -655,6 +768,7 @@
             action: 'updateDescription',
             description: field.value
         });
+        validateFields();
     };
 
     window.updatePriority = function () {
@@ -684,49 +798,6 @@
         renderPriorityControls();
     };
 
-    window.updateStage = function () {
-        var radioButtons = document.getElementsByName('stage');
-        var selectedValue = 'product';
-
-        for (var i = 0; i < radioButtons.length; i++) {
-            if (radioButtons[i].checked) {
-                selectedValue = radioButtons[i].value;
-                break;
-            }
-        }
-
-        var stage = typeof selectedValue === 'string' ? selectedValue.trim().toLowerCase() : 'product';
-        if (stage !== 'test' && stage !== 'product') {
-            stage = 'product';
-        }
-
-        state.stage = stage;
-        postMessage({
-            action: 'updateStage',
-            stage: stage
-        });
-    };
-
-    window.setInitialStage = function (value) {
-        var stage = 'product';
-        if (typeof value === 'string') {
-            var trimmed = value.trim().toLowerCase();
-            if (trimmed === 'test' || trimmed === 'product') {
-                stage = trimmed;
-            }
-        }
-        state.stage = stage;
-
-        var radioButtons = document.getElementsByName('stage');
-        for (var i = 0; i < radioButtons.length; i++) {
-            if (radioButtons[i].value === stage) {
-                radioButtons[i].checked = true;
-            } else {
-                radioButtons[i].checked = false;
-            }
-        }
-    };
-
     window.updateWebhookURL = function () {
         var trimmed = getWebhookInputValue();
         var previous = state.webhookURL;
@@ -742,6 +813,8 @@
                 scheduleAssigneeFetch(true);
                 schedulePriorityFetch(true);
             }
+            // Re-check LLM support when webhook URL changes
+            checkLLMSupport();
         }
 
         if (previous === trimmed) {
@@ -1098,11 +1171,81 @@
         }
     };
 
+    // Check if LLM mode is supported via webhook health check
+    function checkLLMSupport() {
+        var webhookURL = getWebhookInputValue();
+        if (!webhookURL) {
+            // No webhook configured, force manual mode
+            forceModeToManual();
+            return;
+        }
+
+        // Send health check request with whtype=llm_supported
+        fetch(webhookURL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                whtype: 'llm_supported'
+            })
+        })
+        .then(function(response) {
+            if (response.status === 200) {
+                // LLM is supported, show mode selector
+                showModeSelector();
+            } else {
+                // LLM not supported, force manual mode
+                forceModeToManual();
+            }
+        })
+        .catch(function(error) {
+            // Network error or endpoint unavailable, force manual mode
+            notifyNativeLog('LLM support check failed: ' + error.message);
+            forceModeToManual();
+        });
+    }
+
+    function showModeSelector() {
+        // Find the field-group containing the Mode radio buttons
+        var modeLLM = document.getElementById('modeLLM');
+        if (modeLLM) {
+            var fieldGroupContainer = modeLLM.closest('.field-group');
+            if (fieldGroupContainer) {
+                fieldGroupContainer.style.display = 'flex';
+            }
+        }
+    }
+
+    function forceModeToManual() {
+        // Hide the mode selector field-group
+        var modeLLM = document.getElementById('modeLLM');
+        if (modeLLM) {
+            var fieldGroupContainer = modeLLM.closest('.field-group');
+            if (fieldGroupContainer) {
+                fieldGroupContainer.style.display = 'none';
+            }
+        }
+
+        // Force manual mode
+        var modeManual = document.getElementById('modeManual');
+        if (modeManual) {
+            modeManual.checked = true;
+        }
+        if (modeLLM) {
+            modeLLM.checked = false;
+        }
+
+        // Apply manual mode UI changes
+        setMode('manual');
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         updateSystemInfo();
         updateGitLabSection();
         renderAssignControls();
         renderPriorityControls();
+        checkLLMSupport();
     });
 
     document.addEventListener('keydown', function (event) {

@@ -10,28 +10,6 @@ import Foundation
 import UIKit
 import QuickLook
 
-/// Internal custom window that detects shake gestures
-private class QCInternalShakeDetectingWindow: UIWindow {
-    var shakeHandler: (() -> Void)?
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        // Make sure the window doesn't intercept touches
-        isUserInteractionEnabled = false
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
-        super.motionEnded(motion, with: event)
-
-        if motion == .motionShake {
-            shakeHandler?()
-        }
-    }
-}
 
 private final class SingleAttachmentPreviewDataSource: NSObject, QLPreviewControllerDataSource {
     private let url: URL
@@ -64,7 +42,7 @@ final class QCBugPluginManager: NSObject {
     // MARK: - Private Properties
     private var configuration: QCBugPluginConfig?
     private weak var hostWindow: UIWindow?
-    private var internalShakeWindow: QCInternalShakeDetectingWindow?
+    private var overlayWindow: QCOverlayWindow?
     private var screenRecorder: ScreenRecordingProtocol?
     private var screenCapture: ScreenCaptureProtocol?
     private var bugReportService: BugReportProtocol?
@@ -78,7 +56,6 @@ final class QCBugPluginManager: NSObject {
     private var sessionBugReportViewController: QCBugReportViewController?
     private var sessionBugDescription: String = ""
     private var sessionBugPriority: String = ""
-    private var sessionBugStage: String = BugStage.product.rawValue
     private var sessionWebhookURL: String?
     private var sessionAssigneeUsername: String?
     private var sessionIssueNumber: Int?
@@ -93,6 +70,18 @@ final class QCBugPluginManager: NSObject {
     private var activePreviewMode: AttachmentPreviewMode = .none
     private var submissionTimeoutWorkItem: DispatchWorkItem?
     private weak var recordingPreviewPresenter: UIViewController?
+
+    // MARK: - Testing helpers
+    /// Test helper to directly invoke confirmation flow (fallback path)
+    internal func test_invokeShowRecordingConfirmationFallback(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
+        // Force fallback behavior by clearing any presenter
+        self.recordingPreviewPresenter = nil
+        self.showRecordingConfirmation(recordingURL: recordingURL, completion: completion)
+    }
+
+    internal func test_getSessionMediaCount() -> Int {
+        return sessionMediaAttachments.count
+    }
 
     // MARK: - Delegate
     weak var delegate: QCBugPluginDelegate?
@@ -117,8 +106,10 @@ final class QCBugPluginManager: NSObject {
         bugReportService = BugReportAPIService(
             webhookURL: webhook,
             apiKey: configuration?.apiKey,
-            gitLabAuthProvider: gitLabAuthService
+            gitLabAuthProvider: gitLabAuthService,
+            team: configuration?.team ?? "ios"
         )
+
     }
 
     // MARK: - Initialization
@@ -171,13 +162,11 @@ final class QCBugPluginManager: NSObject {
 
         refreshBugReportService()
 
-        // Setup floating action buttons and shake detection if enabled
+        // Setup overlay window with floating buttons and shake detection if enabled
         if config.enableFloatingButton {
-            setupFloatingActionButtons()
-            setupInternalShakeDetection()
+            setupOverlayWindow()
         } else {
-            teardownFloatingActionButtons()
-            teardownShakeDetection()
+            teardownOverlayWindow()
         }
 
         self.isConfigured = true
@@ -235,14 +224,14 @@ final class QCBugPluginManager: NSObject {
             bugReportVC.restoreSessionState(
                 description: self.sessionBugDescription,
                 priority: self.sessionBugPriority,
-                stage: self.sessionBugStage,
                 webhookURL: self.resolvedWebhookURL(),
                 assigneeUsername: self.sessionAssigneeUsername,
                 issueNumber: self.sessionIssueNumber
             )
 
-            // Hide floating buttons while bug report is presented
+            // Hide floating UI (both buttons and overlay window) while bug report is presented
             self.floatingActionButtons?.isHidden = true
+            self.overlayWindow?.isHidden = true
 
             // Present modally
             if let topViewController = UIApplication.shared.topViewController() {
@@ -311,20 +300,46 @@ final class QCBugPluginManager: NSObject {
             return
         }
 
-        recorder.startRecording { [weak self] result in
+        // IMPORTANT: Hide overlay window before starting capture to allow ReplayKit to see app content
+        // ReplayKit's startCapture() needs to capture the app's main window, not the overlay
+        // We'll restore the overlay shortly after capture starts so users can control recording
+        print("👻 QCBugPlugin: Temporarily hiding overlay for ReplayKit initialization")
+        overlayWindow?.isHidden = true
+
+        // Wait a moment for UI to settle before starting capture
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self = self else { return }
 
-            switch result {
-            case .success:
-                // Notify delegate
-                self.delegate?.bugPluginDidStartRecording()
-                print("🎥 QCBugPlugin: Screen recording started")
-                completion(.success(()))
+            recorder.startRecording { [weak self] result in
+                guard let self = self else { return }
 
-            case .failure(let error):
-                // Notify delegate
-                self.delegate?.bugPluginDidFailRecording(error)
-                completion(.failure(error))
+                switch result {
+                case .success:
+                    // Restore overlay window after a longer delay to allow recording to fully initialize
+                    // This gives ReplayKit more time to lock onto the app window and start receiving buffers
+                    // We increase the delay to 2 seconds to ensure capture is fully established
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                        guard let self = self else { return }
+                        self.overlayWindow?.isHidden = false
+                        self.floatingActionButtons?.isHidden = false
+                        print("👁️ QCBugPlugin: Restored overlay after recording initialized (2s delay)")
+                    }
+
+                    // Notify delegate
+                    self.delegate?.bugPluginDidStartRecording()
+                    self.floatingActionButtons?.updateRecordingState(isRecording: true)
+                    print("🎥 QCBugPlugin: Screen recording started")
+                    completion(.success(()))
+
+                case .failure(let error):
+                    // Restore overlay on failure
+                    self.overlayWindow?.isHidden = false
+                    print("👁️ QCBugPlugin: Restored overlay after recording failed")
+
+                    // Notify delegate
+                    self.delegate?.bugPluginDidFailRecording(error)
+                    completion(.failure(error))
+                }
             }
         }
     }
@@ -343,7 +358,7 @@ final class QCBugPluginManager: NSObject {
         recorder.stopRecording { [weak self] result in
             guard let self = self else { return }
 
-            // Update floating button state first
+            // Update floating button state
             self.floatingActionButtons?.updateRecordingState(isRecording: false)
 
             switch result {
@@ -429,7 +444,9 @@ final class QCBugPluginManager: NSObject {
 
     private func showRecordingConfirmation(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
         print("🎬 QCBugPlugin: Showing recording confirmation dialog")
-
+        // Prefer using the original presenter that presented the preview (stable),
+        // otherwise fallback to the bug report VC or top VC. If none are available,
+        // auto-add the recording to the session.
         guard let presenter = resolveRecordingConfirmationPresenter() else {
             print("⚠️ QCBugPlugin: No top view controller, auto-adding recording")
             // Fallback: auto-add if no presenter found
@@ -439,6 +456,13 @@ final class QCBugPluginManager: NSObject {
         }
 
         print("📱 QCBugPlugin: Presenting recording confirmation alert on \(type(of: presenter))")
+
+        // Ensure floating UI is visible while the confirmation is presented
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.floatingActionButtons?.isHidden = false
+            self.overlayWindow?.isHidden = false
+        }
 
         let alert = UIAlertController(
             title: "Add Recording",
@@ -466,10 +490,32 @@ final class QCBugPluginManager: NSObject {
             self?.addRecordingToSession(recordingURL: recordingURL, completion: completion)
         })
 
-        presenter.present(alert, animated: true) {
-            print("✅ QCBugPlugin: Recording confirmation alert presented")
+        // Present the alert on the stable presenter. If the presenter is currently
+        // in the process of being dismissed, presenting from it can fail. In that
+        // case, fall back to the top view controller.
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            let stablePresenter: UIViewController
+            if presenter.viewIfLoaded?.window != nil {
+                stablePresenter = presenter
+            } else if let bugVC = self.sessionBugReportViewController, bugVC.viewIfLoaded?.window != nil {
+                stablePresenter = bugVC
+            } else if let top = UIApplication.shared.topViewController() {
+                stablePresenter = top
+            } else {
+                // Last resort: auto-add
+                print("⚠️ QCBugPlugin: No stable presenter available; auto-adding recording")
+                self.recordingPreviewPresenter = nil
+                self.addRecordingToSession(recordingURL: recordingURL, completion: completion)
+                return
+            }
+
+            stablePresenter.present(alert, animated: true) {
+                print("✅ QCBugPlugin: Recording confirmation alert presented")
+            }
+            // Clear stored presenter reference now that we've used it
+            self.recordingPreviewPresenter = nil
         }
-        recordingPreviewPresenter = nil
     }
 
     private func addRecordingToSession(recordingURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
@@ -488,8 +534,9 @@ final class QCBugPluginManager: NSObject {
                 self.presentBugReport()
             }
         } else {
-            // Show floating button if bug report won't be presented or is already visible
+            // Show floating UI if bug report won't be presented or is already visible
             self.floatingActionButtons?.isHidden = false
+            self.overlayWindow?.isHidden = false
         }
 
         completion(.success(recordingURL))
@@ -503,30 +550,6 @@ final class QCBugPluginManager: NSObject {
             self,
             selector: #selector(appDidEnterBackground),
             name: UIApplication.didEnterBackgroundNotification,
-            object: nil
-        )
-
-        // Listen for window becoming key (handles rootViewController changes)
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(windowDidBecomeKey),
-            name: UIWindow.didBecomeKeyNotification,
-            object: nil
-        )
-
-        // Listen for window becoming visible
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(windowDidBecomeVisible),
-            name: UIWindow.didBecomeVisibleNotification,
-            object: nil
-        )
-
-        // Listen for view controller presentations (modals)
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(viewControllerDidPresent),
-            name: NSNotification.Name("UIViewControllerShowDetailTargetDidChangeNotification"),
             object: nil
         )
     }
@@ -627,83 +650,50 @@ final class QCBugPluginManager: NSObject {
         }
     }
     
-    private func setupFloatingActionButtons() {
+    // MARK: - Overlay Window Setup
+
+    private func setupOverlayWindow() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
-            // Don't setup or re-add during preview
+            // Don't setup during preview
             if self.previewDataSource != nil {
                 return
             }
 
-            // Get the key window
-            let window: UIWindow?
-            if #available(iOS 13.0, *) {
-                window = UIApplication.shared.windows.first { $0.isKeyWindow } ?? self.hostWindow
-            } else {
-                window = UIApplication.shared.keyWindow ?? self.hostWindow
-            }
-
-            guard let window = window else {
-                print("⚠️ QCBugPlugin: Cannot attach floating controls without a window.")
-                return
-            }
-
-            if let controls = self.floatingActionButtons {
-                // Only re-add if superview is different AND buttons are not hidden
-                // (Don't interfere during modal presentations like QLPreviewController)
-                if controls.superview !== window && !controls.isHidden {
-                    controls.removeFromSuperview()
-                    window.addSubview(controls)
-                    window.bringSubviewToFront(controls)
-                }
-                return
-            }
-
-            let controls = QCFloatingActionButtons()
-            controls.delegate = self
-            window.addSubview(controls)
-            window.bringSubviewToFront(controls)
-            self.floatingActionButtons = controls
-        }
-    }
-
-    private func teardownFloatingActionButtons() {
-        DispatchQueue.main.async { [weak self] in
-            self?.floatingActionButtons?.removeFromSuperview()
-            self?.floatingActionButtons = nil
-        }
-    }
-
-    // MARK: - Shake Detection
-
-    private func setupInternalShakeDetection() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-
-            // Create internal shake-detecting window if needed
-            if self.internalShakeWindow == nil {
-                let shakeWindow = QCInternalShakeDetectingWindow(frame: UIScreen.main.bounds)
-                shakeWindow.windowLevel = .normal - 1 // Behind everything
-                shakeWindow.backgroundColor = .clear // Transparent background
-                shakeWindow.isHidden = false
-                shakeWindow.rootViewController = UIViewController() // Needed for shake to work
-                shakeWindow.rootViewController?.view.backgroundColor = .clear
-                shakeWindow.shakeHandler = { [weak self] in
+            // Create overlay window if needed
+            if self.overlayWindow == nil {
+                let overlay = QCOverlayWindow(frame: UIScreen.main.bounds)
+                overlay.shakeHandler = { [weak self] in
                     self?.handleShakeGesture()
                 }
-                self.internalShakeWindow = shakeWindow
-                print("✅ QCBugPlugin: Shake detection enabled for floating button backdoor")
+                self.overlayWindow = overlay
+                print("✅ QCBugPlugin: Overlay window created")
             }
+
+            // Create or reuse floating buttons
+            if let existingButtons = self.floatingActionButtons {
+                self.overlayWindow?.attachFloatingButtons(existingButtons)
+            } else {
+                let buttons = QCFloatingActionButtons()
+                buttons.delegate = self
+                self.floatingActionButtons = buttons
+                self.overlayWindow?.attachFloatingButtons(buttons)
+            }
+
+            print("✅ QCBugPlugin: Floating UI enabled with shake detection")
         }
     }
 
-    private func teardownShakeDetection() {
+    private func teardownOverlayWindow() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.internalShakeWindow?.shakeHandler = nil
-            self.internalShakeWindow?.isHidden = true
-            self.internalShakeWindow = nil
+            self.overlayWindow?.detachFloatingButtons()
+            self.overlayWindow?.shakeHandler = nil
+            self.overlayWindow?.isHidden = true
+            self.overlayWindow = nil
+            self.floatingActionButtons = nil
+            print("🗑️ QCBugPlugin: Overlay window torn down")
         }
     }
 
@@ -770,36 +760,6 @@ final class QCBugPluginManager: NSObject {
         }
     }
 
-    @objc private func windowDidBecomeKey(_ notification: Notification) {
-        if let reason = floatingUIBlockingReason() {
-            print("🪟 QCBugPlugin: Window became key - ignoring (\(reason))")
-            return
-        }
-        print("🪟 QCBugPlugin: Window became key, preview active: \(previewDataSource != nil)")
-        // Ensure floating buttons stay on top when window becomes key
-        bringFloatingButtonsToFront()
-    }
-
-    @objc private func windowDidBecomeVisible(_ notification: Notification) {
-        if let reason = floatingUIBlockingReason() {
-            print("🪟 QCBugPlugin: Window became visible - ignoring (\(reason))")
-            return
-        }
-        print("🪟 QCBugPlugin: Window became visible, preview active: \(previewDataSource != nil)")
-        // Ensure floating buttons stay on top when window becomes visible
-        bringFloatingButtonsToFront()
-    }
-
-    @objc private func viewControllerDidPresent(_ notification: Notification) {
-        if let reason = floatingUIBlockingReason() {
-            print("🪟 QCBugPlugin: View controller presented - ignoring (\(reason))")
-            return
-        }
-        print("🪟 QCBugPlugin: View controller presented, preview active: \(previewDataSource != nil)")
-        // Ensure floating buttons stay on top when view controllers are presented
-        bringFloatingButtonsToFront()
-    }
-
     private func floatingUIBlockingReason() -> String? {
         if isFloatingUISuspended {
             return "floatingUI-suspended"
@@ -860,41 +820,6 @@ final class QCBugPluginManager: NSObject {
         return false
     }
 
-    private func bringFloatingButtonsToFront() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self,
-                  let controls = self.floatingActionButtons,
-                  let superview = controls.superview else {
-                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - no controls or superview")
-                return
-            }
-
-            // Don't manipulate if buttons are hidden (e.g., during preview)
-            if controls.isHidden {
-                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - skipped (buttons hidden)")
-                return
-            }
-
-            // Don't manipulate if a preview is active
-            if self.previewDataSource != nil {
-                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - skipped (preview active)")
-                return
-            }
-
-            if self.isFloatingUISuspended {
-                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - skipped (UI suspended)")
-                return
-            }
-
-            // Bring to front if not already the topmost subview
-            if superview.subviews.last !== controls {
-                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - bringing to front")
-                superview.bringSubviewToFront(controls)
-            } else {
-                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - already at front")
-            }
-        }
-    }
 
     private func resolveRecordingConfirmationPresenter() -> UIViewController? {
         if let presenter = recordingPreviewPresenter, presenter.viewIfLoaded?.window != nil {
@@ -918,7 +843,7 @@ final class QCBugPluginManager: NSObject {
         isFloatingUISuspended = true
         floatingActionButtons?.setSuspended(true)
         floatingActionButtons?.isHidden = true
-        internalShakeWindow?.isHidden = true
+        overlayWindow?.isHidden = true
         print("🛑 QCBugPlugin: Suspended floating UI (\(reason))")
     }
 
@@ -947,9 +872,16 @@ final class QCBugPluginManager: NSObject {
             if let reason = self.floatingUIBlockingReason() {
                 print("🔧 QCBugPlugin: Evaluating floating UI - keeping hidden (\(reason))")
                 self.floatingActionButtons?.isHidden = true
-                self.internalShakeWindow?.isHidden = true
-                if retryCount < 5 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                self.overlayWindow?.isHidden = true
+
+                // Exponential backoff for retries: start small, grow up to a cap
+                let maxRetries = 12
+                if retryCount < maxRetries {
+                    let baseDelay: Double = 0.12
+                    let multiplier: Double = 1.6
+                    let delay = min(baseDelay * pow(multiplier, Double(retryCount)), 1.5)
+                    print("🔁 QCBugPlugin: retrying floating UI visibility in \(String(format: "%.2fs", delay)) (attempt \(retryCount + 1)/\(maxRetries))")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                         self?.evaluateFloatingUIVisibility(retryCount: retryCount + 1)
                     }
                 }
@@ -957,20 +889,24 @@ final class QCBugPluginManager: NSObject {
             }
 
             self.floatingActionButtons?.isHidden = false
-            self.internalShakeWindow?.isHidden = false
+            self.overlayWindow?.isHidden = false
 
             if let reason = self.floatingUIBlockingReason() {
                 print("🔧 QCBugPlugin: Floating UI should hide (\(reason)) - scheduling retry")
                 self.floatingActionButtons?.isHidden = true
-                self.internalShakeWindow?.isHidden = true
-                if retryCount < 5 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self.overlayWindow?.isHidden = true
+                let maxRetries = 12
+                if retryCount < maxRetries {
+                    let baseDelay: Double = 0.12
+                    let multiplier: Double = 1.6
+                    let delay = min(baseDelay * pow(multiplier, Double(retryCount)), 1.5)
+                    print("🔁 QCBugPlugin: scheduled retry in \(String(format: "%.2fs", delay)) (attempt \(retryCount + 1)/\(maxRetries))")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                         self?.evaluateFloatingUIVisibility(retryCount: retryCount + 1)
                     }
                 }
             } else {
                 self.floatingActionButtons?.show(animated: false)
-                self.bringFloatingButtonsToFront()
             }
         }
     }
@@ -989,19 +925,34 @@ final class QCBugPluginManager: NSObject {
             return
         }
 
-        capture.captureScreen { [weak self] result in
+        // Hide overlay window and floating buttons before capturing to avoid including them in screenshot
+        overlayWindow?.isHidden = true
+        floatingActionButtons?.isHidden = true
+        print("👻 QCBugPlugin: Hiding overlay UI for screenshot")
+
+        // Wait a tiny moment for UI to update before capturing
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self = self else { return }
 
-            switch result {
-            case .success(let url):
-                DispatchQueue.main.async {
-                    self.presentScreenshotAnnotationEditor(screenshotURL: url, completion: completion)
-                }
+            capture.captureScreen { [weak self] result in
+                guard let self = self else { return }
 
-            case .failure(let error):
-                DispatchQueue.main.async {
-                    print("❌ QCBugPlugin: Screenshot capture failed - \(error.localizedDescription)")
-                    completion(.failure(error))
+                switch result {
+                case .success(let url):
+                    DispatchQueue.main.async {
+                        self.presentScreenshotAnnotationEditor(screenshotURL: url, completion: completion)
+                    }
+
+                case .failure(let error):
+                    // Restore overlay UI if capture failed
+                    self.overlayWindow?.isHidden = false
+                    self.floatingActionButtons?.isHidden = false
+                    print("👁️ QCBugPlugin: Restored overlay UI after capture failure")
+
+                    DispatchQueue.main.async {
+                        print("❌ QCBugPlugin: Screenshot capture failed - \(error.localizedDescription)")
+                        completion(.failure(error))
+                    }
                 }
             }
         }
@@ -1083,8 +1034,9 @@ final class QCBugPluginManager: NSObject {
                         self.presentBugReport()
                     }
                 } else {
-                    // Show floating button if bug report is already visible
+                    // Show floating UI if bug report is already visible
                     self.floatingActionButtons?.isHidden = false
+                    self.overlayWindow?.isHidden = false
                 }
 
                 print("🖍️ QCBugPlugin: Screenshot annotated and saved - \(annotatedURL)")
@@ -1096,8 +1048,9 @@ final class QCBugPluginManager: NSObject {
                     try? FileManager.default.removeItem(at: originalURL)
                 }
 
-                // Show floating button on cancellation/failure
+                // Show floating UI on cancellation/failure
                 self.floatingActionButtons?.isHidden = false
+                self.overlayWindow?.isHidden = false
 
                 print("❌ QCBugPlugin: Screenshot annotation failed - \(error.localizedDescription)")
                 completion(.failure(error))
@@ -1182,7 +1135,6 @@ final class QCBugPluginManager: NSObject {
         // Clear session UI state
         sessionBugDescription = ""
         sessionBugPriority = ""
-        sessionBugStage = BugStage.product.rawValue
         sessionWebhookURL = nil
         sessionAssigneeUsername = nil
         sessionIssueNumber = nil
@@ -1192,7 +1144,6 @@ final class QCBugPluginManager: NSObject {
             self.sessionBugReportViewController?.restoreSessionState(
                 description: "",
                 priority: "",
-                stage: BugStage.product.rawValue,
                 webhookURL: self.resolvedWebhookURL(),
                 assigneeUsername: nil,
                 issueNumber: nil
@@ -1333,7 +1284,6 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         // Capture session state before submission
         self.sessionBugDescription = report.description
         self.sessionBugPriority = report.priority
-        self.sessionBugStage = report.stage
         self.sessionAssigneeUsername = report.assigneeUsername
         self.sessionIssueNumber = report.issueNumber
         let userWebhookInput = controller.getSessionWebhookURL().trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1350,8 +1300,9 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
             submissionTimeoutWorkItem?.cancel()
             submissionTimeoutWorkItem = nil
             controller.dismiss(animated: true) { [weak self] in
-                // Show floating buttons after dismissal
+                // Show floating UI (both buttons and overlay window) after dismissal
                 self?.floatingActionButtons?.isHidden = false
+                self?.overlayWindow?.isHidden = false
                 self?.floatingActionButtons?.hideSubmissionProgress()
 
                 // Show error alert
@@ -1366,8 +1317,9 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
 
         // Dismiss form immediately
         controller.dismiss(animated: true) { [weak self] in
-            // Show floating buttons after dismissal
+            // Show floating UI (both buttons and overlay window) after dismissal
             self?.floatingActionButtons?.isHidden = false
+            self?.overlayWindow?.isHidden = false
         }
 
         // Submit in background
@@ -1412,7 +1364,6 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         // Capture session state even on cancel so it can be restored later
         self.sessionBugDescription = controller.getSessionDescription()
         self.sessionBugPriority = controller.getSessionPriority()
-        self.sessionBugStage = controller.getSessionStage()
         self.sessionAssigneeUsername = controller.getSessionAssigneeUsername()
         self.sessionIssueNumber = controller.getSessionIssueNumber()
         let userWebhookInput = controller.getSessionWebhookURL().trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1423,8 +1374,9 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         }
 
         controller.dismiss(animated: true) { [weak self] in
-            // Show floating buttons after dismissal
+            // Show floating UI (both buttons and overlay window) after dismissal
             self?.floatingActionButtons?.isHidden = false
+            self?.overlayWindow?.isHidden = false
             self?.floatingActionButtons?.hideSubmissionProgress()
             self?.submissionTimeoutWorkItem?.cancel()
             self?.submissionTimeoutWorkItem = nil

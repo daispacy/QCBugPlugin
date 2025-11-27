@@ -120,7 +120,7 @@ let gitLabConfig = GitLabAppConfig(
     appId: "your-gitlab-app-id",
     secret: "your-gitlab-secret",
     scheme: "myapp",
-    redirectURI: URL(string: "myapp://oauth/callback"),
+    redirectURI: URL(string: "myapp://oauth/callback")!,
     baseURL: URL(string: "https://gitlab.com")!,
     scopes: ["api"],
     project: "group/project-name"
@@ -133,6 +133,26 @@ let config = QCBugPluginConfig(
 
 QCBugPlugin.configure(using: window, configuration: config)
 ```
+
+**Important:** When using GitLab integration, you must register the custom URL scheme in your app's `Info.plist`:
+
+```xml
+<key>CFBundleURLTypes</key>
+<array>
+    <dict>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>CFBundleURLName</key>
+        <string>com.yourcompany.yourapp.oauth</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+            <string>myapp</string>
+        </array>
+    </dict>
+</array>
+```
+
+Replace `myapp` with the same scheme you used in `GitLabAppConfig`. This allows the OAuth callback to return to your app after authentication.
 
 ## Advanced Usage
 
@@ -277,7 +297,24 @@ Add these keys to your `Info.plist`:
 <!-- Required for microphone during screen recording (optional) -->
 <key>NSMicrophoneUsageDescription</key>
 <string>We need microphone access to record audio with screen recordings</string>
+
+<!-- Required for GitLab OAuth integration (if using GitLab features) -->
+<key>CFBundleURLTypes</key>
+<array>
+    <dict>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>CFBundleURLName</key>
+        <string>com.yourcompany.yourapp.oauth</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+            <string>yourapp</string>
+        </array>
+    </dict>
+</array>
 ```
+
+**Note:** Replace `yourapp` with your app's custom URL scheme that matches the `scheme` parameter in `GitLabAppConfig`.
 
 ## Architecture
 
@@ -310,6 +347,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+Note: feature branch `feature/ui-agent-builder` contains UI improvements for recording preview handling and floating UI backoff timing. See tests for details.
 
 ## License
 

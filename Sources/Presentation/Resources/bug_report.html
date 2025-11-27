@@ -33,7 +33,7 @@
             background: #ffffff;
             border-radius: 16px;
             padding: 20px;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08);
             border: 1px solid rgba(0, 0, 0, 0.05);
         }
@@ -41,7 +41,7 @@
         .section h2 {
             font-size: 18px;
             font-weight: 600;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
             color: #1d1d1f;
             display: flex;
             align-items: center;
@@ -87,7 +87,7 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
-            margin-bottom: 16px;
+            margin-bottom: 8px;
         }
 
         .field-label {
@@ -312,52 +312,28 @@
 
         #gitlabSection {
             display: none;
-            margin-bottom: 16px;
-            padding: 12px 14px;
-            border-radius: 12px;
-            background: #f2f4ff;
-            border: 1px solid rgba(27, 77, 216, 0.12);
-        }
-
-        .gitlab-subpanel-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            color: #1d1d1f;
-        }
-
-        .gitlab-subpanel-header span:last-child {
-            margin-left: 0;
+            margin-bottom: 12px;
+            padding: 8px 0;
         }
 
         .gitlab-row {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-top: 10px;
-        }
-
-        .gitlab-status {
-            font-size: 13px;
-            color: #1d1d1f;
-            flex: 1;
-            min-width: 190px;
+            justify-content: flex-end;
+            gap: 8px;
         }
 
         .gitlab-auth-state {
             display: none;
             align-items: center;
-            gap: 8px;
-            font-size: 13px;
-            color: #1d1d1f;
+            gap: 6px;
+            font-size: 12px;
+            color: #636366;
         }
 
         .gitlab-username {
-            font-weight: 600;
+            font-weight: 500;
+            color: #636366;
         }
 
         .gitlab-divider {
@@ -365,38 +341,40 @@
         }
 
         .gitlab-button {
-            padding: 8px 14px;
-            border-radius: 10px;
-            border: none;
-            background: #1b4dd8;
-            color: #ffffff;
-            font-size: 13px;
-            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid #d2d2d7;
+            background: #ffffff;
+            color: #636366;
+            font-size: 12px;
+            font-weight: 500;
             cursor: pointer;
-            transition: background 0.2s ease, transform 0.1s ease;
+            transition: background 0.15s ease, border-color 0.15s ease;
         }
 
         .gitlab-button--link {
             background: transparent;
-            color: #1b4dd8;
+            color: #636366;
             padding: 0;
             border: none;
             border-radius: 0;
+            font-size: 12px;
         }
 
         .gitlab-button:disabled {
-            background: #9fa7c1;
-            color: #ffffff;
+            background: #f5f5f7;
+            color: #8e8e93;
+            border-color: #d2d2d7;
             cursor: not-allowed;
-            transform: none;
         }
 
         .gitlab-button--link:disabled {
-            color: #9fa7c1;
+            color: #8e8e93;
         }
 
         .gitlab-button:not(:disabled):hover {
-            background: #275eff;
+            background: #f5f5f7;
+            border-color: #636366;
         }
 
         .gitlab-button--link:not(:disabled):hover {
@@ -412,17 +390,20 @@
             transform: none;
         }
 
-        .gitlab-error {
-            margin-top: 8px;
-            font-size: 12px;
-            color: #d70015;
-            display: none;
+        /* Collapsible animation for manual fields */
+        .collapsible {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 280ms cubic-bezier(0.2, 0, 0, 1);
         }
 
-        .gitlab-hint {
-            font-size: 12px;
-            margin-top: 6px;
-            color: #4a4a4f;
+        .collapsible.expanded {
+            max-height: 800px; /* large enough to show content */
+        }
+
+        .invalid {
+            border-color: #d70015 !important;
+            box-shadow: 0 0 0 3px rgba(215, 0, 21, 0.06);
         }
 
         .info-grid {
@@ -480,21 +461,15 @@
     <div class="container">
         <div class="section">
             <h2>📝 Bug Description</h2>
-            <div class="gitlab-subpanel" id="gitlabSection">
-                <div class="gitlab-subpanel-header">
-                    <span>🔐</span>
-                    <span>GitLab</span>
-                </div>
+            <div id="gitlabSection">
                 <div class="gitlab-row">
                     <div class="gitlab-auth-state" id="gitlabAuthState">
                         <span class="gitlab-username" id="gitlabUsernameLabel">@username</span>
                         <span class="gitlab-divider">|</span>
                         <button type="button" id="gitlabLogoutButton" class="gitlab-button gitlab-button--link" onclick="logoutGitLab()">Logout</button>
                     </div>
-                    <button type="button" id="gitlabLoginButton" class="gitlab-button" onclick="triggerGitLabLogin()">Log in with GitLab</button>
+                    <button type="button" id="gitlabLoginButton" class="gitlab-button" onclick="triggerGitLabLogin()">GitLab</button>
                 </div>
-                <div class="gitlab-error" id="gitlabError"></div>
-                <p class="field-hint gitlab-hint">Connect your GitLab account to include project metadata with this report.</p>
             </div>
                 <div class="field-group">
                     <label class="field-label" for="assigneeSelect">Assign</label>
@@ -504,21 +479,64 @@
                     <div class="assign-status" id="assignStatus"></div>
                 </div>
                 <div class="field-group">
-                    <label class="field-label" for="issueNumberInput">Issue Number</label>
+                    <label class="field-label" for="issueNumberInput">Parent Issue</label>
                     <input
                         type="text"
                         id="issueNumberInput"
                         inputmode="numeric"
                         pattern="[0-9]*"
-                        placeholder="Link an existing issue number"
+                        placeholder="Liên kết số issue đã tồn tại"
                         oninput="updateIssueNumber()"
                         autocomplete="off"
                         autocapitalize="none"
                         spellcheck="false"
                     >
-                    <p class="field-hint">Optional: reference a ticket or issue from your tracker.</p>
+                    <p class="field-hint">Nếu có giá trị, sẽ tạo task con cho issue này. Để trống sẽ tạo issue mới.</p>
                 </div>
-            <textarea id="bugDescription" placeholder="Describe the bug you encountered..." oninput="updateDescription()"></textarea>
+        </div>
+
+        <div class="section">
+            <h2>🤖 LLM or Manual</h2>
+            <div class="field-group">
+                <label class="field-label">Mode</label>
+                <div class="radio-group">
+                    <label class="radio-option">
+                        <input type="radio" name="mode" id="modeLLM" value="llm" checked onchange="setMode('llm')">
+                        <span class="radio-label">Use LLM</span>
+                    </label>
+                    <label class="radio-option">
+                        <input type="radio" name="mode" id="modeManual" value="manual" onchange="setMode('manual')">
+                        <span class="radio-label">Manual</span>
+                    </label>
+                </div>
+                <p class="field-hint">Chọn mô tả tự động bằng LLM hoặc nhập thủ công bên dưới.</p>
+            </div>
+
+            <div class="field-group">
+                <label class="field-label" for="bugDescription">Description</label>
+                <textarea id="bugDescription" placeholder="Mô tả lỗi bạn gặp phải..." oninput="updateDescription()"></textarea>
+                <p class="field-hint">Mô tả chung về vấn đề bạn đang báo cáo.</p>
+            </div>
+
+            <div id="manualFields" class="collapsible">
+                <div class="field-group">
+                    <label class="field-label" for="manualWhat">What</label>
+                    <textarea id="manualWhat" placeholder="Điều gì đã xảy ra? Mô tả vấn đề bạn quan sát được" oninput="updateManualWhat()"></textarea>
+                    <p class="field-hint">Mô tả những gì bạn quan sát được hoặc điều gì đã xảy ra sai.</p>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label" for="manualSteps">Steps</label>
+                    <textarea id="manualSteps" placeholder="Bước 1: Mở ứng dụng&#10;Bước 2: Điều hướng đến...&#10;Bước 3: Nhấn vào..." oninput="updateManualSteps()"></textarea>
+                    <p class="field-hint">Liệt kê các bước để tái hiện vấn đề.</p>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label" for="manualExpected">Expected</label>
+                    <textarea id="manualExpected" placeholder="Điều gì lẽ ra phải xảy ra?" oninput="updateManualExpected()"></textarea>
+                    <p class="field-hint">Mô tả hành vi hoặc kết quả mong đợi.</p>
+                </div>
+            </div>
         </div>
 
         <div class="section">
@@ -538,36 +556,18 @@
         </div>
 
         <div class="section">
-            <h2>🔧 Development Settings</h2>
-            <div class="field-group">
-                <label class="field-label">Test Environment</label>
-                <div class="radio-group">
-                    <label class="radio-option">
-                        <input type="radio" name="stage" value="product" checked onchange="updateStage()">
-                        <span class="radio-label">Product</span>
-                    </label>
-                    <label class="radio-option">
-                        <input type="radio" name="stage" value="test" onchange="updateStage()">
-                        <span class="radio-label">Test</span>
-                    </label>
-                </div>
-                <p class="field-hint">For development/testing only: Select which environment you're testing in (not related to app lifecycle stage).</p>
-            </div>
-        </div>
-
-        <div class="section">
             <h2>🔗 Webhook URL</h2>
             <input
                 type="url"
                 id="webhookURL"
-                placeholder="https://your-webhook-endpoint"
+                placeholder="https://webhook-endpoint-của-bạn"
                 oninput="updateWebhookURL()"
                 inputmode="url"
                 autocomplete="off"
                 autocapitalize="none"
                 spellcheck="false"
             >
-            <p class="field-hint">Bug reports are sent to this endpoint. Leave blank to use the default webhook.</p>
+            <p class="field-hint">Báo cáo lỗi sẽ được gửi đến địa chỉ này. Để trống để sử dụng webhook mặc định.</p>
         </div>
     </div>
 

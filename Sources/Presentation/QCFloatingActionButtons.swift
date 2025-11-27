@@ -37,7 +37,6 @@ final class QCFloatingActionButtons: UIView {
     private var lastLocation: CGPoint = .zero
     private let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
     private var keyboardHeight: CGFloat = 0
-    private var zOrderMonitorTimer: Timer?
     private var isSuspended = false
 
     // MARK: - Initialization
@@ -63,22 +62,13 @@ final class QCFloatingActionButtons: UIView {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
-        stopZOrderMonitoring()
     }
 
     // MARK: - Lifecycle Overrides
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-
-        if window != nil {
-            bringToFront()
-            if !isSuspended {
-                startZOrderMonitoring()
-            }
-        } else {
-            stopZOrderMonitoring()
-        }
+        // Window attachment handled by QCOverlayWindow
     }
 
     // MARK: - Setup
@@ -266,39 +256,6 @@ final class QCFloatingActionButtons: UIView {
             name: UIResponder.keyboardWillHideNotification,
             object: nil
         )
-
-        // Window hierarchy changes
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleWindowDidBecomeVisible),
-            name: UIWindow.didBecomeVisibleNotification,
-            object: nil
-        )
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleWindowDidBecomeKey),
-            name: UIWindow.didBecomeKeyNotification,
-            object: nil
-        )
-
-        // Screen bounds changes (for split screen, etc.)
-        if #available(iOS 13.0, *) {
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(handleSceneDidActivate),
-                name: UIScene.didActivateNotification,
-                object: nil
-            )
-        }
-
-        // Application state changes
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleApplicationDidBecomeActive),
-            name: UIApplication.didBecomeActiveNotification,
-            object: nil
-        )
     }
 
     private func positionView() {
@@ -369,109 +326,10 @@ final class QCFloatingActionButtons: UIView {
         }
     }
 
-    @objc private func handleSceneDidActivate() {
-        ensureVisibleWithinBounds(animated: true)
-    }
-
-    @objc private func handleApplicationDidBecomeActive() {
-        ensureVisibleWithinBounds(animated: true)
-        bringToFront()
-    }
-
-    @objc private func handleWindowDidBecomeVisible() {
-        ensureProperWindowAttachment()
-    }
-
-    @objc private func handleWindowDidBecomeKey() {
-        ensureProperWindowAttachment()
-    }
-
     // MARK: - Visibility Management
 
-    /// Ensures the button is attached to the correct window and brought to front
-    private func ensureProperWindowAttachment() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            guard !self.isSuspended else { return }
-            guard !self.isHidden else { return }
-
-            let keyWindow: UIWindow?
-            if #available(iOS 13.0, *) {
-                keyWindow = UIApplication.shared.windows.first { $0.isKeyWindow }
-            } else {
-                keyWindow = UIApplication.shared.keyWindow
-            }
-
-            guard let window = keyWindow else { return }
-
-            // Re-attach to key window if needed
-            if self.superview !== window {
-                self.removeFromSuperview()
-                window.addSubview(self)
-                self.positionView()
-            }
-
-            // Always bring to front
-            self.bringToFront()
-        }
-    }
-
-    /// Brings the button to the front of its superview
-    private func bringToFront() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.superview?.bringSubviewToFront(self)
-        }
-    }
-
-    /// Starts monitoring z-order to ensure button stays on top
-    private func startZOrderMonitoring() {
-        guard !isSuspended else { return }
-        // Stop any existing timer
-        stopZOrderMonitoring()
-
-        // Create a timer that fires every 0.5 seconds
-        zOrderMonitorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            self?.ensureOnTop()
-        }
-
-        // Also add to RunLoop for common modes to ensure it fires during UI interactions
-        if let timer = zOrderMonitorTimer {
-            RunLoop.main.add(timer, forMode: .common)
-        }
-    }
-
-    /// Stops z-order monitoring
-    private func stopZOrderMonitoring() {
-        zOrderMonitorTimer?.invalidate()
-        zOrderMonitorTimer = nil
-    }
-
-    /// Ensures the button is the topmost subview
-    private func ensureOnTop() {
-        guard !isSuspended,
-              !isHidden,
-              let superview = superview,
-              superview.subviews.last !== self else {
-            return
-        }
-
-        // Bring to front if not already the topmost subview
-        superview.bringSubviewToFront(self)
-    }
-
     func setSuspended(_ suspended: Bool) {
-        guard isSuspended != suspended else { return }
         isSuspended = suspended
-
-        if suspended {
-            stopZOrderMonitoring()
-        } else {
-            if window != nil {
-                startZOrderMonitoring()
-                ensureProperWindowAttachment()
-            }
-        }
     }
 
     /// Ensures the floating button stays within visible screen bounds
@@ -886,22 +744,10 @@ final class QCFloatingActionButtons: UIView {
     }
 
     func show(animated: Bool = true) {
-        let window: UIWindow?
-        if #available(iOS 13.0, *) {
-            window = UIApplication.shared.windows.first { $0.isKeyWindow } ?? UIApplication.shared.windows.first
-        } else {
-            window = UIApplication.shared.keyWindow ?? UIApplication.shared.windows.first
-        }
-
-        guard let window = window else { return }
-
-        if superview == nil {
-            window.addSubview(self)
+        // Position view if needed
+        if superview != nil {
             positionView()
         }
-
-        // Ensure button is on top
-        bringToFront()
 
         if animated {
             alpha = 0

@@ -45,8 +45,11 @@ final class QCBugReportViewController: UIViewController {
 
     // Bug report data
     private var bugDescription = ""
+    private var isManualMode: Bool = false
+    private var manualWhat: String = ""
+    private var manualSteps: String = ""
+    private var manualExpected: String = ""
     private var selectedPriority: String = ""
-    private var selectedStage: String = BugStage.product.rawValue
     private var webhookURL: String
     private var selectedAssigneeUsername: String?
     private var issueNumber: Int?
@@ -112,6 +115,12 @@ final class QCBugReportViewController: UIViewController {
         wasExplicitlyDismissed = false
         // Clear child presentation flag once we're back on screen
         isPresentingChildController = false
+
+        // Trigger LLM support check every time view appears (if WebView is loaded)
+        if isWebViewLoaded {
+            let script = "if (typeof checkLLMSupport === 'function') { checkLLMSupport(); }"
+            webView.evaluateJavaScript(script)
+        }
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -253,7 +262,6 @@ final class QCBugReportViewController: UIViewController {
         return BugReport(
             description: bugDescription,
             priority: selectedPriority,
-            stage: selectedStage,
             userActions: actionHistory,
             deviceInfo: deviceInfo,
             appInfo: appInfo,
@@ -265,7 +273,11 @@ final class QCBugReportViewController: UIViewController {
             gitLabProject: gitLabProject,
             assigneeUsername: selectedAssigneeUsername,
             issueNumber: issueNumber,
-            gitLabCredentials: gitLabCredentials
+            gitLabCredentials: gitLabCredentials,
+            mode: isManualMode ? "manual" : "llm",
+            manualWhat: isManualMode ? manualWhat : nil,
+            manualSteps: isManualMode ? manualSteps : nil,
+            manualExpected: isManualMode ? manualExpected : nil
         )
     }
 
@@ -308,12 +320,17 @@ final class QCBugReportViewController: UIViewController {
             error: nil
         )
 
-        provider.authenticateInteractively(from: self) { [weak self] result in
-            guard let self = self else { return }
-            self.isGitLabLoginInProgress = false
+        // Delay authentication to allow WebView to finish processing JavaScript injection
+        // This prevents UI freeze when ASWebAuthenticationSession tries to present
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self, weak provider] in
+            guard let self = self, let provider = provider else { return }
 
-            switch result {
-            case .success(let authorization):
+            provider.authenticateInteractively(from: self) { [weak self] result in
+                guard let self = self else { return }
+                self.isGitLabLoginInProgress = false
+
+                switch result {
+                case .success(let authorization):
                 self.gitLabJWT = authorization.jwt
                 self.gitLabUsername = authorization.username
                 let trimmedHeader = authorization.authorizationHeader.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -385,6 +402,7 @@ final class QCBugReportViewController: UIViewController {
                         self.showGitLabAuthAlert(message: errorMessage ?? "Please sign in to GitLab to continue.")
                     }
                 }
+            }
             }
         }
     }
@@ -537,14 +555,12 @@ final class QCBugReportViewController: UIViewController {
     internal func restoreSessionState(
         description: String,
         priority: String,
-        stage: String? = nil,
         webhookURL: String? = nil,
         assigneeUsername: String? = nil,
         issueNumber: Int? = nil
     ) {
         bugDescription = description
         selectedPriority = priority
-        selectedStage = stage ?? BugStage.product.rawValue
         if let webhookURL = webhookURL {
             self.webhookURL = webhookURL
         }
@@ -563,10 +579,6 @@ final class QCBugReportViewController: UIViewController {
     
     internal func getSessionPriority() -> String {
         return selectedPriority
-    }
-
-    internal func getSessionStage() -> String {
-        return selectedStage
     }
 
     internal func getSessionWebhookURL() -> String {
@@ -623,11 +635,6 @@ extension QCBugReportViewController: WKScriptMessageHandler {
                 selectedPriority = priorityString
             }
 
-        case "updateStage":
-            if let stageString = data["stage"] as? String {
-                selectedStage = stageString
-            }
-
         case "updateWebhookURL":
             let value = (data["webhookURL"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             webhookURL = value
@@ -647,8 +654,34 @@ extension QCBugReportViewController: WKScriptMessageHandler {
                 issueNumber = parsed >= 0 ? parsed : nil
             } else {
                 issueNumber = nil
+                updateSubmitButtonState()
             }
-        
+
+        case "setMode":
+                if let mode = data["mode"] as? String {
+                    let isManual = mode.lowercased() == "manual"
+                    isManualMode = isManual
+                }
+                updateSubmitButtonState()
+
+            case "setManualMode":
+                // Backwards-compatible: older UI may send boolean
+                if let manual = data["manual"] as? Bool {
+                    isManualMode = manual
+                }
+                updateSubmitButtonState()
+
+            case "updateManualWhat":
+                manualWhat = data["what"] as? String ?? ""
+                updateSubmitButtonState()
+
+            case "updateManualSteps":
+                manualSteps = data["steps"] as? String ?? ""
+                updateSubmitButtonState()
+
+            case "updateManualExpected":
+                manualExpected = data["expected"] as? String ?? ""
+                updateSubmitButtonState()
         case "deleteMediaAttachment":
             if let fileURL = data["fileURL"] as? String {
                 removeMediaAttachment(withFileURL: fileURL)
@@ -678,7 +711,16 @@ extension QCBugReportViewController: WKScriptMessageHandler {
     }
     
     private func updateSubmitButtonState() {
-        navigationItem.rightBarButtonItem?.isEnabled = !bugDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let enabled: Bool
+        if isManualMode {
+            let whatOk = !manualWhat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let stepsOk = !manualSteps.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let expectedOk = !manualExpected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            enabled = whatOk && stepsOk && expectedOk
+        } else {
+            enabled = !bugDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        navigationItem.rightBarButtonItem?.isEnabled = enabled
     }
 }
 
@@ -741,6 +783,18 @@ extension QCBugReportViewController: WKNavigationDelegate {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
         let issueNumberString = issueNumber.map(String.init) ?? ""
+        let escapedManualWhat = manualWhat
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        let escapedManualSteps = manualSteps
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        let escapedManualExpected = manualExpected
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
         let script = """
         (function() {
             const descriptionField = document.getElementById('bugDescription');
@@ -753,10 +807,22 @@ extension QCBugReportViewController: WKNavigationDelegate {
             }
             if (typeof setInitialAssignee === 'function') { setInitialAssignee('\(escapedAssignee)'); }
             if (typeof setInitialPriority === 'function') { setInitialPriority('\(selectedPriority)'); }
-            if (typeof setInitialStage === 'function') { setInitialStage('\(selectedStage)'); }
             if (typeof setInitialIssueNumber === 'function') { setInitialIssueNumber('\(issueNumberString)'); }
+            if (typeof setInitialMode === 'function') { setInitialMode('\(isManualMode ? "manual" : "llm")'); }
+            // Populate manual fields if present
+            const mw = document.getElementById('manualWhat');
+            if (mw) { mw.value = '\(escapedManualWhat)'; }
+            const ms = document.getElementById('manualSteps');
+            if (ms) { ms.value = '\(escapedManualSteps)'; }
+            const me = document.getElementById('manualExpected');
+            if (me) { me.value = '\(escapedManualExpected)'; }
             if (typeof updateDescription === 'function') { updateDescription(); }
             if (typeof updateWebhookURL === 'function') { updateWebhookURL(); }
+            if (typeof updateManualWhat === 'function') { updateManualWhat(); }
+            if (typeof updateManualSteps === 'function') { updateManualSteps(); }
+            if (typeof updateManualExpected === 'function') { updateManualExpected(); }
+            // Trigger LLM support check after webhook URL is set
+            if (typeof checkLLMSupport === 'function') { checkLLMSupport(); }
         })();
         """
         webView.evaluateJavaScript(script)
