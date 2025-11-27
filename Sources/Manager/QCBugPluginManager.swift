@@ -300,6 +300,10 @@ final class QCBugPluginManager: NSObject {
             return
         }
 
+        // Note: We keep floating buttons visible during recording so users can stop it
+        // The buttons will be captured in the recording, which is acceptable and expected behavior
+        // Similar to iOS native screen recording indicator
+
         recorder.startRecording { [weak self] result in
             guard let self = self else { return }
 
@@ -307,7 +311,7 @@ final class QCBugPluginManager: NSObject {
             case .success:
                 // Notify delegate
                 self.delegate?.bugPluginDidStartRecording()
-                print("🎥 QCBugPlugin: Screen recording started")
+                print("🎥 QCBugPlugin: Screen recording started (buttons remain visible for stop control)")
                 completion(.success(()))
 
             case .failure(let error):
@@ -332,7 +336,7 @@ final class QCBugPluginManager: NSObject {
         recorder.stopRecording { [weak self] result in
             guard let self = self else { return }
 
-            // Update floating button state first
+            // Update floating button state
             self.floatingActionButtons?.updateRecordingState(isRecording: false)
 
             switch result {
@@ -899,19 +903,34 @@ final class QCBugPluginManager: NSObject {
             return
         }
 
-        capture.captureScreen { [weak self] result in
+        // Hide overlay window and floating buttons before capturing to avoid including them in screenshot
+        overlayWindow?.isHidden = true
+        floatingActionButtons?.isHidden = true
+        print("👻 QCBugPlugin: Hiding overlay UI for screenshot")
+
+        // Wait a tiny moment for UI to update before capturing
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self = self else { return }
 
-            switch result {
-            case .success(let url):
-                DispatchQueue.main.async {
-                    self.presentScreenshotAnnotationEditor(screenshotURL: url, completion: completion)
-                }
+            capture.captureScreen { [weak self] result in
+                guard let self = self else { return }
 
-            case .failure(let error):
-                DispatchQueue.main.async {
-                    print("❌ QCBugPlugin: Screenshot capture failed - \(error.localizedDescription)")
-                    completion(.failure(error))
+                switch result {
+                case .success(let url):
+                    DispatchQueue.main.async {
+                        self.presentScreenshotAnnotationEditor(screenshotURL: url, completion: completion)
+                    }
+
+                case .failure(let error):
+                    // Restore overlay UI if capture failed
+                    self.overlayWindow?.isHidden = false
+                    self.floatingActionButtons?.isHidden = false
+                    print("👁️ QCBugPlugin: Restored overlay UI after capture failure")
+
+                    DispatchQueue.main.async {
+                        print("❌ QCBugPlugin: Screenshot capture failed - \(error.localizedDescription)")
+                        completion(.failure(error))
+                    }
                 }
             }
         }

@@ -22,18 +22,30 @@ final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
 
     func captureScreen(completion: @escaping (Result<URL, ScreenCaptureError>) -> Void) {
         DispatchQueue.main.async {
-            // Get the key window
+            // Get the app's main window, excluding overlay windows
+            // We want to capture only the app content, not the plugin's floating UI
             let window: UIWindow?
             if #available(iOS 13.0, *) {
-                window = UIApplication.shared.windows.first(where: { $0.isKeyWindow })
+                // Find the first non-overlay window (app's main window)
+                window = UIApplication.shared.windows.first { w in
+                    // Exclude QCOverlayWindow and windows with high window levels (alerts, overlays)
+                    return w.windowLevel == .normal &&
+                           String(describing: type(of: w)) != "QCOverlayWindow" &&
+                           !w.isHidden
+                }
             } else {
-                window = UIApplication.shared.keyWindow
+                // For iOS 12, find the first normal-level window that's not hidden
+                window = UIApplication.shared.windows.first { w in
+                    return w.windowLevel == .normal && !w.isHidden
+                }
             }
 
             guard let captureWindow = window else {
-                completion(.failure(.captureFailed("No window available")))
+                completion(.failure(.captureFailed("No app window available")))
                 return
             }
+
+            print("📸 ScreenCaptureService: Capturing window: \(type(of: captureWindow)) at level \(captureWindow.windowLevel.rawValue)")
 
             self.captureView(captureWindow) { result in
                 completion(result)
