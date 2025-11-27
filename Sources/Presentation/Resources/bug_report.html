@@ -33,7 +33,7 @@
             background: #ffffff;
             border-radius: 16px;
             padding: 20px;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08);
             border: 1px solid rgba(0, 0, 0, 0.05);
         }
@@ -41,7 +41,7 @@
         .section h2 {
             font-size: 18px;
             font-weight: 600;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
             color: #1d1d1f;
             display: flex;
             align-items: center;
@@ -87,7 +87,7 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
-            margin-bottom: 16px;
+            margin-bottom: 8px;
         }
 
         .field-label {
@@ -479,7 +479,7 @@
                     <div class="assign-status" id="assignStatus"></div>
                 </div>
                 <div class="field-group">
-                    <label class="field-label" for="issueNumberInput">Issue Number</label>
+                    <label class="field-label" for="issueNumberInput">Parent Issue</label>
                     <input
                         type="text"
                         id="issueNumberInput"
@@ -491,7 +491,7 @@
                         autocapitalize="none"
                         spellcheck="false"
                     >
-                    <p class="field-hint">Optional: reference a ticket or issue from your tracker.</p>
+                    <p class="field-hint">Nếu có giá trị, sẽ tạo task con cho issue này. Để trống sẽ tạo issue mới.</p>
                 </div>
         </div>
 
