@@ -300,24 +300,44 @@ final class QCBugPluginManager: NSObject {
             return
         }
 
-        // Note: We keep floating buttons visible during recording so users can stop it
-        // The buttons will be captured in the recording, which is acceptable and expected behavior
-        // Similar to iOS native screen recording indicator
+        // IMPORTANT: Hide overlay window before starting capture to allow ReplayKit to see app content
+        // ReplayKit's startCapture() needs to capture the app's main window, not the overlay
+        // We'll restore the overlay shortly after capture starts so users can control recording
+        print("👻 QCBugPlugin: Temporarily hiding overlay for ReplayKit initialization")
+        overlayWindow?.isHidden = true
 
-        recorder.startRecording { [weak self] result in
+        // Wait a moment for UI to settle before starting capture
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self = self else { return }
 
-            switch result {
-            case .success:
-                // Notify delegate
-                self.delegate?.bugPluginDidStartRecording()
-                print("🎥 QCBugPlugin: Screen recording started (buttons remain visible for stop control)")
-                completion(.success(()))
+            recorder.startRecording { [weak self] result in
+                guard let self = self else { return }
 
-            case .failure(let error):
-                // Notify delegate
-                self.delegate?.bugPluginDidFailRecording(error)
-                completion(.failure(error))
+                switch result {
+                case .success:
+                    // Restore overlay window after a short delay to allow recording to initialize
+                    // This gives ReplayKit time to lock onto the app window before we show overlay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                        guard let self = self else { return }
+                        self.overlayWindow?.isHidden = false
+                        print("👁️ QCBugPlugin: Restored overlay after recording started")
+                    }
+
+                    // Notify delegate
+                    self.delegate?.bugPluginDidStartRecording()
+                    self.floatingActionButtons?.updateRecordingState(isRecording: true)
+                    print("🎥 QCBugPlugin: Screen recording started")
+                    completion(.success(()))
+
+                case .failure(let error):
+                    // Restore overlay on failure
+                    self.overlayWindow?.isHidden = false
+                    print("👁️ QCBugPlugin: Restored overlay after recording failed")
+
+                    // Notify delegate
+                    self.delegate?.bugPluginDidFailRecording(error)
+                    completion(.failure(error))
+                }
             }
         }
     }
