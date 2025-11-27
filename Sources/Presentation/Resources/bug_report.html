@@ -485,7 +485,7 @@
                         id="issueNumberInput"
                         inputmode="numeric"
                         pattern="[0-9]*"
-                        placeholder="Link an existing issue number"
+                        placeholder="Liên kết số issue đã tồn tại"
                         oninput="updateIssueNumber()"
                         autocomplete="off"
                         autocapitalize="none"
@@ -509,32 +509,32 @@
                         <span class="radio-label">Manual</span>
                     </label>
                 </div>
-                <p class="field-hint">Choose automatic LLM-generated description or provide manual inputs below.</p>
+                <p class="field-hint">Chọn mô tả tự động bằng LLM hoặc nhập thủ công bên dưới.</p>
             </div>
 
             <div class="field-group">
                 <label class="field-label" for="bugDescription">Description</label>
-                <textarea id="bugDescription" placeholder="Describe the bug you encountered..." oninput="updateDescription()"></textarea>
-                <p class="field-hint">A general description of the issue you're reporting.</p>
+                <textarea id="bugDescription" placeholder="Mô tả lỗi bạn gặp phải..." oninput="updateDescription()"></textarea>
+                <p class="field-hint">Mô tả chung về vấn đề bạn đang báo cáo.</p>
             </div>
 
             <div id="manualFields" class="collapsible">
                 <div class="field-group">
                     <label class="field-label" for="manualWhat">What</label>
-                    <textarea id="manualWhat" placeholder="What happened? Describe the issue you observed" oninput="updateManualWhat()"></textarea>
-                    <p class="field-hint">Describe what you observed or what went wrong.</p>
+                    <textarea id="manualWhat" placeholder="Điều gì đã xảy ra? Mô tả vấn đề bạn quan sát được" oninput="updateManualWhat()"></textarea>
+                    <p class="field-hint">Mô tả những gì bạn quan sát được hoặc điều gì đã xảy ra sai.</p>
                 </div>
 
                 <div class="field-group">
                     <label class="field-label" for="manualSteps">Steps</label>
-                    <textarea id="manualSteps" placeholder="Step 1: Open the app&#10;Step 2: Navigate to...&#10;Step 3: Tap on..." oninput="updateManualSteps()"></textarea>
-                    <p class="field-hint">List the steps to reproduce the issue.</p>
+                    <textarea id="manualSteps" placeholder="Bước 1: Mở ứng dụng&#10;Bước 2: Điều hướng đến...&#10;Bước 3: Nhấn vào..." oninput="updateManualSteps()"></textarea>
+                    <p class="field-hint">Liệt kê các bước để tái hiện vấn đề.</p>
                 </div>
 
                 <div class="field-group">
                     <label class="field-label" for="manualExpected">Expected</label>
-                    <textarea id="manualExpected" placeholder="What should have happened instead?" oninput="updateManualExpected()"></textarea>
-                    <p class="field-hint">Describe the expected behavior or outcome.</p>
+                    <textarea id="manualExpected" placeholder="Điều gì lẽ ra phải xảy ra?" oninput="updateManualExpected()"></textarea>
+                    <p class="field-hint">Mô tả hành vi hoặc kết quả mong đợi.</p>
                 </div>
             </div>
         </div>
@@ -560,14 +560,14 @@
             <input
                 type="url"
                 id="webhookURL"
-                placeholder="https://your-webhook-endpoint"
+                placeholder="https://webhook-endpoint-của-bạn"
                 oninput="updateWebhookURL()"
                 inputmode="url"
                 autocomplete="off"
                 autocapitalize="none"
                 spellcheck="false"
             >
-            <p class="field-hint">Bug reports are sent to this endpoint. Leave blank to use the default webhook.</p>
+            <p class="field-hint">Báo cáo lỗi sẽ được gửi đến địa chỉ này. Để trống để sử dụng webhook mặc định.</p>
         </div>
     </div>
 
