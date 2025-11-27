@@ -64,10 +64,21 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
     func startRecording(completion: @escaping (Result<Void, ScreenRecordingError>) -> Void) {
         print("🚨🚨🚨 ScreenRecordingService: START RECORDING - NEW CODE VERSION 2024-11-11 🚨🚨🚨")
 
+        // Check if running on simulator
+        #if targetEnvironment(simulator)
+        print("⚠️ ScreenRecordingService: Running on simulator - ReplayKit has limited support")
+        print("⚠️ ScreenRecordingService: Screen recording may not work properly on simulator")
+        #else
+        print("✅ ScreenRecordingService: Running on physical device")
+        #endif
+
         guard isAvailable else {
+            print("❌ ScreenRecordingService: Recorder not available")
             completion(.failure(.notAvailable))
             return
         }
+
+        print("✅ ScreenRecordingService: Recorder is available")
 
         // Check if recording is already in progress
         if isRecording {
@@ -141,13 +152,40 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
             return
         }
 
+        // Check if microphone is available for audio capture
+        print("🎬 ScreenRecordingService: Checking microphone availability...")
+        if recorder.isMicrophoneEnabled {
+            print("✅ ScreenRecordingService: Microphone is enabled")
+        } else {
+            print("⚠️ ScreenRecordingService: Microphone is disabled (video-only recording)")
+        }
+
         // Start capture with handler to save video data
+        print("🎬 ScreenRecordingService: Calling startCapture with handler...")
         recorder.startCapture(handler: { [weak self] sampleBuffer, bufferType, error in
             guard let self = self else { return }
 
             if let error = error {
-                print("❌ ScreenRecordingService: Capture error: \(error.localizedDescription)")
+                print("❌ ScreenRecordingService: Capture handler error: \(error.localizedDescription)")
                 return
+            }
+
+            // Log buffer type for debugging
+            let bufferTypeStr: String
+            switch bufferType {
+            case .video:
+                bufferTypeStr = "video"
+            case .audioApp:
+                bufferTypeStr = "audioApp"
+            case .audioMic:
+                bufferTypeStr = "audioMic"
+            @unknown default:
+                bufferTypeStr = "unknown"
+            }
+
+            // Only log first few buffers to avoid spam
+            if self.videoBufferCount < 5 || self.audioBufferCount < 5 {
+                print("📦 ScreenRecordingService: Received \(bufferTypeStr) buffer")
             }
 
             self.writerQueue.async { [weak self] in
@@ -171,6 +209,22 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
                 } else {
                     self.isRecordingStartedByService = true
                     print("🎥 ScreenRecordingService: Started screen recording with capture")
+
+                    // Add a timeout check to detect if buffers are being received
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                        guard let self = self else { return }
+                        if self.videoBufferCount == 0 {
+                            print("⚠️ ScreenRecordingService: WARNING - No video buffers received after 3 seconds!")
+                            print("⚠️ ScreenRecordingService: This might indicate:")
+                            print("   - Running on simulator (limited ReplayKit support)")
+                            print("   - App window is not visible")
+                            print("   - ReplayKit permissions issue")
+                            print("   - Overlay window blocking capture")
+                        } else {
+                            print("✅ ScreenRecordingService: Recording is working - \(self.videoBufferCount) video buffers received")
+                        }
+                    }
+
                     completion(.success(()))
                 }
             }

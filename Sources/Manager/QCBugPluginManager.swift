@@ -315,12 +315,14 @@ final class QCBugPluginManager: NSObject {
 
                 switch result {
                 case .success:
-                    // Restore overlay window after a short delay to allow recording to initialize
-                    // This gives ReplayKit time to lock onto the app window before we show overlay
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    // Restore overlay window after a longer delay to allow recording to fully initialize
+                    // This gives ReplayKit more time to lock onto the app window and start receiving buffers
+                    // We increase the delay to 2 seconds to ensure capture is fully established
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                         guard let self = self else { return }
                         self.overlayWindow?.isHidden = false
-                        print("👁️ QCBugPlugin: Restored overlay after recording started")
+                        self.floatingActionButtons?.isHidden = false
+                        print("👁️ QCBugPlugin: Restored overlay after recording initialized (2s delay)")
                     }
 
                     // Notify delegate
