@@ -152,18 +152,33 @@ final class ScreenRecordingService: NSObject, ScreenRecordingProtocol {
             return
         }
 
-        // Check if microphone is available for audio capture
+        // Enable microphone for audio capture
+        // Note: ReplayKit might not capture ANY buffers if microphone is disabled
         print("🎬 ScreenRecordingService: Checking microphone availability...")
-        if recorder.isMicrophoneEnabled {
-            print("✅ ScreenRecordingService: Microphone is enabled")
-        } else {
-            print("⚠️ ScreenRecordingService: Microphone is disabled (video-only recording)")
-        }
+        print("🎬 ScreenRecordingService: Current microphone state: \(recorder.isMicrophoneEnabled)")
+
+        // Try enabling microphone to ensure we get video buffers
+        recorder.isMicrophoneEnabled = true
+        print("🎬 ScreenRecordingService: Enabled microphone for capture")
+        print("🎬 ScreenRecordingService: New microphone state: \(recorder.isMicrophoneEnabled)")
+
+        // Log additional recorder state
+        print("🎬 ScreenRecordingService: Recorder isAvailable: \(recorder.isAvailable)")
+        print("🎬 ScreenRecordingService: Recorder isRecording: \(recorder.isRecording)")
 
         // Start capture with handler to save video data
         print("🎬 ScreenRecordingService: Calling startCapture with handler...")
+
+        // Add a flag to detect if handler is ever called
+        var handlerCalled = false
+
         recorder.startCapture(handler: { [weak self] sampleBuffer, bufferType, error in
             guard let self = self else { return }
+
+            if !handlerCalled {
+                handlerCalled = true
+                print("✅ ScreenRecordingService: Capture handler CALLED for first time!")
+            }
 
             if let error = error {
                 print("❌ ScreenRecordingService: Capture handler error: \(error.localizedDescription)")
