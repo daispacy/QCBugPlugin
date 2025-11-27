@@ -10,28 +10,6 @@ import Foundation
 import UIKit
 import QuickLook
 
-/// Internal custom window that detects shake gestures
-private class QCInternalShakeDetectingWindow: UIWindow {
-    var shakeHandler: (() -> Void)?
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        // Make sure the window doesn't intercept touches
-        isUserInteractionEnabled = false
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
-        super.motionEnded(motion, with: event)
-
-        if motion == .motionShake {
-            shakeHandler?()
-        }
-    }
-}
 
 private final class SingleAttachmentPreviewDataSource: NSObject, QLPreviewControllerDataSource {
     private let url: URL
@@ -64,7 +42,7 @@ final class QCBugPluginManager: NSObject {
     // MARK: - Private Properties
     private var configuration: QCBugPluginConfig?
     private weak var hostWindow: UIWindow?
-    private var internalShakeWindow: QCInternalShakeDetectingWindow?
+    private var overlayWindow: QCOverlayWindow?
     private var screenRecorder: ScreenRecordingProtocol?
     private var screenCapture: ScreenCaptureProtocol?
     private var bugReportService: BugReportProtocol?
@@ -185,13 +163,11 @@ final class QCBugPluginManager: NSObject {
 
         refreshBugReportService()
 
-        // Setup floating action buttons and shake detection if enabled
+        // Setup overlay window with floating buttons and shake detection if enabled
         if config.enableFloatingButton {
-            setupFloatingActionButtons()
-            setupInternalShakeDetection()
+            setupOverlayWindow()
         } else {
-            teardownFloatingActionButtons()
-            teardownShakeDetection()
+            teardownOverlayWindow()
         }
 
         self.isConfigured = true
@@ -456,11 +432,10 @@ final class QCBugPluginManager: NSObject {
 
         print("📱 QCBugPlugin: Presenting recording confirmation alert on \(type(of: presenter))")
 
-        // Ensure floating UI is visible and on top while the confirmation is presented
+        // Ensure floating UI is visible while the confirmation is presented
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.floatingActionButtons?.isHidden = false
-            self.bringFloatingButtonsToFront()
         }
 
         let alert = UIAlertController(
@@ -548,30 +523,6 @@ final class QCBugPluginManager: NSObject {
             self,
             selector: #selector(appDidEnterBackground),
             name: UIApplication.didEnterBackgroundNotification,
-            object: nil
-        )
-
-        // Listen for window becoming key (handles rootViewController changes)
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(windowDidBecomeKey),
-            name: UIWindow.didBecomeKeyNotification,
-            object: nil
-        )
-
-        // Listen for window becoming visible
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(windowDidBecomeVisible),
-            name: UIWindow.didBecomeVisibleNotification,
-            object: nil
-        )
-
-        // Listen for view controller presentations (modals)
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(viewControllerDidPresent),
-            name: NSNotification.Name("UIViewControllerShowDetailTargetDidChangeNotification"),
             object: nil
         )
     }
@@ -672,83 +623,50 @@ final class QCBugPluginManager: NSObject {
         }
     }
     
-    private func setupFloatingActionButtons() {
+    // MARK: - Overlay Window Setup
+
+    private func setupOverlayWindow() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
-            // Don't setup or re-add during preview
+            // Don't setup during preview
             if self.previewDataSource != nil {
                 return
             }
 
-            // Get the key window
-            let window: UIWindow?
-            if #available(iOS 13.0, *) {
-                window = UIApplication.shared.windows.first { $0.isKeyWindow } ?? self.hostWindow
-            } else {
-                window = UIApplication.shared.keyWindow ?? self.hostWindow
-            }
-
-            guard let window = window else {
-                print("⚠️ QCBugPlugin: Cannot attach floating controls without a window.")
-                return
-            }
-
-            if let controls = self.floatingActionButtons {
-                // Only re-add if superview is different AND buttons are not hidden
-                // (Don't interfere during modal presentations like QLPreviewController)
-                if controls.superview !== window && !controls.isHidden {
-                    controls.removeFromSuperview()
-                    window.addSubview(controls)
-                    window.bringSubviewToFront(controls)
-                }
-                return
-            }
-
-            let controls = QCFloatingActionButtons()
-            controls.delegate = self
-            window.addSubview(controls)
-            window.bringSubviewToFront(controls)
-            self.floatingActionButtons = controls
-        }
-    }
-
-    private func teardownFloatingActionButtons() {
-        DispatchQueue.main.async { [weak self] in
-            self?.floatingActionButtons?.removeFromSuperview()
-            self?.floatingActionButtons = nil
-        }
-    }
-
-    // MARK: - Shake Detection
-
-    private func setupInternalShakeDetection() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-
-            // Create internal shake-detecting window if needed
-            if self.internalShakeWindow == nil {
-                let shakeWindow = QCInternalShakeDetectingWindow(frame: UIScreen.main.bounds)
-                shakeWindow.windowLevel = .normal - 1 // Behind everything
-                shakeWindow.backgroundColor = .clear // Transparent background
-                shakeWindow.isHidden = false
-                shakeWindow.rootViewController = UIViewController() // Needed for shake to work
-                shakeWindow.rootViewController?.view.backgroundColor = .clear
-                shakeWindow.shakeHandler = { [weak self] in
+            // Create overlay window if needed
+            if self.overlayWindow == nil {
+                let overlay = QCOverlayWindow(frame: UIScreen.main.bounds)
+                overlay.shakeHandler = { [weak self] in
                     self?.handleShakeGesture()
                 }
-                self.internalShakeWindow = shakeWindow
-                print("✅ QCBugPlugin: Shake detection enabled for floating button backdoor")
+                self.overlayWindow = overlay
+                print("✅ QCBugPlugin: Overlay window created")
             }
+
+            // Create or reuse floating buttons
+            if let existingButtons = self.floatingActionButtons {
+                self.overlayWindow?.attachFloatingButtons(existingButtons)
+            } else {
+                let buttons = QCFloatingActionButtons()
+                buttons.delegate = self
+                self.floatingActionButtons = buttons
+                self.overlayWindow?.attachFloatingButtons(buttons)
+            }
+
+            print("✅ QCBugPlugin: Floating UI enabled with shake detection")
         }
     }
 
-    private func teardownShakeDetection() {
+    private func teardownOverlayWindow() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.internalShakeWindow?.shakeHandler = nil
-            self.internalShakeWindow?.isHidden = true
-            self.internalShakeWindow = nil
+            self.overlayWindow?.detachFloatingButtons()
+            self.overlayWindow?.shakeHandler = nil
+            self.overlayWindow?.isHidden = true
+            self.overlayWindow = nil
+            self.floatingActionButtons = nil
+            print("🗑️ QCBugPlugin: Overlay window torn down")
         }
     }
 
@@ -815,36 +733,6 @@ final class QCBugPluginManager: NSObject {
         }
     }
 
-    @objc private func windowDidBecomeKey(_ notification: Notification) {
-        if let reason = floatingUIBlockingReason() {
-            print("🪟 QCBugPlugin: Window became key - ignoring (\(reason))")
-            return
-        }
-        print("🪟 QCBugPlugin: Window became key, preview active: \(previewDataSource != nil)")
-        // Ensure floating buttons stay on top when window becomes key
-        bringFloatingButtonsToFront()
-    }
-
-    @objc private func windowDidBecomeVisible(_ notification: Notification) {
-        if let reason = floatingUIBlockingReason() {
-            print("🪟 QCBugPlugin: Window became visible - ignoring (\(reason))")
-            return
-        }
-        print("🪟 QCBugPlugin: Window became visible, preview active: \(previewDataSource != nil)")
-        // Ensure floating buttons stay on top when window becomes visible
-        bringFloatingButtonsToFront()
-    }
-
-    @objc private func viewControllerDidPresent(_ notification: Notification) {
-        if let reason = floatingUIBlockingReason() {
-            print("🪟 QCBugPlugin: View controller presented - ignoring (\(reason))")
-            return
-        }
-        print("🪟 QCBugPlugin: View controller presented, preview active: \(previewDataSource != nil)")
-        // Ensure floating buttons stay on top when view controllers are presented
-        bringFloatingButtonsToFront()
-    }
-
     private func floatingUIBlockingReason() -> String? {
         if isFloatingUISuspended {
             return "floatingUI-suspended"
@@ -905,41 +793,6 @@ final class QCBugPluginManager: NSObject {
         return false
     }
 
-    private func bringFloatingButtonsToFront() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self,
-                  let controls = self.floatingActionButtons,
-                  let superview = controls.superview else {
-                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - no controls or superview")
-                return
-            }
-
-            // Don't manipulate if buttons are hidden (e.g., during preview)
-            if controls.isHidden {
-                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - skipped (buttons hidden)")
-                return
-            }
-
-            // Don't manipulate if a preview is active
-            if self.previewDataSource != nil {
-                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - skipped (preview active)")
-                return
-            }
-
-            if self.isFloatingUISuspended {
-                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - skipped (UI suspended)")
-                return
-            }
-
-            // Bring to front if not already the topmost subview
-            if superview.subviews.last !== controls {
-                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - bringing to front")
-                superview.bringSubviewToFront(controls)
-            } else {
-                print("🔧 QCBugPlugin: bringFloatingButtonsToFront - already at front")
-            }
-        }
-    }
 
     private func resolveRecordingConfirmationPresenter() -> UIViewController? {
         if let presenter = recordingPreviewPresenter, presenter.viewIfLoaded?.window != nil {
@@ -963,7 +816,7 @@ final class QCBugPluginManager: NSObject {
         isFloatingUISuspended = true
         floatingActionButtons?.setSuspended(true)
         floatingActionButtons?.isHidden = true
-        internalShakeWindow?.isHidden = true
+        overlayWindow?.isHidden = true
         print("🛑 QCBugPlugin: Suspended floating UI (\(reason))")
     }
 
@@ -992,7 +845,7 @@ final class QCBugPluginManager: NSObject {
             if let reason = self.floatingUIBlockingReason() {
                 print("🔧 QCBugPlugin: Evaluating floating UI - keeping hidden (\(reason))")
                 self.floatingActionButtons?.isHidden = true
-                self.internalShakeWindow?.isHidden = true
+                self.overlayWindow?.isHidden = true
 
                 // Exponential backoff for retries: start small, grow up to a cap
                 let maxRetries = 12
@@ -1009,12 +862,12 @@ final class QCBugPluginManager: NSObject {
             }
 
             self.floatingActionButtons?.isHidden = false
-            self.internalShakeWindow?.isHidden = false
+            self.overlayWindow?.isHidden = false
 
             if let reason = self.floatingUIBlockingReason() {
                 print("🔧 QCBugPlugin: Floating UI should hide (\(reason)) - scheduling retry")
                 self.floatingActionButtons?.isHidden = true
-                self.internalShakeWindow?.isHidden = true
+                self.overlayWindow?.isHidden = true
                 let maxRetries = 12
                 if retryCount < maxRetries {
                     let baseDelay: Double = 0.12
@@ -1027,7 +880,6 @@ final class QCBugPluginManager: NSObject {
                 }
             } else {
                 self.floatingActionButtons?.show(animated: false)
-                self.bringFloatingButtonsToFront()
             }
         }
     }
