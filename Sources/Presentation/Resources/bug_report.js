@@ -19,7 +19,6 @@
             lastFetchKey: null,
             requestId: 0
         },
-        stage: 'product',
         issueNumber: '',
         gitlab: {
             isAuthenticated: false,
@@ -684,9 +683,8 @@
         var logoutButton = document.getElementById('gitlabLogoutButton');
         var authState = document.getElementById('gitlabAuthState');
         var usernameLabel = document.getElementById('gitlabUsernameLabel');
-        var errorLabel = document.getElementById('gitlabError');
 
-        if (!section || !loginButton || !logoutButton || !authState || !usernameLabel || !errorLabel) {
+        if (!section || !loginButton || !logoutButton || !authState || !usernameLabel) {
             return;
         }
 
@@ -697,37 +695,33 @@
         }
 
         section.style.display = 'block';
-        loginButton.style.display = 'inline-flex';
+        loginButton.style.display = 'inline-block';
         loginButton.disabled = false;
-        loginButton.textContent = 'Log in with GitLab';
+        loginButton.textContent = 'GitLab';
 
         authState.style.display = 'none';
         logoutButton.disabled = false;
 
         if (gitlab.isLoading) {
             if (gitlab.isAuthenticated && gitlab.username) {
-                usernameLabel.textContent = '@' + gitlab.username;
+                usernameLabel.textContent = gitlab.username;
                 authState.style.display = 'flex';
                 logoutButton.disabled = true;
                 loginButton.style.display = 'none';
             } else {
                 loginButton.disabled = true;
-                loginButton.textContent = 'Opening…';
+                loginButton.textContent = 'GitLab';
             }
         } else if (gitlab.isAuthenticated) {
-            var label = gitlab.username ? ('@' + gitlab.username) : 'GitLab account';
-            usernameLabel.textContent = label;
+            usernameLabel.textContent = gitlab.username || 'Connected';
             authState.style.display = 'flex';
             loginButton.style.display = 'none';
         } else if (gitlab.requiresLogin) {
-            loginButton.style.display = 'inline-flex';
+            loginButton.style.display = 'inline-block';
         } else {
             section.style.display = 'none';
             return;
         }
-
-        errorLabel.textContent = gitlab.error ? String(gitlab.error) : '';
-        errorLabel.style.display = errorLabel.textContent ? 'block' : 'none';
     }
 
     window.triggerGitLabLogin = function () {
@@ -737,7 +731,6 @@
 
         state.gitlab.available = true;
         state.gitlab.isLoading = true;
-        state.gitlab.error = '';
         state.gitlab.requiresLogin = true;
         updateGitLabSection();
     };
@@ -748,7 +741,6 @@
         }
 
         state.gitlab.isLoading = true;
-        state.gitlab.error = '';
         state.gitlab.isAuthenticated = false;
         state.gitlab.requiresLogin = true;
         state.gitlab.username = null;
@@ -804,49 +796,6 @@
         }
         state.priority.selected = priority;
         renderPriorityControls();
-    };
-
-    window.updateStage = function () {
-        var radioButtons = document.getElementsByName('stage');
-        var selectedValue = 'product';
-
-        for (var i = 0; i < radioButtons.length; i++) {
-            if (radioButtons[i].checked) {
-                selectedValue = radioButtons[i].value;
-                break;
-            }
-        }
-
-        var stage = typeof selectedValue === 'string' ? selectedValue.trim().toLowerCase() : 'product';
-        if (stage !== 'test' && stage !== 'product') {
-            stage = 'product';
-        }
-
-        state.stage = stage;
-        postMessage({
-            action: 'updateStage',
-            stage: stage
-        });
-    };
-
-    window.setInitialStage = function (value) {
-        var stage = 'product';
-        if (typeof value === 'string') {
-            var trimmed = value.trim().toLowerCase();
-            if (trimmed === 'test' || trimmed === 'product') {
-                stage = trimmed;
-            }
-        }
-        state.stage = stage;
-
-        var radioButtons = document.getElementsByName('stage');
-        for (var i = 0; i < radioButtons.length; i++) {
-            if (radioButtons[i].value === stage) {
-                radioButtons[i].checked = true;
-            } else {
-                radioButtons[i].checked = false;
-            }
-        }
     };
 
     window.updateWebhookURL = function () {

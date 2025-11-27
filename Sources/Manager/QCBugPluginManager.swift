@@ -56,7 +56,6 @@ final class QCBugPluginManager: NSObject {
     private var sessionBugReportViewController: QCBugReportViewController?
     private var sessionBugDescription: String = ""
     private var sessionBugPriority: String = ""
-    private var sessionBugStage: String = BugStage.product.rawValue
     private var sessionWebhookURL: String?
     private var sessionAssigneeUsername: String?
     private var sessionIssueNumber: Int?
@@ -225,7 +224,6 @@ final class QCBugPluginManager: NSObject {
             bugReportVC.restoreSessionState(
                 description: self.sessionBugDescription,
                 priority: self.sessionBugPriority,
-                stage: self.sessionBugStage,
                 webhookURL: self.resolvedWebhookURL(),
                 assigneeUsername: self.sessionAssigneeUsername,
                 issueNumber: self.sessionIssueNumber
@@ -1096,7 +1094,6 @@ final class QCBugPluginManager: NSObject {
         // Clear session UI state
         sessionBugDescription = ""
         sessionBugPriority = ""
-        sessionBugStage = BugStage.product.rawValue
         sessionWebhookURL = nil
         sessionAssigneeUsername = nil
         sessionIssueNumber = nil
@@ -1106,7 +1103,6 @@ final class QCBugPluginManager: NSObject {
             self.sessionBugReportViewController?.restoreSessionState(
                 description: "",
                 priority: "",
-                stage: BugStage.product.rawValue,
                 webhookURL: self.resolvedWebhookURL(),
                 assigneeUsername: nil,
                 issueNumber: nil
@@ -1247,7 +1243,6 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         // Capture session state before submission
         self.sessionBugDescription = report.description
         self.sessionBugPriority = report.priority
-        self.sessionBugStage = report.stage
         self.sessionAssigneeUsername = report.assigneeUsername
         self.sessionIssueNumber = report.issueNumber
         let userWebhookInput = controller.getSessionWebhookURL().trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1328,7 +1323,6 @@ extension QCBugPluginManager: QCBugReportViewControllerDelegate {
         // Capture session state even on cancel so it can be restored later
         self.sessionBugDescription = controller.getSessionDescription()
         self.sessionBugPriority = controller.getSessionPriority()
-        self.sessionBugStage = controller.getSessionStage()
         self.sessionAssigneeUsername = controller.getSessionAssigneeUsername()
         self.sessionIssueNumber = controller.getSessionIssueNumber()
         let userWebhookInput = controller.getSessionWebhookURL().trimmingCharacters(in: .whitespacesAndNewlines)

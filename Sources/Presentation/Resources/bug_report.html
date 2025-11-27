@@ -312,52 +312,28 @@
 
         #gitlabSection {
             display: none;
-            margin-bottom: 16px;
-            padding: 12px 14px;
-            border-radius: 12px;
-            background: #f2f4ff;
-            border: 1px solid rgba(27, 77, 216, 0.12);
-        }
-
-        .gitlab-subpanel-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            color: #1d1d1f;
-        }
-
-        .gitlab-subpanel-header span:last-child {
-            margin-left: 0;
+            margin-bottom: 12px;
+            padding: 8px 0;
         }
 
         .gitlab-row {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-top: 10px;
-        }
-
-        .gitlab-status {
-            font-size: 13px;
-            color: #1d1d1f;
-            flex: 1;
-            min-width: 190px;
+            justify-content: flex-end;
+            gap: 8px;
         }
 
         .gitlab-auth-state {
             display: none;
             align-items: center;
-            gap: 8px;
-            font-size: 13px;
-            color: #1d1d1f;
+            gap: 6px;
+            font-size: 12px;
+            color: #636366;
         }
 
         .gitlab-username {
-            font-weight: 600;
+            font-weight: 500;
+            color: #636366;
         }
 
         .gitlab-divider {
@@ -365,38 +341,40 @@
         }
 
         .gitlab-button {
-            padding: 8px 14px;
-            border-radius: 10px;
-            border: none;
-            background: #1b4dd8;
-            color: #ffffff;
-            font-size: 13px;
-            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid #d2d2d7;
+            background: #ffffff;
+            color: #636366;
+            font-size: 12px;
+            font-weight: 500;
             cursor: pointer;
-            transition: background 0.2s ease, transform 0.1s ease;
+            transition: background 0.15s ease, border-color 0.15s ease;
         }
 
         .gitlab-button--link {
             background: transparent;
-            color: #1b4dd8;
+            color: #636366;
             padding: 0;
             border: none;
             border-radius: 0;
+            font-size: 12px;
         }
 
         .gitlab-button:disabled {
-            background: #9fa7c1;
-            color: #ffffff;
+            background: #f5f5f7;
+            color: #8e8e93;
+            border-color: #d2d2d7;
             cursor: not-allowed;
-            transform: none;
         }
 
         .gitlab-button--link:disabled {
-            color: #9fa7c1;
+            color: #8e8e93;
         }
 
         .gitlab-button:not(:disabled):hover {
-            background: #275eff;
+            background: #f5f5f7;
+            border-color: #636366;
         }
 
         .gitlab-button--link:not(:disabled):hover {
@@ -426,19 +404,6 @@
         .invalid {
             border-color: #d70015 !important;
             box-shadow: 0 0 0 3px rgba(215, 0, 21, 0.06);
-        }
-
-        .gitlab-error {
-            margin-top: 8px;
-            font-size: 12px;
-            color: #d70015;
-            display: none;
-        }
-
-        .gitlab-hint {
-            font-size: 12px;
-            margin-top: 6px;
-            color: #4a4a4f;
         }
 
         .info-grid {
@@ -496,21 +461,15 @@
     <div class="container">
         <div class="section">
             <h2>📝 Bug Description</h2>
-            <div class="gitlab-subpanel" id="gitlabSection">
-                <div class="gitlab-subpanel-header">
-                    <span>🔐</span>
-                    <span>GitLab</span>
-                </div>
+            <div id="gitlabSection">
                 <div class="gitlab-row">
                     <div class="gitlab-auth-state" id="gitlabAuthState">
                         <span class="gitlab-username" id="gitlabUsernameLabel">@username</span>
                         <span class="gitlab-divider">|</span>
                         <button type="button" id="gitlabLogoutButton" class="gitlab-button gitlab-button--link" onclick="logoutGitLab()">Logout</button>
                     </div>
-                    <button type="button" id="gitlabLoginButton" class="gitlab-button" onclick="triggerGitLabLogin()">Log in with GitLab</button>
+                    <button type="button" id="gitlabLoginButton" class="gitlab-button" onclick="triggerGitLabLogin()">GitLab</button>
                 </div>
-                <div class="gitlab-error" id="gitlabError"></div>
-                <p class="field-hint gitlab-hint">Connect your GitLab account to include project metadata with this report.</p>
             </div>
                 <div class="field-group">
                     <label class="field-label" for="assigneeSelect">Assign</label>
@@ -594,24 +553,6 @@
         <div class="section" id="mediaSection" style="display: none;">
             <h2>📎 Attachments</h2>
             <div id="mediaList" class="media-list"></div>
-        </div>
-
-        <div class="section">
-            <h2>🔧 Development Settings</h2>
-            <div class="field-group">
-                <label class="field-label">Test Environment</label>
-                <div class="radio-group">
-                    <label class="radio-option">
-                        <input type="radio" name="stage" value="product" checked onchange="updateStage()">
-                        <span class="radio-label">Product</span>
-                    </label>
-                    <label class="radio-option">
-                        <input type="radio" name="stage" value="test" onchange="updateStage()">
-                        <span class="radio-label">Test</span>
-                    </label>
-                </div>
-                <p class="field-hint">For development/testing only: Select which environment you're testing in (not related to app lifecycle stage).</p>
-            </div>
         </div>
 
         <div class="section">
